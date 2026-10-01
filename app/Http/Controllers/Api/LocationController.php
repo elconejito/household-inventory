@@ -1,0 +1,196 @@
+<?php
+
+namespace App\Http\Controllers\Api;
+
+use App\Actions\ManageLocationHierarchy;
+use App\Http\Controllers\Controller;
+use App\Http\Requests\IndexLocationRequest;
+use App\Http\Requests\StoreLocationRequest;
+use App\Http\Requests\UpdateLocationRequest;
+use App\Models\Household;
+use App\Models\Location;
+use App\Models\User;
+use App\Serialization\ApiResponse;
+use App\Transformers\LocationTransformer;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Gate;
+use Spatie\QueryBuilder\AllowedFilter;
+use Spatie\QueryBuilder\Exceptions\InvalidIncludeQuery;
+use Spatie\QueryBuilder\QueryBuilder;
+use Symfony\Component\HttpFoundation\Response;
+
+class LocationController extends Controller
+{
+    public function index(
+        IndexLocationRequest $request,
+        ApiResponse $apiResponse,
+        LocationTransformer $transformer,
+    ): JsonResponse {
+        Gate::authorize('viewAny', Location::class);
+
+        $household = $this->household($request->user());
+        $includes = $this->requestedIncludes($request->query('include'));
+
+        $query = QueryBuilder::for($household->locations()->getQuery())
+            ->allowedFilters(
+                AllowedFilter::partial('search', 'name'),
+                AllowedFilter::partial('name'),
+                AllowedFilter::trashed(),
+            )
+            ->allowedSorts('name')
+            ->defaultSort('name')
+            ->allowedIncludes('parent', 'children')
+            ->orderBy('locations.id');
+
+        $paginator = $query
+            ->paginate($request->integer('per_page', 10))
+            ->withQueryString();
+        $response = $apiResponse->collection($paginator->items(), $transformer, $includes);
+        $response['meta'] = [
+            'current_page' => $paginator->currentPage(),
+            'from' => $paginator->firstItem(),
+            'last_page' => $paginator->lastPage(),
+            'per_page' => $paginator->perPage(),
+            'to' => $paginator->lastItem(),
+            'total' => $paginator->total(),
+        ];
+        $response['links'] = [
+            'first' => $paginator->url(1),
+            'last' => $paginator->url($paginator->lastPage()),
+            'prev' => $paginator->previousPageUrl(),
+            'next' => $paginator->nextPageUrl(),
+        ];
+
+        return response()->json($response);
+    }
+
+    public function store(
+        StoreLocationRequest $request,
+        ManageLocationHierarchy $hierarchy,
+        ApiResponse $apiResponse,
+        LocationTransformer $transformer,
+    ): JsonResponse {
+        Gate::authorize('create', Location::class);
+
+        $household = $this->household($request->user());
+        /** @var array{name: string, description?: string|null, parent_id?: int|string|null} $data */
+        $data = $request->validated('data');
+        $includes = $this->requestedIncludes($request->query('include'));
+        $location = $hierarchy->create($household, $data);
+
+        if ($includes !== []) {
+            $location->load($includes);
+        }
+
+        return response()
+            ->json($apiResponse->item($location, $transformer, $includes), 201)
+            ->header('Location', route('locations.show', ['location' => $location->id]));
+    }
+
+    public function show(
+        Request $request,
+        string $location,
+        ApiResponse $apiResponse,
+        LocationTransformer $transformer,
+    ): JsonResponse {
+        $household = $this->household($request->user());
+        $location = $household->locations()->findOrFail($location);
+
+        Gate::authorize('view', $location);
+        $includes = $this->requestedIncludes($request->query('include'));
+
+        if ($includes !== []) {
+            $location->load($includes);
+        }
+
+        return response()->json($apiResponse->item($location, $transformer, $includes));
+    }
+
+    public function update(
+        UpdateLocationRequest $request,
+        string $location,
+        ManageLocationHierarchy $hierarchy,
+        ApiResponse $apiResponse,
+        LocationTransformer $transformer,
+    ): JsonResponse {
+        $household = $this->household($request->user());
+        $location = $household->locations()->findOrFail($location);
+
+        Gate::authorize('update', $location);
+        /** @var array{name?: string, description?: string|null, parent_id?: int|string|null} $data */
+        $data = $request->validated('data');
+        $includes = $this->requestedIncludes($request->query('include'));
+        $location = $hierarchy->update($household, $location, $data);
+
+        if ($includes !== []) {
+            $location->load($includes);
+        }
+
+        return response()->json($apiResponse->item($location, $transformer, $includes));
+    }
+
+    public function destroy(
+        Request $request,
+        string $location,
+        ManageLocationHierarchy $hierarchy,
+    ): Response {
+        $household = $this->household($request->user());
+        $location = $household->locations()->findOrFail($location);
+
+        Gate::authorize('delete', $location);
+        $hierarchy->archive($household, $location);
+
+        return response()->noContent();
+    }
+
+    public function restore(
+        Request $request,
+        string $location,
+        ManageLocationHierarchy $hierarchy,
+        ApiResponse $apiResponse,
+        LocationTransformer $transformer,
+    ): JsonResponse {
+        $household = $this->household($request->user());
+        $location = $household->locations()->withTrashed()->findOrFail($location);
+
+        Gate::authorize('restore', $location);
+        $includes = $this->requestedIncludes($request->query('include'));
+        $location = $hierarchy->restore($household, $location);
+
+        if ($includes !== []) {
+            $location->load($includes);
+        }
+
+        return response()->json($apiResponse->item($location, $transformer, $includes));
+    }
+
+    private function household(User $user): Household
+    {
+        return $user->households()->firstOrFail();
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function requestedIncludes(mixed $includeParameter): array
+    {
+        if ($includeParameter === null || $includeParameter === '') {
+            return [];
+        }
+
+        $allowedIncludes = ['parent', 'children'];
+        if (! is_string($includeParameter)) {
+            throw InvalidIncludeQuery::includesNotAllowed(collect(['include']), collect($allowedIncludes));
+        }
+
+        $includes = array_values(array_filter(array_map('trim', explode(',', $includeParameter))));
+        $unknownIncludes = array_diff($includes, $allowedIncludes);
+
+        if ($unknownIncludes !== []) {
+            throw InvalidIncludeQuery::includesNotAllowed(collect($unknownIncludes), collect($allowedIncludes));
+        }
+
+        return $includes;
+    }
+}
