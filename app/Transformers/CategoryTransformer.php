@@ -3,10 +3,13 @@
 namespace App\Transformers;
 
 use App\Models\Category;
+use League\Fractal\Resource\ResourceInterface;
 use League\Fractal\TransformerAbstract;
 
 class CategoryTransformer extends TransformerAbstract
 {
+    protected array $availableIncludes = ['items'];
+
     /**
      * @return array{type: string, id: string, name: string}
      */
@@ -18,5 +21,10 @@ class CategoryTransformer extends TransformerAbstract
             'id' => (string) $category->getKey(),
             'name' => $category->name,
         ];
+    }
+
+    public function includeItems(Category $category): ResourceInterface
+    {
+        return $this->collection($category->items, new ItemTransformer);
     }
 }
