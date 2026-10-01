@@ -5,6 +5,8 @@ import App from './App.vue';
 import { router } from './router';
 import './styles.css';
 
+const pinia = createPinia();
+
 const queryClient = new QueryClient({
     defaultOptions: {
         queries: {
@@ -14,7 +16,7 @@ const queryClient = new QueryClient({
 });
 
 createApp(App)
-    .use(createPinia())
+    .use(pinia)
     .use(router)
     .use(VueQueryPlugin, { queryClient })
     .mount('#app');

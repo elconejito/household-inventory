@@ -1,8 +1,10 @@
 import { flushPromises, mount } from '@vue/test-utils';
+import { createPinia, setActivePinia } from 'pinia';
 import { createMemoryHistory, createRouter } from 'vue-router';
 import { describe, expect, it } from 'vitest';
 import App from '../App.vue';
 import { routes } from '../router';
+import { useSessionStore } from '../stores/session';
 
 describe('application shell', () => {
     it('navigates between the main sections and marks the current section', async () => {
@@ -10,13 +12,24 @@ describe('application shell', () => {
             history: createMemoryHistory(),
             routes,
         });
+        const pinia = createPinia();
+        setActivePinia(pinia);
+        useSessionStore(pinia).$patch({
+            user: {
+                id: '1',
+                name: 'Jordan Ramos',
+                email: 'jordan@example.com',
+                membership: { role: 'owner', household: { id: '1', name: 'Ramos Home' } },
+            },
+            status: 'authenticated',
+        });
 
         await router.push('/inventory');
         await router.isReady();
 
         const wrapper = mount(App, {
             global: {
-                plugins: [router],
+                plugins: [pinia, router],
             },
         });
 

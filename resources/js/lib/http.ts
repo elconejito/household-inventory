@@ -9,3 +9,10 @@ export const http = axios.create({
         'X-Requested-With': 'XMLHttpRequest',
     },
 });
+
+export function requestCsrfCookie(): Promise<void> {
+    return axios.get('/sanctum/csrf-cookie', {
+        withCredentials: true,
+        withXSRFToken: true,
+    }).then(() => undefined);
+}
