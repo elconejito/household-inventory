@@ -1,3 +1,4 @@
+import { VueQueryPlugin, QueryClient } from '@tanstack/vue-query';
 import { flushPromises, mount } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
 import { createMemoryHistory, createRouter } from 'vue-router';
@@ -13,6 +14,9 @@ describe('application shell', () => {
             routes,
         });
         const pinia = createPinia();
+        const queryClient = new QueryClient({
+            defaultOptions: { queries: { retry: false } },
+        });
         setActivePinia(pinia);
         useSessionStore(pinia).$patch({
             user: {
@@ -29,7 +33,7 @@ describe('application shell', () => {
 
         const wrapper = mount(App, {
             global: {
-                plugins: [pinia, router],
+                plugins: [pinia, [VueQueryPlugin, { queryClient }], router],
             },
         });
 
