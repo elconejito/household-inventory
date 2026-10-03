@@ -6,8 +6,13 @@ import { http } from '../lib/http';
 import { AxiosError } from 'axios';
 import ItemDetailPage from './ItemDetailPage.vue';
 
+const { routeState } = vi.hoisted(() => ({ routeState: { params: { item: '7' } } }));
 vi.mock('../lib/http', () => ({ http: { get: vi.fn(), post: vi.fn(), patch: vi.fn(), delete: vi.fn() } }));
-vi.mock('vue-router', () => ({ useRoute: () => ({ params: { item: '7' } }) }));
+vi.mock('vue-router', async (importOriginal) => {
+    const vue = await import('vue');
+    const route = vue.reactive(routeState);
+    return { ...(await importOriginal<typeof import('vue-router')>()), useRoute: () => route, setMockItem: (id: string) => { route.params.item = id; } };
+});
 
 const item = {
     id: '7', name: 'Batteries', counting_unit: 'pack', counting_unit_plural: 'packs', description: null, total_quantity: 5,
@@ -21,8 +26,9 @@ describe('item stock detail', () => {
     let queryClient: QueryClient;
     let wrapper: ReturnType<typeof mount> | undefined;
 
-    beforeEach(() => {
+    beforeEach(async () => {
         vi.clearAllMocks();
+        (await import('vue-router') as unknown as { setMockItem: (id: string) => void }).setMockItem('7');
         queryClient = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
         vi.mocked(http.get).mockImplementation(async (url) => {
             if (String(url).includes('/images')) return { data: { data: [] } } as never;
@@ -164,5 +170,24 @@ describe('item stock detail', () => {
 
         finishMovement?.({ data: { data: { id: '22' } } });
         await flushPromises();
+    });
+
+    it('does not show a completed stock action on a different item after navigation', async () => {
+        let finishMovement: ((response: { data: { data: { id: string } } }) => void) | undefined;
+        vi.mocked(http.post).mockImplementation(() => new Promise((resolve) => {
+            finishMovement = resolve;
+        }) as never);
+        mountPage();
+        await flushPromises();
+        const closet = wrapper!.findAll('li').find((row) => row.text().includes('Closet'))!;
+        await closet.findAll('button').find((button) => button.text() === 'Use 1')!.trigger('click');
+
+        (await import('vue-router') as unknown as { setMockItem: (id: string) => void }).setMockItem('8');
+        await flushPromises();
+        finishMovement?.({ data: { data: { id: '23' } } });
+        await flushPromises();
+
+        expect(wrapper!.text()).not.toContain('Used 1 pack from Closet.');
+        expect(wrapper!.text()).not.toContain('Stock updated.');
     });
 });

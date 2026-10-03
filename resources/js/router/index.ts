@@ -11,6 +11,7 @@ import RegisterPage from '../pages/RegisterPage.vue';
 import SettingsPage from '../pages/SettingsPage.vue';
 import ArchivesPage from '../pages/ArchivesPage.vue';
 import InvitationAcceptPage from '../pages/InvitationAcceptPage.vue';
+import SessionUnavailablePage from '../pages/SessionUnavailablePage.vue';
 import { useSessionStore } from '../stores/session';
 
 declare module 'vue-router' {
@@ -34,6 +35,7 @@ export const routes: RouteRecordRaw[] = [
         meta: { guestOnly: true },
     },
     { path: '/invitations/accept', name: 'invitation-accept', component: InvitationAcceptPage },
+    { path: '/session-unavailable', name: 'session-unavailable', component: SessionUnavailablePage },
     {
         path: '/',
         component: AppShell,
@@ -83,7 +85,14 @@ export function installSessionGuards(targetRouter: ReturnType<typeof createRoute
         }
 
         const session = useSessionStore();
-        const user = await session.ensureLoaded();
+        let user: Awaited<ReturnType<typeof session.ensureLoaded>>;
+        try {
+            user = await session.ensureLoaded();
+        } catch {
+            session.rememberPendingDestination(to.fullPath);
+
+            return { name: 'session-unavailable' };
+        }
 
         if (to.meta.requiresAuth && !user) {
             return {

@@ -79,6 +79,8 @@ watch(itemId, () => {
     targetLocationId.value = '';
     showCreateLocation.value = false;
     errors.value = { fields: {}, form: '' };
+    success.value = '';
+    actionError.value = '';
 });
 
 function cancelAction(): void {
@@ -122,6 +124,7 @@ async function submitAction(): Promise<void> {
         return;
     }
 
+    const operationItemId = itemId.value;
     errors.value = { fields: {}, form: '' };
     actionError.value = '';
     if (activeAction.value !== 'threshold' && !confirmation.value) {
@@ -137,14 +140,17 @@ async function submitAction(): Promise<void> {
                 return;
             }
             await thresholdMutation.mutateAsync({ id: selectedLevel.value.id, alertThreshold: nextThreshold });
+            if (itemId.value !== operationItemId) return;
             success.value = 'Low stock threshold updated.';
         } else {
             await movementMutation.mutateAsync(movementPayload());
+            if (itemId.value !== operationItemId) return;
             success.value = 'Stock updated.';
         }
         activeAction.value = null;
         confirmation.value = false;
     } catch (error) {
+        if (itemId.value !== operationItemId) return;
         if (activeAction.value) {
             errors.value = parseApiErrors(error);
         } else {
@@ -185,6 +191,7 @@ async function quickConsume(level: InventoryLevel): Promise<void> {
 
     actionError.value = '';
     success.value = '';
+    const operationItemId = itemId.value;
 
     try {
         await movementMutation.mutateAsync({
@@ -193,14 +200,17 @@ async function quickConsume(level: InventoryLevel): Promise<void> {
             location_id: level.location.id,
             quantity: 1,
         });
+        if (itemId.value !== operationItemId) return;
         success.value = `Used 1 ${unitFor(1)} from ${locationPath(level.location)}.`;
     } catch (error) {
+        if (itemId.value !== operationItemId) return;
         actionError.value = parseApiErrors(error).form || 'The stock change could not be saved.';
     }
 }
 
 async function toggleBuySoon(): Promise<void> {
     if (alertPending.value) return;
+    const operationItemId = itemId.value;
     try {
         if (manualAlert.value) {
             await resolveAlertMutation.mutateAsync(manualAlert.value.id);
@@ -208,6 +218,7 @@ async function toggleBuySoon(): Promise<void> {
             await buySoonMutation.mutateAsync(itemId.value);
         }
     } catch (error) {
+        if (itemId.value !== operationItemId) return;
         actionError.value = parseApiErrors(error).form || 'The Buy soon status could not be updated.';
     }
 }

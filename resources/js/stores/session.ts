@@ -41,11 +41,23 @@ type SessionStatus = 'unknown' | 'loading' | 'authenticated' | 'guest';
 export const useSessionStore = defineStore('session', () => {
     const user = ref<SessionUser | null>(null);
     const status = ref<SessionStatus>('unknown');
+    const pendingDestination = ref<string | null>(null);
     let loadingCurrentUser: Promise<SessionUser | null> | null = null;
 
     function clearSession(): void {
         user.value = null;
         status.value = 'guest';
+    }
+
+    function rememberPendingDestination(destination: string): void {
+        pendingDestination.value = destination;
+    }
+
+    function takePendingDestination(): string | null {
+        const destination = pendingDestination.value;
+        pendingDestination.value = null;
+
+        return destination;
     }
 
     async function loadCurrentUser(): Promise<SessionUser | null> {
@@ -132,7 +144,10 @@ export const useSessionStore = defineStore('session', () => {
     return {
         user,
         status,
+        pendingDestination,
         ensureLoaded,
+        rememberPendingDestination,
+        takePendingDestination,
         refresh,
         setAuthenticatedUser,
         login,

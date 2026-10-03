@@ -3,6 +3,7 @@ import { createPinia, setActivePinia } from 'pinia';
 import { createMemoryHistory, createRouter } from 'vue-router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { http } from '../lib/http';
+import { useSessionStore } from '../stores/session';
 import { installSessionGuards, routes } from './index';
 
 vi.mock('../lib/http', () => ({
@@ -46,5 +47,29 @@ describe('session route guards', () => {
 
         expect(router.currentRoute.value.name).toBe('dashboard');
         expect(http.get).toHaveBeenCalledTimes(1);
+    });
+
+    it('sends a protected deep link to recoverable session retry without dropping its URL', async () => {
+        vi.mocked(http.get).mockRejectedValueOnce(new Error('Network unavailable'));
+        const router = createRouter({ history: createMemoryHistory(), routes });
+        installSessionGuards(router);
+
+        await router.push('/inventory?create=1');
+
+        expect(router.currentRoute.value.name).toBe('session-unavailable');
+        expect(useSessionStore().pendingDestination).toBe('/inventory?create=1');
+    });
+
+    it('keeps invitation credentials in the fragment while session lookup recovers', async () => {
+        vi.mocked(http.get).mockRejectedValueOnce(new Error('Network unavailable'));
+        const router = createRouter({ history: createMemoryHistory(), routes });
+        installSessionGuards(router);
+        const destination = '/invitations/accept#token=one-time-secret';
+
+        await router.push(destination);
+
+        expect(router.currentRoute.value.name).toBe('session-unavailable');
+        expect(router.currentRoute.value.fullPath).not.toContain('one-time-secret');
+        expect(useSessionStore().pendingDestination).toBe(destination);
     });
 });
