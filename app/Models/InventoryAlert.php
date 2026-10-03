@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\InventoryAlertType;
+use App\Models\Concerns\HasNotes;
 use Database\Factories\InventoryAlertFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -13,7 +14,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class InventoryAlert extends Model
 {
     /** @use HasFactory<InventoryAlertFactory> */
-    use HasFactory;
+    use HasFactory, HasNotes;
 
     public $timestamps = false;
 

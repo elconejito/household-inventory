@@ -15,6 +15,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
 use Spatie\QueryBuilder\AllowedFilter;
+use Spatie\QueryBuilder\AllowedInclude;
 use Spatie\QueryBuilder\Exceptions\InvalidIncludeQuery;
 use Spatie\QueryBuilder\QueryBuilder;
 use Symfony\Component\HttpFoundation\Response;
@@ -39,7 +40,7 @@ class CategoryController extends Controller
             )
             ->allowedSorts('name')
             ->defaultSort('name')
-            ->allowedIncludes('items')
+            ->allowedIncludes('items', 'notes', AllowedInclude::relationship('notes.created_by', 'notes.creator'))
             ->orderBy('categories.id');
 
         $paginator = $query
@@ -78,7 +79,10 @@ class CategoryController extends Controller
         $category = $household->categories()->create($data);
 
         if (in_array('items', $includes, true)) {
-            $category->load('items');
+            $category->load($this->relationshipIncludes(['items']));
+        }
+        if (in_array('notes', $includes, true) || in_array('notes.created_by', $includes, true)) {
+            $category->load($this->relationshipIncludes($includes));
         }
 
         return response()
@@ -99,7 +103,10 @@ class CategoryController extends Controller
         $includes = $this->requestedIncludes($request->query('include'));
 
         if (in_array('items', $includes, true)) {
-            $category->load('items');
+            $category->load($this->relationshipIncludes(['items']));
+        }
+        if (in_array('notes', $includes, true) || in_array('notes.created_by', $includes, true)) {
+            $category->load($this->relationshipIncludes($includes));
         }
 
         return response()->json($apiResponse->item($category, $transformer, $includes));
@@ -121,7 +128,10 @@ class CategoryController extends Controller
         $category->update($data);
 
         if (in_array('items', $includes, true)) {
-            $category->load('items');
+            $category->load($this->relationshipIncludes(['items']));
+        }
+        if (in_array('notes', $includes, true) || in_array('notes.created_by', $includes, true)) {
+            $category->load($this->relationshipIncludes($includes));
         }
 
         return response()->json($apiResponse->item($category, $transformer, $includes));
@@ -154,7 +164,10 @@ class CategoryController extends Controller
         $category->restore();
 
         if (in_array('items', $includes, true)) {
-            $category->load('items');
+            $category->load($this->relationshipIncludes(['items']));
+        }
+        if (in_array('notes', $includes, true) || in_array('notes.created_by', $includes, true)) {
+            $category->load($this->relationshipIncludes($includes));
         }
 
         return response()->json($apiResponse->item($category, $transformer, $includes));
@@ -174,7 +187,7 @@ class CategoryController extends Controller
             return [];
         }
 
-        $allowedIncludes = ['items'];
+        $allowedIncludes = ['items', 'notes', 'notes.created_by'];
         if (! is_string($includeParameter)) {
             throw InvalidIncludeQuery::includesNotAllowed(collect(['include']), collect($allowedIncludes));
         }
@@ -187,5 +200,13 @@ class CategoryController extends Controller
         }
 
         return $includes;
+    }
+
+    /** @param array<int, string> $includes
+     * @return array<int, string>
+     */
+    private function relationshipIncludes(array $includes): array
+    {
+        return array_map(static fn (string $include): string => $include === 'notes.created_by' ? 'notes.creator' : $include, $includes);
     }
 }

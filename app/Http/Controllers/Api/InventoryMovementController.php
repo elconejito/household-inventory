@@ -40,7 +40,11 @@ class InventoryMovementController extends Controller
                 AllowedFilter::callback('to_location_id', fn (Builder $query, mixed $value): Builder => $query->where('movement_type', 'transfer')->whereHas('entries', fn (Builder $entries): Builder => $entries->where('location_id', $value)->where('quantity_delta', '>', 0))),
                 AllowedFilter::callback('location_id', fn (Builder $query, mixed $value): Builder => $query->whereHas('entries', fn (Builder $entries): Builder => $entries->where('location_id', $value))),
             )
-            ->allowedIncludes('item', 'entries.location', AllowedInclude::relationship('recorded_by', 'recorder'))
+            ->allowedIncludes(
+                'item', 'entries.location', 'notes',
+                AllowedInclude::relationship('recorded_by', 'recorder'),
+                AllowedInclude::relationship('notes.created_by', 'notes.creator'),
+            )
             ->orderByDesc('recorded_at')
             ->orderByDesc('id');
         $paginator = $query->paginate($request->integer('per_page', 10))->withQueryString();
@@ -90,7 +94,7 @@ class InventoryMovementController extends Controller
     /** @return array<int, string> */
     private function requestedIncludes(mixed $value): array
     {
-        $allowed = ['item', 'entries', 'entries.location', 'recorded_by'];
+        $allowed = ['item', 'entries', 'entries.location', 'recorded_by', 'notes', 'notes.created_by'];
         if ($value === null || $value === '') {
             return [];
         }
@@ -122,6 +126,10 @@ class InventoryMovementController extends Controller
      */
     private function relationshipIncludes(array $includes): array
     {
-        return array_map(static fn (string $include): string => $include === 'recorded_by' ? 'recorder' : $include, $includes);
+        return array_map(static fn (string $include): string => match ($include) {
+            'recorded_by' => 'recorder',
+            'notes.created_by' => 'notes.creator',
+            default => $include,
+        }, $includes);
     }
 }

@@ -8,7 +8,7 @@ use League\Fractal\TransformerAbstract;
 
 class InventoryMovementTransformer extends TransformerAbstract
 {
-    protected array $availableIncludes = ['item', 'entries', 'recorded_by'];
+    protected array $availableIncludes = ['item', 'entries', 'recorded_by', 'notes'];
 
     /** @return array{type: string, id: string, movement_type: string, recorded_at: string} */
     public function transform(mixed $movement): array
@@ -35,5 +35,10 @@ class InventoryMovementTransformer extends TransformerAbstract
     public function includeRecordedBy(InventoryMovement $movement): ResourceInterface
     {
         return $this->item($movement->recorder, new UserTransformer);
+    }
+
+    public function includeNotes(InventoryMovement $movement): ResourceInterface
+    {
+        return $this->collection($movement->notes, new NoteTransformer);
     }
 }

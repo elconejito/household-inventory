@@ -8,7 +8,7 @@ use League\Fractal\TransformerAbstract;
 
 class LocationTransformer extends TransformerAbstract
 {
-    protected array $availableIncludes = ['parent', 'children'];
+    protected array $availableIncludes = ['parent', 'children', 'notes'];
 
     /**
      * @return array{type: string, id: string, name: string, description: string|null}
@@ -38,5 +38,10 @@ class LocationTransformer extends TransformerAbstract
     public function includeChildren(Location $location): ResourceInterface
     {
         return $this->collection($location->children->sortBy('name')->values(), new self);
+    }
+
+    public function includeNotes(Location $location): ResourceInterface
+    {
+        return $this->collection($location->notes, new NoteTransformer);
     }
 }

@@ -8,7 +8,7 @@ use League\Fractal\TransformerAbstract;
 
 class InventoryAlertTransformer extends TransformerAbstract
 {
-    protected array $availableIncludes = ['item', 'created_by', 'resolved_by'];
+    protected array $availableIncludes = ['item', 'created_by', 'resolved_by', 'notes'];
 
     /** @return array{type: string, id: string, alert_type: string, created_at: string, resolved_at: string|null} */
     public function transform(mixed $alert): array
@@ -38,5 +38,10 @@ class InventoryAlertTransformer extends TransformerAbstract
         return $alert->resolver === null
             ? $this->null()
             : $this->item($alert->resolver, new UserTransformer);
+    }
+
+    public function includeNotes(InventoryAlert $alert): ResourceInterface
+    {
+        return $this->collection($alert->notes, new NoteTransformer);
     }
 }

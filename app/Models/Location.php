@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\HasNotes;
 use Database\Factories\LocationFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Casts\Attribute;
@@ -16,7 +17,7 @@ use Illuminate\Support\Str;
 class Location extends Model
 {
     /** @use HasFactory<LocationFactory> */
-    use HasFactory, SoftDeletes;
+    use HasFactory, HasNotes, SoftDeletes;
 
     public $timestamps = false;
 

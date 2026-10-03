@@ -50,6 +50,10 @@ class ItemController extends Controller
                     fn (Builder|Relation $levels) => $levels->whereHas('location'), 'inventoryLevels'),
                 AllowedInclude::callback('inventory_levels.location',
                     fn (Builder|Relation $levels) => $levels->whereHas('location')->with('location'), 'inventoryLevels'),
+                'notes',
+                AllowedInclude::relationship('notes.created_by', 'notes.creator'),
+                'images',
+                AllowedInclude::relationship('images.uploaded_by', 'images.uploader'),
             )
             ->orderBy('items.id');
 
@@ -199,7 +203,7 @@ class ItemController extends Controller
             return [];
         }
 
-        $allowedIncludes = ['categories', 'inventory_levels', 'inventory_levels.location'];
+        $allowedIncludes = ['categories', 'inventory_levels', 'inventory_levels.location', 'notes', 'notes.created_by', 'images', 'images.uploaded_by'];
         if (! is_string($includeParameter)) {
             throw InvalidIncludeQuery::includesNotAllowed(collect(['include']), collect($allowedIncludes));
         }
@@ -237,6 +241,14 @@ class ItemController extends Controller
                     $levels->with('location');
                 }
             }]);
+        }
+
+        if (in_array('notes', $includes, true) || in_array('notes.created_by', $includes, true)) {
+            $item->load(array_map(static fn (string $include): string => $include === 'notes.created_by' ? 'notes.creator' : $include, array_filter($includes, static fn (string $include): bool => str_starts_with($include, 'notes'))));
+        }
+
+        if (in_array('images', $includes, true) || in_array('images.uploaded_by', $includes, true)) {
+            $item->load(in_array('images.uploaded_by', $includes, true) ? 'images.uploader' : 'images');
         }
     }
 }

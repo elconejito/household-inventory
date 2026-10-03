@@ -7,7 +7,9 @@ use App\Http\Controllers\Api\InventoryAlertController;
 use App\Http\Controllers\Api\InventoryLevelController;
 use App\Http\Controllers\Api\InventoryMovementController;
 use App\Http\Controllers\Api\ItemController;
+use App\Http\Controllers\Api\ItemImageController;
 use App\Http\Controllers\Api\LocationController;
+use App\Http\Controllers\Api\NoteController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/health', HealthController::class)->name('health');
@@ -57,4 +59,29 @@ Route::middleware('auth:sanctum')->group(function (): void {
     Route::post('/inventory-alerts', [InventoryAlertController::class, 'store'])->name('inventory-alerts.store');
     Route::get('/inventory-alerts/{inventory_alert}', [InventoryAlertController::class, 'show'])->name('inventory-alerts.show');
     Route::post('/inventory-alerts/{inventory_alert}/resolve', [InventoryAlertController::class, 'resolve'])->name('inventory-alerts.resolve');
+
+    foreach ([
+        'items' => 'item',
+        'categories' => 'category',
+        'locations' => 'location',
+        'inventory-movements' => 'inventory_movement',
+        'inventory-alerts' => 'inventory_alert',
+    ] as $notableType => $parameter) {
+        Route::get("/{$notableType}/{{$parameter}}/notes", [NoteController::class, 'index'])
+            ->defaults('notable_type', $notableType)->name("{$notableType}.notes.index");
+        Route::post("/{$notableType}/{{$parameter}}/notes", [NoteController::class, 'store'])
+            ->defaults('notable_type', $notableType)->name("{$notableType}.notes.store");
+    }
+
+    Route::patch('/notes/{note}', [NoteController::class, 'update'])->name('notes.update');
+    Route::delete('/notes/{note}', [NoteController::class, 'destroy'])->name('notes.destroy');
+    Route::post('/notes/{note}/restore', [NoteController::class, 'restore'])->name('notes.restore');
+
+    Route::get('/items/{item}/images', [ItemImageController::class, 'index'])->name('items.images.index');
+    Route::post('/items/{item}/images', [ItemImageController::class, 'store'])->name('items.images.store');
+    Route::patch('/item-images/{item_image}', [ItemImageController::class, 'update'])->name('item-images.update');
+    Route::delete('/item-images/{item_image}', [ItemImageController::class, 'destroy'])->name('item-images.destroy');
+    Route::post('/item-images/{item_image}/restore', [ItemImageController::class, 'restore'])->name('item-images.restore');
+    Route::get('/item-images/{item_image}/thumbnail', [ItemImageController::class, 'thumbnail'])->name('item-images.thumbnail');
+    Route::get('/item-images/{item_image}/display', [ItemImageController::class, 'display'])->name('item-images.display');
 });

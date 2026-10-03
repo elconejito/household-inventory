@@ -38,6 +38,14 @@ return [
             'report' => false,
         ],
 
+        'inventory-images' => [
+            'driver' => 'local',
+            'root' => storage_path('app/private/inventory-images'),
+            'visibility' => 'private',
+            'throw' => true,
+            'report' => false,
+        ],
+
         'public' => [
             'driver' => 'local',
             'root' => storage_path('app/public'),

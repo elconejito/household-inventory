@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\HasNotes;
 use Database\Factories\ItemFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Scope;
@@ -19,7 +20,7 @@ use Illuminate\Support\Str;
 class Item extends Model
 {
     /** @use HasFactory<ItemFactory> */
-    use HasFactory, SoftDeletes;
+    use HasFactory, HasNotes, SoftDeletes;
 
     public $timestamps = false;
 
@@ -53,6 +54,14 @@ class Item extends Model
     public function inventoryAlerts(): HasMany
     {
         return $this->hasMany(InventoryAlert::class);
+    }
+
+    public function images(): HasMany
+    {
+        return $this->hasMany(ItemImage::class)
+            ->orderByDesc('is_primary')
+            ->orderBy('uploaded_at')
+            ->orderBy('id');
     }
 
     #[Scope]

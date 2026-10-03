@@ -16,6 +16,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
 use Spatie\QueryBuilder\AllowedFilter;
+use Spatie\QueryBuilder\AllowedInclude;
 use Spatie\QueryBuilder\Exceptions\InvalidIncludeQuery;
 use Spatie\QueryBuilder\QueryBuilder;
 use Symfony\Component\HttpFoundation\Response;
@@ -40,7 +41,7 @@ class LocationController extends Controller
             )
             ->allowedSorts('name')
             ->defaultSort('name')
-            ->allowedIncludes('parent', 'children')
+            ->allowedIncludes('parent', 'children', 'notes', AllowedInclude::relationship('notes.created_by', 'notes.creator'))
             ->orderBy('locations.id');
 
         $paginator = $query
@@ -80,7 +81,7 @@ class LocationController extends Controller
         $location = $hierarchy->create($household, $data);
 
         if ($includes !== []) {
-            $location->load($includes);
+            $location->load($this->relationshipIncludes($includes));
         }
 
         return response()
@@ -101,7 +102,7 @@ class LocationController extends Controller
         $includes = $this->requestedIncludes($request->query('include'));
 
         if ($includes !== []) {
-            $location->load($includes);
+            $location->load($this->relationshipIncludes($includes));
         }
 
         return response()->json($apiResponse->item($location, $transformer, $includes));
@@ -124,7 +125,7 @@ class LocationController extends Controller
         $location = $hierarchy->update($household, $location, $data);
 
         if ($includes !== []) {
-            $location->load($includes);
+            $location->load($this->relationshipIncludes($includes));
         }
 
         return response()->json($apiResponse->item($location, $transformer, $includes));
@@ -159,7 +160,7 @@ class LocationController extends Controller
         $location = $hierarchy->restore($household, $location);
 
         if ($includes !== []) {
-            $location->load($includes);
+            $location->load($this->relationshipIncludes($includes));
         }
 
         return response()->json($apiResponse->item($location, $transformer, $includes));
@@ -179,7 +180,7 @@ class LocationController extends Controller
             return [];
         }
 
-        $allowedIncludes = ['parent', 'children'];
+        $allowedIncludes = ['parent', 'children', 'notes', 'notes.created_by'];
         if (! is_string($includeParameter)) {
             throw InvalidIncludeQuery::includesNotAllowed(collect(['include']), collect($allowedIncludes));
         }
@@ -192,5 +193,13 @@ class LocationController extends Controller
         }
 
         return $includes;
+    }
+
+    /** @param array<int, string> $includes
+     * @return array<int, string>
+     */
+    private function relationshipIncludes(array $includes): array
+    {
+        return array_map(static fn (string $include): string => $include === 'notes.created_by' ? 'notes.creator' : $include, $includes);
     }
 }

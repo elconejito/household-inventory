@@ -8,7 +8,7 @@ use League\Fractal\TransformerAbstract;
 
 class CategoryTransformer extends TransformerAbstract
 {
-    protected array $availableIncludes = ['items'];
+    protected array $availableIncludes = ['items', 'notes'];
 
     /**
      * @return array{type: string, id: string, name: string}
@@ -26,5 +26,10 @@ class CategoryTransformer extends TransformerAbstract
     public function includeItems(Category $category): ResourceInterface
     {
         return $this->collection($category->items, new ItemTransformer);
+    }
+
+    public function includeNotes(Category $category): ResourceInterface
+    {
+        return $this->collection($category->notes, new NoteTransformer);
     }
 }

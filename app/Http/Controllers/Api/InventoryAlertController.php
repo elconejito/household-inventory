@@ -46,6 +46,8 @@ class InventoryAlertController extends Controller
                 'item',
                 AllowedInclude::relationship('created_by', 'creator'),
                 AllowedInclude::relationship('resolved_by', 'resolver'),
+                'notes',
+                AllowedInclude::relationship('notes.created_by', 'notes.creator'),
             )
             ->orderByDesc('inventory_alerts.created_at')
             ->orderByDesc('inventory_alerts.id');
@@ -115,7 +117,7 @@ class InventoryAlertController extends Controller
     /** @return array<int, string> */
     private function requestedIncludes(mixed $value): array
     {
-        $allowed = ['item', 'created_by', 'resolved_by'];
+        $allowed = ['item', 'created_by', 'resolved_by', 'notes', 'notes.created_by'];
         if ($value === null || $value === '') {
             return [];
         }
@@ -137,6 +139,7 @@ class InventoryAlertController extends Controller
         $relations = array_map(static fn (string $include): string => match ($include) {
             'created_by' => 'creator',
             'resolved_by' => 'resolver',
+            'notes.created_by' => 'notes.creator',
             default => $include,
         }, $includes);
         if ($relations !== []) {

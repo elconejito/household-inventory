@@ -9,7 +9,7 @@ use League\Fractal\TransformerAbstract;
 
 class ItemTransformer extends TransformerAbstract
 {
-    protected array $availableIncludes = ['categories', 'inventory_levels'];
+    protected array $availableIncludes = ['categories', 'inventory_levels', 'notes', 'images'];
 
     /**
      * @return array{type: string, id: string, name: string, counting_unit: string, counting_unit_plural: string, description: string|null, total_quantity: int}
@@ -36,5 +36,15 @@ class ItemTransformer extends TransformerAbstract
     public function includeInventoryLevels(Item $item): ResourceInterface
     {
         return $this->collection($item->inventoryLevels, new InventoryLevelTransformer);
+    }
+
+    public function includeNotes(Item $item): ResourceInterface
+    {
+        return $this->collection($item->notes, new NoteTransformer);
+    }
+
+    public function includeImages(Item $item): ResourceInterface
+    {
+        return $this->collection($item->images, new ItemImageTransformer);
     }
 }

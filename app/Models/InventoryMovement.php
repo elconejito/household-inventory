@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\MovementType;
+use App\Models\Concerns\HasNotes;
 use Database\Factories\InventoryMovementFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -14,7 +15,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 class InventoryMovement extends Model
 {
     /** @use HasFactory<InventoryMovementFactory> */
-    use HasFactory;
+    use HasFactory, HasNotes;
 
     public $timestamps = false;
 

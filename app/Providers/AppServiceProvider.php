@@ -2,7 +2,13 @@
 
 namespace App\Providers;
 
+use App\Models\Category;
+use App\Models\InventoryAlert;
+use App\Models\InventoryMovement;
+use App\Models\Item;
+use App\Models\Location;
 use Illuminate\Cache\RateLimiting\Limit;
+use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
@@ -23,6 +29,14 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        Relation::enforceMorphMap([
+            'items' => Item::class,
+            'categories' => Category::class,
+            'locations' => Location::class,
+            'inventory-movements' => InventoryMovement::class,
+            'inventory-alerts' => InventoryAlert::class,
+        ]);
+
         RateLimiter::for('register', fn (Request $request): Limit => Limit::perMinute(5)->by($request->ip()));
 
         RateLimiter::for('login', fn (Request $request): Limit => Limit::perMinute(5)->by(Str::transliterate(
