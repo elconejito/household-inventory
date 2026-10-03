@@ -2,18 +2,23 @@
 
 namespace App\Actions;
 
+use App\Actions\Concerns\RequiresActiveHouseholdMembership;
 use App\Models\Household;
 use App\Models\InventoryLevel;
+use App\Models\User;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 class ManageInventoryLevel
 {
+    use RequiresActiveHouseholdMembership;
+
     /** @param array{item_id: int|string, location_id: int|string, alert_threshold?: int|string|null} $data */
-    public function create(Household $household, array $data): InventoryLevel
+    public function create(Household $household, User $actor, array $data): InventoryLevel
     {
-        return DB::transaction(function () use ($household, $data): InventoryLevel {
+        return DB::transaction(function () use ($household, $actor, $data): InventoryLevel {
             $household = Household::query()->lockForUpdate()->findOrFail($household->getKey());
+            $this->assertActiveMembership($household, $actor);
             $item = $household->items()->lockForUpdate()->find($data['item_id']);
             $location = $household->locations()->whereKey($data['location_id'])->lockForUpdate()->first();
             if ($item === null) {
@@ -40,10 +45,11 @@ class ManageInventoryLevel
     }
 
     /** @param array{alert_threshold?: int|string|null} $data */
-    public function update(Household $household, InventoryLevel $inventoryLevel, array $data): InventoryLevel
+    public function update(Household $household, InventoryLevel $inventoryLevel, User $actor, array $data): InventoryLevel
     {
-        return DB::transaction(function () use ($household, $inventoryLevel, $data): InventoryLevel {
+        return DB::transaction(function () use ($household, $inventoryLevel, $actor, $data): InventoryLevel {
             $household = Household::query()->lockForUpdate()->findOrFail($household->getKey());
+            $this->assertActiveMembership($household, $actor);
             $item = $household->items()->lockForUpdate()->find($inventoryLevel->item_id);
             $location = $household->locations()->whereKey($inventoryLevel->location_id)->lockForUpdate()->first();
             if ($item === null) {

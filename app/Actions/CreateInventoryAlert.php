@@ -2,6 +2,7 @@
 
 namespace App\Actions;
 
+use App\Actions\Concerns\RequiresActiveHouseholdMembership;
 use App\Enums\InventoryAlertType;
 use App\Exceptions\ActiveInventoryAlertExists;
 use App\Models\Household;
@@ -11,11 +12,14 @@ use Illuminate\Support\Facades\DB;
 
 class CreateInventoryAlert
 {
+    use RequiresActiveHouseholdMembership;
+
     /** @param array{item_id: int|string, alert_type: string} $data */
     public function create(Household $household, User $creator, array $data): InventoryAlert
     {
         return DB::transaction(function () use ($household, $creator, $data): InventoryAlert {
             $household = Household::query()->lockForUpdate()->findOrFail($household->getKey());
+            $this->assertActiveMembership($household, $creator);
             $item = $household->items()->lockForUpdate()->findOrFail($data['item_id']);
 
             $activeAlert = $item->inventoryAlerts()

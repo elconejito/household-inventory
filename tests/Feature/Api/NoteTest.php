@@ -11,8 +11,10 @@ use App\Models\Membership;
 use App\Models\Note;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Foundation\Testing\LazilyRefreshDatabase;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\TestCase;
 
@@ -57,6 +59,31 @@ class NoteTest extends TestCase
         $this->patchJson('/api/notes/'.$note->id, ['data' => ['body' => 'Edited']])->assertOk();
         $this->assertTrue($updatedAt->equalTo($note->fresh()->updated_at));
         $this->travelBack();
+    }
+
+    public function test_note_update_rejects_membership_removed_before_the_locked_write(): void
+    {
+        [$user, $category] = $this->householdCategory();
+        $note = $this->createNote($category, 'Original', $user);
+        $membership = Membership::query()->where('household_id', $category->household_id)
+            ->where('user_id', $user->getKey())
+            ->firstOrFail();
+        $membershipRemovedAfterNotableLookup = false;
+
+        DB::listen(function (QueryExecuted $query) use ($membership, &$membershipRemovedAfterNotableLookup): void {
+            if (! $membershipRemovedAfterNotableLookup
+                && preg_match('/^select\s+[`"]households[`"]\./i', trim($query->sql)) === 1) {
+                $membershipRemovedAfterNotableLookup = true;
+                $membership->delete();
+            }
+        });
+
+        $this->actingAs($user, 'web')->patchJson('/api/notes/'.$note->getKey(), [
+            'data' => ['body' => 'Changed'],
+        ])->assertForbidden();
+
+        $this->assertTrue($membershipRemovedAfterNotableLookup);
+        $this->assertSame('Original', $note->fresh()->body);
     }
 
     public function test_note_index_is_newest_first_paginated_and_has_optional_author(): void

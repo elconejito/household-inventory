@@ -2,17 +2,22 @@
 
 namespace App\Actions;
 
+use App\Actions\Concerns\RequiresActiveHouseholdMembership;
 use App\Exceptions\InventoryArchiveBlocked;
 use App\Models\Household;
 use App\Models\Item;
+use App\Models\User;
 use Illuminate\Support\Facades\DB;
 
 class ArchiveItem
 {
-    public function archive(Household $household, Item $item): void
+    use RequiresActiveHouseholdMembership;
+
+    public function archive(Household $household, Item $item, User $actor): void
     {
-        DB::transaction(function () use ($household, $item): void {
-            Household::query()->lockForUpdate()->findOrFail($household->getKey());
+        DB::transaction(function () use ($household, $item, $actor): void {
+            $household = Household::query()->lockForUpdate()->findOrFail($household->getKey());
+            $this->assertActiveMembership($household, $actor);
             $item = $household->items()->lockForUpdate()->findOrFail($item->getKey());
 
             $blockers = [];

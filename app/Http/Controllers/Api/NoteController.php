@@ -7,6 +7,7 @@ use App\Http\Requests\IndexNoteRequest;
 use App\Http\Requests\StoreNoteRequest;
 use App\Http\Requests\UpdateNoteRequest;
 use App\Models\Household;
+use App\Models\Membership;
 use App\Models\Note;
 use App\Models\User;
 use App\Serialization\ApiResponse;
@@ -198,6 +199,13 @@ class NoteController extends Controller
     {
         $household = $user->households()->firstOrFail();
         Household::query()->lockForUpdate()->findOrFail($household->getKey());
+        $isActiveMember = Membership::query()
+            ->where('household_id', $household->getKey())
+            ->where('user_id', $user->getKey())
+            ->lockForUpdate()
+            ->exists();
+        abort_unless($isActiveMember, 403);
+
         $class = $notable::class;
         $query = $class::query()
             ->where('household_id', $household->getKey())

@@ -6,7 +6,9 @@ use App\Models\Household;
 use App\Models\Item;
 use App\Models\Membership;
 use App\Models\User;
+use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Foundation\Testing\LazilyRefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
 class ItemTest extends TestCase
@@ -86,6 +88,64 @@ class ItemTest extends TestCase
         }
 
         $this->assertDatabaseCount('items', 0);
+    }
+
+    public function test_category_archived_after_validation_is_not_attached_when_creating_an_item(): void
+    {
+        [$user, $household] = $this->householdMember();
+        $category = $household->categories()->create(['name' => 'Paper']);
+        $archivedDuringValidation = false;
+
+        DB::listen(function (QueryExecuted $query) use ($category, &$archivedDuringValidation): void {
+            if (! $archivedDuringValidation
+                && preg_match('/from [`"]categories[`"]?/i', $query->sql) === 1
+                && in_array($category->getKey(), $query->bindings, true)) {
+                $archivedDuringValidation = true;
+                $category->delete();
+            }
+        });
+
+        $this->actingAs($user, 'web')->postJson('/api/items', [
+            'data' => [
+                'name' => 'Paper Towels',
+                'counting_unit' => 'roll',
+                'category_ids' => [$category->getKey()],
+            ],
+        ])->assertUnprocessable();
+
+        $this->assertTrue($archivedDuringValidation);
+        $this->assertDatabaseCount('items', 0);
+        $this->assertDatabaseMissing('category_item', ['category_id' => $category->getKey()]);
+    }
+
+    public function test_category_archived_after_validation_is_not_attached_when_updating_an_item(): void
+    {
+        [$user, $household] = $this->householdMember();
+        $item = Item::factory()->for($household)->create(['description' => 'Original']);
+        $existingCategory = $household->categories()->create(['name' => 'Current']);
+        $newCategory = $household->categories()->create(['name' => 'Seasonal']);
+        $item->categories()->attach($existingCategory);
+        $archivedDuringValidation = false;
+
+        DB::listen(function (QueryExecuted $query) use ($newCategory, &$archivedDuringValidation): void {
+            if (! $archivedDuringValidation
+                && preg_match('/from [`"]categories[`"]?/i', $query->sql) === 1
+                && in_array($newCategory->getKey(), $query->bindings, true)) {
+                $archivedDuringValidation = true;
+                $newCategory->delete();
+            }
+        });
+
+        $this->actingAs($user, 'web')->patchJson('/api/items/'.$item->getKey(), [
+            'data' => [
+                'description' => 'Changed',
+                'category_ids' => [$newCategory->getKey()],
+            ],
+        ])->assertUnprocessable();
+
+        $this->assertTrue($archivedDuringValidation);
+        $this->assertSame('Original', $item->fresh()->description);
+        $this->assertSame([$existingCategory->getKey()], $item->fresh()->categories->modelKeys());
     }
 
     public function test_patch_preserves_omitted_categories_and_syncs_provided_categories(): void

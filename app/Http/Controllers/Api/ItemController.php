@@ -9,6 +9,7 @@ use App\Http\Requests\StoreItemRequest;
 use App\Http\Requests\UpdateItemRequest;
 use App\Models\Household;
 use App\Models\Item;
+use App\Models\Membership;
 use App\Models\User;
 use App\Serialization\ApiResponse;
 use App\Transformers\ItemTransformer;
@@ -18,6 +19,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Validation\ValidationException;
 use Spatie\QueryBuilder\AllowedFilter;
 use Spatie\QueryBuilder\AllowedInclude;
 use Spatie\QueryBuilder\Exceptions\InvalidIncludeQuery;
@@ -93,7 +95,11 @@ class ItemController extends Controller
         unset($data['category_ids']);
         $includes = $this->requestedIncludes($request->query('include'));
 
-        $item = DB::transaction(function () use ($household, $data, $categoryIds): Item {
+        $item = DB::transaction(function () use ($household, $request, $data, $categoryIds): Item {
+            $household = Household::query()->lockForUpdate()->findOrFail($household->getKey());
+            $this->assertActiveMembership($household, $request->user());
+            Gate::authorize('create', Item::class);
+            $this->assertCategoriesCanBeAttached($household, $categoryIds);
             $item = $household->items()->create($data);
 
             if ($categoryIds !== null) {
@@ -144,12 +150,21 @@ class ItemController extends Controller
         unset($data['category_ids']);
         $includes = $this->requestedIncludes($request->query('include'));
 
-        DB::transaction(function () use ($item, $data, $hasCategoryIds, $categoryIds): void {
-            $item->update($data);
+        $item = DB::transaction(function () use ($household, $item, $request, $data, $hasCategoryIds, $categoryIds): Item {
+            $household = Household::query()->lockForUpdate()->findOrFail($household->getKey());
+            $this->assertActiveMembership($household, $request->user());
+            $lockedItem = $household->items()->lockForUpdate()->findOrFail($item->getKey());
+            Gate::authorize('update', $lockedItem);
+            if ($hasCategoryIds) {
+                $this->assertCategoriesCanBeAttached($household, $categoryIds);
+            }
+            $lockedItem->update($data);
 
             if ($hasCategoryIds) {
-                $item->categories()->sync($categoryIds);
+                $lockedItem->categories()->sync($categoryIds);
             }
+
+            return $lockedItem;
         });
 
         $this->loadPresentation($item, $includes);
@@ -163,7 +178,7 @@ class ItemController extends Controller
         $item = $household->items()->findOrFail($item);
 
         Gate::authorize('delete', $item);
-        $archive->archive($household, $item);
+        $archive->archive($household, $item, $request->user());
 
         return response()->noContent();
     }
@@ -175,14 +190,17 @@ class ItemController extends Controller
         ItemTransformer $transformer,
     ): JsonResponse {
         $household = $this->household($request->user());
-        $item = $household->items()->withTrashed()->findOrFail($item);
-
-        Gate::authorize('restore', $item);
-
-        abort_unless($item->trashed(), 409);
-
         $includes = $this->requestedIncludes($request->query('include'));
-        $item->restore();
+        $item = DB::transaction(function () use ($household, $item, $request): Item {
+            $household = Household::query()->lockForUpdate()->findOrFail($household->getKey());
+            $this->assertActiveMembership($household, $request->user());
+            $item = $household->items()->withTrashed()->lockForUpdate()->findOrFail($item);
+            Gate::authorize('restore', $item);
+            abort_unless($item->trashed(), 409);
+            $item->restore();
+
+            return $item;
+        });
 
         $this->loadPresentation($item, $includes);
 
@@ -192,6 +210,36 @@ class ItemController extends Controller
     private function household(User $user): Household
     {
         return $user->households()->firstOrFail();
+    }
+
+    private function assertActiveMembership(Household $household, User $user): void
+    {
+        $isActiveMember = Membership::query()
+            ->where('household_id', $household->getKey())
+            ->where('user_id', $user->getKey())
+            ->lockForUpdate()
+            ->exists();
+
+        abort_unless($isActiveMember, 403);
+    }
+
+    /** @param array<int, int|string>|null $categoryIds */
+    private function assertCategoriesCanBeAttached(Household $household, ?array $categoryIds): void
+    {
+        if ($categoryIds === null || $categoryIds === []) {
+            return;
+        }
+
+        $activeCategoryCount = $household->categories()
+            ->whereKey($categoryIds)
+            ->lockForUpdate()
+            ->count();
+
+        if ($activeCategoryCount !== count($categoryIds)) {
+            throw ValidationException::withMessages([
+                'data.category_ids' => ['One or more selected categories are invalid or archived.'],
+            ]);
+        }
     }
 
     /**

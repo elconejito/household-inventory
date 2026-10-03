@@ -8,11 +8,13 @@ use App\Http\Requests\StoreCategoryRequest;
 use App\Http\Requests\UpdateCategoryRequest;
 use App\Models\Category;
 use App\Models\Household;
+use App\Models\Membership;
 use App\Models\User;
 use App\Serialization\ApiResponse;
 use App\Transformers\CategoryTransformer;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Spatie\QueryBuilder\AllowedFilter;
 use Spatie\QueryBuilder\AllowedInclude;
@@ -70,13 +72,17 @@ class CategoryController extends Controller
         ApiResponse $apiResponse,
         CategoryTransformer $transformer,
     ): JsonResponse {
-        Gate::authorize('create', Category::class);
-
         $household = $this->household($request->user());
         /** @var array{name: string} $data */
         $data = $request->validated('data');
         $includes = $this->requestedIncludes($request->query('include'));
-        $category = $household->categories()->create($data);
+        $category = DB::transaction(function () use ($household, $request, $data): Category {
+            $household = Household::query()->lockForUpdate()->findOrFail($household->getKey());
+            $this->assertActiveMembership($household, $request->user());
+            Gate::authorize('create', Category::class);
+
+            return $household->categories()->create($data);
+        });
 
         if (in_array('items', $includes, true)) {
             $category->load($this->relationshipIncludes(['items']));
@@ -119,13 +125,18 @@ class CategoryController extends Controller
         CategoryTransformer $transformer,
     ): JsonResponse {
         $household = $this->household($request->user());
-        $category = $household->categories()->findOrFail($category);
-
-        Gate::authorize('update', $category);
         /** @var array{name?: string} $data */
         $data = $request->validated('data');
         $includes = $this->requestedIncludes($request->query('include'));
-        $category->update($data);
+        $category = DB::transaction(function () use ($household, $category, $request, $data): Category {
+            $household = Household::query()->lockForUpdate()->findOrFail($household->getKey());
+            $this->assertActiveMembership($household, $request->user());
+            $category = $household->categories()->lockForUpdate()->findOrFail($category);
+            Gate::authorize('update', $category);
+            $category->update($data);
+
+            return $category;
+        });
 
         if (in_array('items', $includes, true)) {
             $category->load($this->relationshipIncludes(['items']));
@@ -140,10 +151,13 @@ class CategoryController extends Controller
     public function destroy(Request $request, string $category): Response
     {
         $household = $this->household($request->user());
-        $category = $household->categories()->findOrFail($category);
-
-        Gate::authorize('delete', $category);
-        $category->delete();
+        DB::transaction(function () use ($household, $category, $request): void {
+            $household = Household::query()->lockForUpdate()->findOrFail($household->getKey());
+            $this->assertActiveMembership($household, $request->user());
+            $category = $household->categories()->lockForUpdate()->findOrFail($category);
+            Gate::authorize('delete', $category);
+            $category->delete();
+        });
 
         return response()->noContent();
     }
@@ -155,13 +169,17 @@ class CategoryController extends Controller
         CategoryTransformer $transformer,
     ): JsonResponse {
         $household = $this->household($request->user());
-        $category = $household->categories()->withTrashed()->findOrFail($category);
-
-        Gate::authorize('restore', $category);
-        abort_unless($category->trashed(), 409);
-
         $includes = $this->requestedIncludes($request->query('include'));
-        $category->restore();
+        $category = DB::transaction(function () use ($household, $category, $request): Category {
+            $household = Household::query()->lockForUpdate()->findOrFail($household->getKey());
+            $this->assertActiveMembership($household, $request->user());
+            $category = $household->categories()->withTrashed()->lockForUpdate()->findOrFail($category);
+            Gate::authorize('restore', $category);
+            abort_unless($category->trashed(), 409);
+            $category->restore();
+
+            return $category;
+        });
 
         if (in_array('items', $includes, true)) {
             $category->load($this->relationshipIncludes(['items']));
@@ -176,6 +194,17 @@ class CategoryController extends Controller
     private function household(User $user): Household
     {
         return $user->households()->firstOrFail();
+    }
+
+    private function assertActiveMembership(Household $household, User $user): void
+    {
+        $isActiveMember = Membership::query()
+            ->where('household_id', $household->getKey())
+            ->where('user_id', $user->getKey())
+            ->lockForUpdate()
+            ->exists();
+
+        abort_unless($isActiveMember, 403);
     }
 
     /**

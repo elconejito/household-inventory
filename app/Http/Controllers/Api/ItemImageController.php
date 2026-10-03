@@ -96,7 +96,7 @@ class ItemImageController extends Controller
         $itemImage = $this->findImage($household, $item_image);
         Gate::authorize('update', $itemImage);
         $includes = $this->requestedIncludes($request);
-        $itemImage = $manage->update($household, $itemImage, $request->validated('data'));
+        $itemImage = $manage->update($household, $itemImage, $request->validated('data'), $request->user());
         if (in_array('uploaded_by', $includes, true)) {
             $itemImage->load('uploader');
         }
@@ -110,7 +110,7 @@ class ItemImageController extends Controller
         $itemImage = $this->findImage($household, $item_image);
         Gate::authorize('delete', $itemImage);
         $this->requestedIncludes($request);
-        $manage->delete($household, $itemImage);
+        $manage->delete($household, $itemImage, $request->user());
 
         return response()->noContent();
     }
@@ -126,7 +126,7 @@ class ItemImageController extends Controller
         $itemImage = $this->findImage($household, $item_image, withTrashed: true);
         Gate::authorize('restore', $itemImage);
         $includes = $this->requestedIncludes($request);
-        $itemImage = $manage->restore($household, $itemImage);
+        $itemImage = $manage->restore($household, $itemImage, $request->user());
         if (in_array('uploaded_by', $includes, true)) {
             $itemImage->load('uploader');
         }

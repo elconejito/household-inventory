@@ -44,11 +44,12 @@ class ApiQueryPerformanceTest extends TestCase
         $this->createSupply($household, $user, $parent);
         $this->actingAs($user, 'web');
 
-        $smallCount = $this->selectQueryCount($endpoint.'&per_page=25');
+        $isLocationList = str_starts_with($endpoint, '/api/locations?');
+        $smallCount = $this->selectQueryCount($endpoint.'&per_page=25', $isLocationList ? 2 : 1);
         for ($index = 0; $index < 19; $index++) {
             $this->createSupply($household, $user, $parent);
         }
-        $largeCount = $this->selectQueryCount($endpoint.'&per_page=25');
+        $largeCount = $this->selectQueryCount($endpoint.'&per_page=25', $isLocationList ? 21 : 20);
 
         $this->assertGreaterThan(0, $smallCount);
         $this->assertSame($smallCount, $largeCount, 'Explicit includes must be eagerly loaded, not queried separately for every row.');
@@ -74,7 +75,7 @@ class ApiQueryPerformanceTest extends TestCase
         }
     }
 
-    private function selectQueryCount(string $endpoint): int
+    private function selectQueryCount(string $endpoint, int $recordCount): int
     {
         DB::flushQueryLog();
         DB::enableQueryLog();
@@ -85,7 +86,7 @@ class ApiQueryPerformanceTest extends TestCase
             DB::disableQueryLog();
             DB::flushQueryLog();
         }
-        $response->assertOk();
+        $response->assertOk()->assertJsonCount($recordCount, 'data');
 
         return count(array_filter($queries, static fn (array $query): bool => str_starts_with(strtolower(ltrim($query['query'])), 'select')));
     }

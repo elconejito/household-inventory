@@ -2,18 +2,22 @@
 
 namespace App\Actions;
 
+use App\Actions\Concerns\RequiresActiveHouseholdMembership;
 use App\Models\Household;
 use App\Models\Item;
 use App\Models\ItemImage;
+use App\Models\User;
 use Illuminate\Support\Facades\DB;
 
 class ManageItemImage
 {
+    use RequiresActiveHouseholdMembership;
+
     /** @param array{caption?: string|null, is_primary?: bool} $data */
-    public function update(Household $household, ItemImage $itemImage, array $data): ItemImage
+    public function update(Household $household, ItemImage $itemImage, array $data, User $actor): ItemImage
     {
-        return DB::transaction(function () use ($household, $itemImage, $data): ItemImage {
-            [$lockedItem, $lockedImage] = $this->lockItemAndImage($household, $itemImage);
+        return DB::transaction(function () use ($household, $itemImage, $data, $actor): ItemImage {
+            [$lockedItem, $lockedImage] = $this->lockItemAndImage($household, $itemImage, $actor);
 
             if (($data['is_primary'] ?? false) === true) {
                 ItemImage::query()
@@ -29,10 +33,10 @@ class ManageItemImage
         });
     }
 
-    public function delete(Household $household, ItemImage $itemImage): void
+    public function delete(Household $household, ItemImage $itemImage, User $actor): void
     {
-        DB::transaction(function () use ($household, $itemImage): void {
-            [$lockedItem, $lockedImage] = $this->lockItemAndImage($household, $itemImage);
+        DB::transaction(function () use ($household, $itemImage, $actor): void {
+            [$lockedItem, $lockedImage] = $this->lockItemAndImage($household, $itemImage, $actor);
             $wasPrimary = $lockedImage->is_primary;
             $lockedImage->delete();
 
@@ -42,10 +46,10 @@ class ManageItemImage
         });
     }
 
-    public function restore(Household $household, ItemImage $itemImage): ItemImage
+    public function restore(Household $household, ItemImage $itemImage, User $actor): ItemImage
     {
-        return DB::transaction(function () use ($household, $itemImage): ItemImage {
-            [$lockedItem, $lockedImage] = $this->lockItemAndImage($household, $itemImage, withTrashedImage: true);
+        return DB::transaction(function () use ($household, $itemImage, $actor): ItemImage {
+            [$lockedItem, $lockedImage] = $this->lockItemAndImage($household, $itemImage, $actor, withTrashedImage: true);
             if (! $lockedImage->trashed()) {
                 abort(409, 'The photo is already active.');
             }
@@ -59,9 +63,10 @@ class ManageItemImage
     }
 
     /** @return array{Item, ItemImage} */
-    private function lockItemAndImage(Household $household, ItemImage $itemImage, bool $withTrashedImage = false): array
+    private function lockItemAndImage(Household $household, ItemImage $itemImage, User $actor, bool $withTrashedImage = false): array
     {
         $lockedHousehold = Household::query()->lockForUpdate()->findOrFail($household->getKey());
+        $this->assertActiveMembership($lockedHousehold, $actor);
         $lockedItem = $lockedHousehold->items()->lockForUpdate()->findOrFail($itemImage->item_id);
         $imageQuery = ItemImage::query()->where('item_id', $lockedItem->getKey())->lockForUpdate();
 

@@ -2,6 +2,7 @@
 
 namespace App\Actions;
 
+use App\Actions\Concerns\RequiresActiveHouseholdMembership;
 use App\Enums\MovementType;
 use App\Models\Household;
 use App\Models\InventoryLevel;
@@ -12,6 +13,8 @@ use Illuminate\Validation\ValidationException;
 
 class CreateInventoryMovement
 {
+    use RequiresActiveHouseholdMembership;
+
     private const MAX_QUANTITY = 4294967295;
 
     /** @param array<string, int|string> $data */
@@ -19,6 +22,7 @@ class CreateInventoryMovement
     {
         return DB::transaction(function () use ($household, $recorder, $data): InventoryMovement {
             $household = Household::query()->lockForUpdate()->findOrFail($household->getKey());
+            $this->assertActiveMembership($household, $recorder);
             $item = $household->items()->lockForUpdate()->find($data['item_id']);
             if ($item === null) {
                 $this->fail('data.item_id', 'The selected item is invalid.');

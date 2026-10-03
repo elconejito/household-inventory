@@ -2,6 +2,7 @@
 
 namespace App\Actions;
 
+use App\Actions\Concerns\RequiresActiveHouseholdMembership;
 use App\Models\Household;
 use App\Models\Item;
 use App\Models\ItemImage;
@@ -15,6 +16,8 @@ use Throwable;
 
 class UploadItemImage
 {
+    use RequiresActiveHouseholdMembership;
+
     public function __construct(private readonly ProcessItemImage $processor) {}
 
     public function upload(Household $household, Item $item, User $uploader, UploadedFile $file, ?string $caption = null): ItemImage
@@ -39,6 +42,7 @@ class UploadItemImage
                 &$storedPaths,
             ): ItemImage {
                 $lockedHousehold = Household::query()->lockForUpdate()->findOrFail($household->getKey());
+                $this->assertActiveMembership($lockedHousehold, $uploader);
                 $lockedItem = $lockedHousehold->items()->lockForUpdate()->findOrFail($item->getKey());
                 $isPrimary = ! ItemImage::query()->where('item_id', $lockedItem->getKey())->exists();
                 $storage = Storage::disk($disk);

@@ -9,11 +9,13 @@ use App\Http\Requests\StoreLocationRequest;
 use App\Http\Requests\UpdateLocationRequest;
 use App\Models\Household;
 use App\Models\Location;
+use App\Models\Membership;
 use App\Models\User;
 use App\Serialization\ApiResponse;
 use App\Transformers\LocationTransformer;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Spatie\QueryBuilder\AllowedFilter;
 use Spatie\QueryBuilder\AllowedInclude;
@@ -72,13 +74,17 @@ class LocationController extends Controller
         ApiResponse $apiResponse,
         LocationTransformer $transformer,
     ): JsonResponse {
-        Gate::authorize('create', Location::class);
-
         $household = $this->household($request->user());
         /** @var array{name: string, description?: string|null, parent_id?: int|string|null} $data */
         $data = $request->validated('data');
         $includes = $this->requestedIncludes($request->query('include'));
-        $location = $hierarchy->create($household, $data);
+        $location = DB::transaction(function () use ($household, $request, $hierarchy, $data): Location {
+            $household = Household::query()->lockForUpdate()->findOrFail($household->getKey());
+            $this->assertActiveMembership($household, $request->user());
+            Gate::authorize('create', Location::class);
+
+            return $hierarchy->create($household, $data);
+        });
 
         if ($includes !== []) {
             $location->load($this->relationshipIncludes($includes));
@@ -116,13 +122,17 @@ class LocationController extends Controller
         LocationTransformer $transformer,
     ): JsonResponse {
         $household = $this->household($request->user());
-        $location = $household->locations()->findOrFail($location);
-
-        Gate::authorize('update', $location);
         /** @var array{name?: string, description?: string|null, parent_id?: int|string|null} $data */
         $data = $request->validated('data');
         $includes = $this->requestedIncludes($request->query('include'));
-        $location = $hierarchy->update($household, $location, $data);
+        $location = DB::transaction(function () use ($household, $location, $request, $hierarchy, $data): Location {
+            $household = Household::query()->lockForUpdate()->findOrFail($household->getKey());
+            $this->assertActiveMembership($household, $request->user());
+            $location = $household->locations()->lockForUpdate()->findOrFail($location);
+            Gate::authorize('update', $location);
+
+            return $hierarchy->update($household, $location, $data);
+        });
 
         if ($includes !== []) {
             $location->load($this->relationshipIncludes($includes));
@@ -137,10 +147,13 @@ class LocationController extends Controller
         ManageLocationHierarchy $hierarchy,
     ): Response {
         $household = $this->household($request->user());
-        $location = $household->locations()->findOrFail($location);
-
-        Gate::authorize('delete', $location);
-        $hierarchy->archive($household, $location);
+        DB::transaction(function () use ($household, $location, $request, $hierarchy): void {
+            $household = Household::query()->lockForUpdate()->findOrFail($household->getKey());
+            $this->assertActiveMembership($household, $request->user());
+            $location = $household->locations()->lockForUpdate()->findOrFail($location);
+            Gate::authorize('delete', $location);
+            $hierarchy->archive($household, $location);
+        });
 
         return response()->noContent();
     }
@@ -153,11 +166,15 @@ class LocationController extends Controller
         LocationTransformer $transformer,
     ): JsonResponse {
         $household = $this->household($request->user());
-        $location = $household->locations()->withTrashed()->findOrFail($location);
-
-        Gate::authorize('restore', $location);
         $includes = $this->requestedIncludes($request->query('include'));
-        $location = $hierarchy->restore($household, $location);
+        $location = DB::transaction(function () use ($household, $location, $request, $hierarchy): Location {
+            $household = Household::query()->lockForUpdate()->findOrFail($household->getKey());
+            $this->assertActiveMembership($household, $request->user());
+            $location = $household->locations()->withTrashed()->lockForUpdate()->findOrFail($location);
+            Gate::authorize('restore', $location);
+
+            return $hierarchy->restore($household, $location);
+        });
 
         if ($includes !== []) {
             $location->load($this->relationshipIncludes($includes));
@@ -169,6 +186,17 @@ class LocationController extends Controller
     private function household(User $user): Household
     {
         return $user->households()->firstOrFail();
+    }
+
+    private function assertActiveMembership(Household $household, User $user): void
+    {
+        $isActiveMember = Membership::query()
+            ->where('household_id', $household->getKey())
+            ->where('user_id', $user->getKey())
+            ->lockForUpdate()
+            ->exists();
+
+        abort_unless($isActiveMember, 403);
     }
 
     /**

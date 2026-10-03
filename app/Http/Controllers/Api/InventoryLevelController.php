@@ -48,7 +48,7 @@ class InventoryLevelController extends Controller
     {
         $includes = $this->requestedIncludes($request->query('include'));
         Gate::authorize('create', InventoryLevel::class);
-        $level = $levels->create($this->household($request->user()), $request->validated('data'));
+        $level = $levels->create($this->household($request->user()), $request->user(), $request->validated('data'));
         if ($includes !== []) {
             $level->load($includes);
         }
@@ -79,7 +79,7 @@ class InventoryLevelController extends Controller
             ->whereHas('location', fn (Builder $query): Builder => $query->where('household_id', $household->getKey()))
             ->findOrFail($inventory_level);
         Gate::authorize('update', $level);
-        $level = $levels->update($household, $level, $request->validated('data'));
+        $level = $levels->update($household, $level, $request->user(), $request->validated('data'));
         if ($includes !== []) {
             $level->load($includes);
         }
