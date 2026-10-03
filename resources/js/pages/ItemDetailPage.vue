@@ -6,6 +6,7 @@ import { buildLocationPath, type InventoryLevel } from '../api/stock';
 import { useActiveAlertsQuery, useBuySoonMutation, useCreateLocationMutation, useLocationsQuery, useRecordMovementMutation, useResolveAlertMutation, useStockItemQuery, useUpdateThresholdMutation } from '../queries/stock';
 import NotesPanel from '../components/NotesPanel.vue';
 import ItemImagesPanel from '../components/ItemImagesPanel.vue';
+import ArchiveResourceButton from '../components/ArchiveResourceButton.vue';
 
 type Action = 'restock' | 'transfer-out' | 'transfer-in' | 'correction' | 'disposal' | 'threshold';
 const route = useRoute();
@@ -233,6 +234,8 @@ async function toggleBuySoon(): Promise<void> {
                     <p class="mt-1 text-2xl font-semibold text-ink">{{ itemQuery.data.value.total_quantity }} <span class="text-sm font-normal text-ink-muted">{{ unitFor(itemQuery.data.value.total_quantity ?? 0) }}</span></p>
                 </div>
             </div>
+
+            <div class="mt-4"><ArchiveResourceButton type="items" :id="itemId" label="Item" /></div>
 
             <ItemImagesPanel class="mt-6" :item-id="itemId" />
 

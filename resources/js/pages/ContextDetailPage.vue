@@ -6,6 +6,7 @@ import NotesPanel from '../components/NotesPanel.vue';
 import { getCategory, getLocation } from '../api/note-contexts';
 import { buildLocationPath } from '../api/stock';
 import type { ItemLocation } from '../api/items';
+import ArchiveResourceButton from '../components/ArchiveResourceButton.vue';
 
 const route = useRoute();
 const contextType = computed(() => route.name === 'category-detail' ? 'categories' as const : 'locations' as const);
@@ -32,6 +33,7 @@ const locationPath = computed(() => {
             <h1 id="context-title" class="page-title mt-2">{{ contextQuery.data.value.name }}</h1>
             <p v-if="contextType === 'locations' && locationPath" class="mt-2 text-sm text-ink-muted">{{ locationPath }}</p>
             <p v-if="'description' in contextQuery.data.value && contextQuery.data.value.description" class="mt-2 text-sm text-ink-muted">{{ contextQuery.data.value.description }}</p>
+            <div class="mt-4"><ArchiveResourceButton :type="contextType" :id="contextId" :label="title" /></div>
             <NotesPanel :key="`${contextType}:${contextId}`" class="mt-6" :type="contextType" :context-id="contextId" />
         </template>
     </section>

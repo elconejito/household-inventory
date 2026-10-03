@@ -59,6 +59,7 @@ async function signOut(): Promise<void> {
                         <p class="max-w-40 truncate text-xs text-ink-muted">{{ session.user?.membership?.household?.name }}</p>
                     </div>
                     <span class="grid size-10 place-items-center rounded-md border border-line bg-sage-soft text-sm font-semibold text-sage-dark" aria-hidden="true">{{ initials }}</span>
+                    <RouterLink to="/settings" class="inline-flex min-h-10 items-center rounded-md px-2 text-xs font-medium text-ink-muted transition hover:bg-surface-soft hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sage sm:px-3 sm:text-sm">Settings</RouterLink>
                     <button
                         type="button"
                         class="min-h-10 rounded-md border border-line bg-white px-3 text-sm font-medium text-ink-muted transition hover:bg-surface-soft hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sage"

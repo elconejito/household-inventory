@@ -9,6 +9,7 @@ type HouseholdResource = {
 };
 
 type MembershipResource = {
+    id?: string;
     role: 'owner' | 'member';
     household?: HouseholdResource | null;
 };
@@ -92,6 +93,22 @@ export const useSessionStore = defineStore('session', () => {
         }
     }
 
+    async function refresh(): Promise<SessionUser | null> {
+        status.value = 'loading';
+        loadingCurrentUser = loadCurrentUser();
+
+        try {
+            return await loadingCurrentUser;
+        } finally {
+            loadingCurrentUser = null;
+        }
+    }
+
+    function setAuthenticatedUser(value: SessionUser): void {
+        user.value = value;
+        status.value = 'authenticated';
+    }
+
     async function login(credentials: Credentials): Promise<void> {
         await requestCsrfCookie();
         await http.post('/login', { data: credentials });
@@ -116,6 +133,8 @@ export const useSessionStore = defineStore('session', () => {
         user,
         status,
         ensureLoaded,
+        refresh,
+        setAuthenticatedUser,
         login,
         register,
         logout,

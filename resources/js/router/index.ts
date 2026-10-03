@@ -8,6 +8,9 @@ import ItemDetailPage from '../pages/ItemDetailPage.vue';
 import ContextDetailPage from '../pages/ContextDetailPage.vue';
 import LoginPage from '../pages/LoginPage.vue';
 import RegisterPage from '../pages/RegisterPage.vue';
+import SettingsPage from '../pages/SettingsPage.vue';
+import ArchivesPage from '../pages/ArchivesPage.vue';
+import InvitationAcceptPage from '../pages/InvitationAcceptPage.vue';
 import { useSessionStore } from '../stores/session';
 
 declare module 'vue-router' {
@@ -30,6 +33,7 @@ export const routes: RouteRecordRaw[] = [
         component: RegisterPage,
         meta: { guestOnly: true },
     },
+    { path: '/invitations/accept', name: 'invitation-accept', component: InvitationAcceptPage },
     {
         path: '/',
         component: AppShell,
@@ -57,6 +61,8 @@ export const routes: RouteRecordRaw[] = [
                 name: 'activity',
                 component: ActivityPage,
             },
+            { path: 'settings', name: 'settings', component: SettingsPage },
+            { path: 'settings/archives', name: 'archives', component: ArchivesPage },
         ],
     },
     {
@@ -72,7 +78,7 @@ export const router = createRouter({
 
 export function installSessionGuards(targetRouter: ReturnType<typeof createRouter>): void {
     targetRouter.beforeEach(async (to) => {
-        if (!to.meta.requiresAuth && !to.meta.guestOnly) {
+        if (!to.meta.requiresAuth && !to.meta.guestOnly && to.name !== 'invitation-accept') {
             return true;
         }
 
@@ -86,8 +92,14 @@ export function installSessionGuards(targetRouter: ReturnType<typeof createRoute
             };
         }
 
+        const hasHousehold = Boolean(user?.membership?.household?.id);
+
+        if (to.meta.requiresAuth && user && !hasHousehold && to.name !== 'invitation-accept') {
+            return { name: 'invitation-accept' };
+        }
+
         if (to.meta.guestOnly && user) {
-            return { name: 'dashboard' };
+            return hasHousehold ? { name: 'dashboard' } : { name: 'invitation-accept' };
         }
 
         return true;

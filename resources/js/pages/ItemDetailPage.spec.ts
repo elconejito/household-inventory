@@ -1,4 +1,5 @@
 import { VueQueryPlugin, QueryClient } from '@tanstack/vue-query';
+import { createPinia } from 'pinia';
 import { flushPromises, mount } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { http } from '../lib/http';
@@ -39,7 +40,7 @@ describe('item stock detail', () => {
     });
 
     function mountPage(): void {
-        wrapper = mount(ItemDetailPage, { global: { plugins: [[VueQueryPlugin, { queryClient }]], stubs: { RouterLink: { template: '<a><slot /></a>' } } } });
+        wrapper = mount(ItemDetailPage, { global: { plugins: [createPinia(), [VueQueryPlugin, { queryClient }]], stubs: { RouterLink: { template: '<a><slot /></a>' }, ArchiveResourceButton: true } } });
     }
 
     function actionForm() {

@@ -1,4 +1,5 @@
 import { VueQueryPlugin, QueryClient } from '@tanstack/vue-query';
+import { createPinia } from 'pinia';
 import { flushPromises, mount } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { http } from '../lib/http';
@@ -26,7 +27,7 @@ describe('category and location note contexts', () => {
     afterEach(() => { wrapper?.unmount(); wrapper = undefined; client.clear(); });
 
     function mountPage(): void {
-        wrapper = mount(ContextDetailPage, { global: { plugins: [[VueQueryPlugin, { queryClient: client }]], stubs: { RouterLink: { template: '<a><slot /></a>' } } } });
+        wrapper = mount(ContextDetailPage, { global: { plugins: [createPinia(), [VueQueryPlugin, { queryClient: client }]], stubs: { RouterLink: { template: '<a><slot /></a>' }, ArchiveResourceButton: true } } });
     }
 
     it('loads a category detail identity and offers its notes', async () => {

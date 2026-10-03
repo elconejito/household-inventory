@@ -19,7 +19,8 @@ async function submit(): Promise<void> {
 
     try {
         await session.login({ email: email.value, password: password.value });
-        await router.push(postAuthenticationPath(route.query.redirect));
+        const destination = postAuthenticationPath(route.query.redirect);
+        await router.push(destination === '/invitations/accept' && route.hash ? `${destination}${route.hash}` : destination);
     } catch (error) {
         errors.value = parseApiErrors(error);
     } finally {

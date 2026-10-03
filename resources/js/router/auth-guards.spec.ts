@@ -37,7 +37,7 @@ describe('session route guards', () => {
 
     it('redirects an authenticated visitor away from public auth pages', async () => {
         vi.mocked(http.get).mockResolvedValue({
-            data: { data: { id: '3', name: 'Taylor Home', email: 'taylor@example.com' } },
+            data: { data: { id: '3', name: 'Taylor Home', email: 'taylor@example.com', membership: { role: 'owner', household: { id: '1', name: 'Taylor Home' } } } },
         });
         const router = createRouter({ history: createMemoryHistory(), routes });
         installSessionGuards(router);
