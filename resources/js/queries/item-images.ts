@@ -12,6 +12,7 @@ export function useItemImageMutations(itemId: ComputedRef<string>) {
     const client = useQueryClient();
     const refresh = async (contextId: string) => Promise.all([
         client.invalidateQueries({ queryKey: itemImageQueryKey(contextId) }),
+        client.invalidateQueries({ queryKey: ['archived-child-records', 'item-images', 'items', contextId] }),
         client.invalidateQueries({ queryKey: ['items'] }),
     ]);
     return {

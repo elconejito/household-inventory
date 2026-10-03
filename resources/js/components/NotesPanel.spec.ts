@@ -1,6 +1,7 @@
 import { VueQueryPlugin, QueryClient } from '@tanstack/vue-query';
 import { flushPromises, mount } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { createPinia } from 'pinia';
 import { http } from '../lib/http';
 import NotesPanel from './NotesPanel.vue';
 
@@ -24,7 +25,7 @@ describe('notes panel', () => {
     afterEach(() => { wrapper?.unmount(); wrapper = undefined; client.clear(); vi.restoreAllMocks(); });
 
     function mountPanel(): void {
-        wrapper = mount(NotesPanel, { props: { type: 'items', contextId: '7' }, global: { plugins: [[VueQueryPlugin, { queryClient: client }]] } });
+        wrapper = mount(NotesPanel, { props: { type: 'items', contextId: '7' }, global: { plugins: [createPinia(), [VueQueryPlugin, { queryClient: client }]] } });
     }
 
     it('loads recent notes with their author and preserves plain text line breaks', async () => {
@@ -58,12 +59,14 @@ describe('notes panel', () => {
     });
 
     it('confirms note deletion', async () => {
+        const invalidate = vi.spyOn(client, 'invalidateQueries');
         mountPanel();
         await flushPromises();
         await wrapper!.findAll('button').find((button) => button.text() === 'Delete note')!.trigger('click');
         await flushPromises();
         expect(window.confirm).toHaveBeenCalledWith('Delete this note?');
         expect(http.delete).toHaveBeenCalledWith('/notes/51');
+        expect(invalidate).toHaveBeenCalledWith({ queryKey: ['archived-child-records', 'notes', 'items', '7'] });
     });
 
     it('preserves outer whitespace when saving and renders HTML as plain text', async () => {

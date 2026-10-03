@@ -66,7 +66,7 @@ test('identifies an item with private photos and preserves editable multiline no
     await expect(notes).toContainText('edited');
 
     const photos = page.getByRole('region', { name: 'Photos', exact: true });
-    await photos.locator('summary').click();
+    await photos.locator('summary').filter({ hasText: 'Add or manage photos' }).click();
     await photos.getByLabel('Add a photo', { exact: true }).setInputFiles({ name: 'front.png', mimeType: 'image/png', buffer: await photoFixture(page, 'CARTRIDGE A') });
     await photos.getByLabel(/Caption/).fill('Front label');
     await photos.getByRole('button', { name: 'Upload photo', exact: true }).click();
@@ -100,6 +100,35 @@ test('identifies an item with private photos and preserves editable multiline no
     expect(persisted.ok()).toBe(true);
     expect((await persisted.json()).data[0].body).toBe('Use cartridge A\nReplace every three months.\n\nKeep the label for reference.');
 
+    const archivedPhotos = photos.locator('details').filter({ has: page.locator('summary', { hasText: 'Archived photos' }) });
+    await archivedPhotos.locator('summary').click();
+    await expect(archivedPhotos).toContainText('Rear instructions');
+    await archivedPhotos.getByRole('button', { name: 'Restore photo', exact: true }).click();
+    await expect(archivedPhotos).toContainText('No archived photos.');
+    await photos.locator('summary').filter({ hasText: 'Add or manage photos' }).click();
+    page.once('dialog', (dialog) => dialog.accept());
+    await photos.getByRole('listitem').filter({ hasText: 'Rear instructions' }).getByRole('button', { name: 'Remove photo', exact: true }).click();
+    await expect(archivedPhotos).toContainText('Rear instructions');
+    await archivedPhotos.getByRole('button', { name: 'Permanently delete', exact: true }).click();
+    await archivedPhotos.getByLabel('Type DELETE to confirm').fill('DELETE');
+    await archivedPhotos.getByRole('button', { name: 'Confirm permanent deletion', exact: true }).click();
+    await expect(archivedPhotos).toContainText('No archived photos.');
+
+    page.once('dialog', (dialog) => dialog.accept());
+    await notes.getByRole('button', { name: 'Delete note', exact: true }).click();
+    const archivedNotes = notes.locator('details').filter({ has: page.locator('summary', { hasText: 'Archived notes' }) });
+    await archivedNotes.locator('summary').click();
+    await expect(archivedNotes).toContainText('Replace every three months.');
+    await archivedNotes.getByRole('button', { name: 'Restore note', exact: true }).click();
+    await expect(archivedNotes).toContainText('No archived notes.');
+    page.once('dialog', (dialog) => dialog.accept());
+    await notes.getByRole('button', { name: 'Delete note', exact: true }).click();
+    await expect(archivedNotes).toContainText('Replace every three months.');
+    await archivedNotes.getByRole('button', { name: 'Permanently delete', exact: true }).click();
+    await archivedNotes.getByLabel('Type DELETE to confirm').fill('DELETE');
+    await archivedNotes.getByRole('button', { name: 'Confirm permanent deletion', exact: true }).click();
+    await expect(archivedNotes).toContainText('No archived notes.');
+
     const category = await createResource(page, 'categories', { name: 'Filters' });
     const location = await createResource(page, 'locations', { name: 'Basement', description: 'Replacement cartridges and other supplies.' });
     for (const context of [{ type: 'categories', id: category.id, body: 'Keep compatible filters together.' }, { type: 'locations', id: location.id, body: 'Check the shelf beside the stairs.' }]) {
@@ -113,7 +142,7 @@ test('identifies an item with private photos and preserves editable multiline no
     await createResource(page, 'inventory-movements', { movement_type: 'restock', item_id: item.id, location_id: location.id, quantity: 1 });
     await page.goto('/activity');
     const activity = page.getByRole('region', { name: 'Inventory activity' });
-    await activity.locator('summary').click();
+    await activity.locator('summary').first().click();
     const movementNotes = activity.getByRole('region', { name: 'Notes', exact: true });
     await movementNotes.getByLabel('Note', { exact: true }).fill('Bought the compatible replacement cartridge.');
     await movementNotes.getByRole('button', { name: 'Add note', exact: true }).click();
@@ -122,7 +151,7 @@ test('identifies an item with private photos and preserves editable multiline no
     await createResource(page, 'inventory-alerts', { item_id: item.id, alert_type: 'buy_soon' });
     await page.goto('/');
     const manualAlerts = page.getByRole('region', { name: 'Buy soon', exact: true });
-    await manualAlerts.locator('summary').click();
+    await manualAlerts.locator('summary').first().click();
     const alertNotes = manualAlerts.getByRole('region', { name: 'Notes', exact: true });
     await alertNotes.getByLabel('Note', { exact: true }).fill('Prepare a spare before winter.');
     await alertNotes.getByRole('button', { name: 'Add note', exact: true }).click();

@@ -2,6 +2,7 @@
 import { computed, ref, watch } from 'vue';
 import { useItemImagesQuery, useItemImageMutations } from '../queries/item-images';
 import { parseApiErrors } from '../lib/api-errors';
+import ArchivedChildRecordsPanel from './ArchivedChildRecordsPanel.vue';
 
 const props = defineProps<{ itemId: string }>();
 const itemId = computed(() => props.itemId);
@@ -132,6 +133,7 @@ function closePreview(): void { preview.value = null; }
             <p class="mt-2 text-xs text-ink-muted">JPEG, PNG, or WebP · up to 20 MB. HEIC is not supported.</p>
             </details>
         </template>
+        <ArchivedChildRecordsPanel context-type="items" :context-id="itemId" kind="item-images" />
         <dialog ref="previewDialog" aria-labelledby="photo-preview-title" class="max-h-[96vh] max-w-[96vw] overflow-visible rounded-lg bg-transparent p-4 backdrop:bg-black/80" @close="closePreview" @cancel="closePreview"><h3 id="photo-preview-title" class="sr-only">Enlarged photo</h3><button type="button" autofocus class="absolute right-4 top-4 min-h-11 rounded-md bg-white px-4 text-sm font-semibold text-ink" @click="closePreview">Close</button><img v-if="preview" :src="preview" alt="Enlarged item photo" class="max-h-[90vh] max-w-full object-contain"></dialog>
     </section>
 </template>

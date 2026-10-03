@@ -1,6 +1,7 @@
 import { VueQueryPlugin, QueryClient } from '@tanstack/vue-query';
 import { flushPromises, mount } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { createPinia } from 'pinia';
 import { http } from '../lib/http';
 import ItemImagesPanel from './ItemImagesPanel.vue';
 
@@ -35,7 +36,7 @@ describe('item images panel', () => {
     });
 
     function mountPanel(): void {
-        wrapper = mount(ItemImagesPanel, { props: { itemId: '7' }, global: { plugins: [[VueQueryPlugin, { queryClient: client }]] } });
+        wrapper = mount(ItemImagesPanel, { props: { itemId: '7' }, global: { plugins: [createPinia(), [VueQueryPlugin, { queryClient: client }]] } });
     }
 
     it('shows the full primary image and secondary thumbnails, with an enlargement dialog', async () => {
@@ -49,6 +50,7 @@ describe('item images panel', () => {
     });
 
     it('sets the primary photo and confirms deletion', async () => {
+        const invalidate = vi.spyOn(client, 'invalidateQueries');
         mountPanel();
         await flushPromises();
         await wrapper!.findAll('button').find((button) => button.text() === 'Make primary')!.trigger('click');
@@ -58,6 +60,7 @@ describe('item images panel', () => {
         await flushPromises();
         expect(window.confirm).toHaveBeenCalledWith('Delete this photo?');
         expect(http.delete).toHaveBeenCalledWith('/item-images/image-1');
+        expect(invalidate).toHaveBeenCalledWith({ queryKey: ['archived-child-records', 'item-images', 'items', '7'] });
     });
 
     it('uploads a selected image and optional caption as multipart form data', async () => {

@@ -16,6 +16,7 @@ export function useNoteMutations(type: NoteContextType, id: ComputedRef<string>)
     const client = useQueryClient();
     const refresh = async (contextId: string) => Promise.all([
         client.invalidateQueries({ queryKey: ['notes', type, contextId] }),
+        client.invalidateQueries({ queryKey: ['archived-child-records', 'notes', type, contextId] }),
         client.invalidateQueries({ queryKey: [type] }),
     ]);
     const create = useMutation({ mutationFn: async (body: string) => {

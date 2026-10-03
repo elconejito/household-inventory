@@ -3,6 +3,7 @@ import { computed, ref, watch } from 'vue';
 import { type NoteContextType } from '../api/notes';
 import { useNotesQuery, useNoteMutations } from '../queries/notes';
 import { parseApiErrors } from '../lib/api-errors';
+import ArchivedChildRecordsPanel from './ArchivedChildRecordsPanel.vue';
 
 const props = defineProps<{ type: NoteContextType; contextId: string }>();
 const page = ref(1);
@@ -108,5 +109,6 @@ async function removeNote(noteId: string): Promise<void> {
             </li>
         </ol>
         <div v-if="notesQuery.data.value && notesQuery.data.value.meta.last_page > 1" class="mt-4 flex items-center justify-between border-t border-line pt-3 text-sm"><span class="text-ink-muted">Page {{ page }} of {{ notesQuery.data.value.meta.last_page }}</span><div class="flex gap-2"><button type="button" :disabled="page <= 1 || notesQuery.isFetching.value" class="min-h-9 rounded-md border border-line px-3 disabled:opacity-50" @click="page--">Previous</button><button type="button" :disabled="page >= notesQuery.data.value.meta.last_page || notesQuery.isFetching.value" class="min-h-9 rounded-md border border-line px-3 disabled:opacity-50" @click="page++">Next</button></div></div>
+        <ArchivedChildRecordsPanel :context-type="type" :context-id="contextId" kind="notes" />
     </section>
 </template>
