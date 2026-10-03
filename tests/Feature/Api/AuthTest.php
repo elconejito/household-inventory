@@ -144,6 +144,7 @@ class AuthTest extends TestCase
             ->assertJsonPath('data.membership.type', 'memberships')
             ->assertJsonPath('data.membership.id', (string) $membership->id)
             ->assertJsonPath('data.membership.role', 'owner')
+            ->assertJsonPath('data.membership.deleted_at', null)
             ->assertJsonPath('data.membership.household.type', 'households')
             ->assertJsonPath('data.membership.household.id', (string) $household->id)
             ->assertJsonPath('data.membership.household.name', 'Ramos Home');

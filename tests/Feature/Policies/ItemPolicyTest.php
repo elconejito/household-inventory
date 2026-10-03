@@ -41,7 +41,7 @@ class ItemPolicyTest extends TestCase
         $this->assertTrue($gate->allows('update', $item));
         $this->assertTrue($gate->allows('delete', $item));
         $this->assertTrue($gate->allows('restore', $archivedItem));
-        $this->assertFalse($gate->allows('forceDelete', $item));
+        $this->assertSame($role === MembershipRole::Owner, $gate->allows('forceDelete', $item));
     }
 
     public function test_users_without_an_active_household_membership_cannot_catalog_write(): void

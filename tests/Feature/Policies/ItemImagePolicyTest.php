@@ -43,6 +43,7 @@ class ItemImagePolicyTest extends TestCase
         $this->assertTrue($gate->allows('update', $image));
         $this->assertTrue($gate->allows('delete', $image));
         $this->assertTrue($gate->allows('restore', $deletedImage));
+        $this->assertSame($role === MembershipRole::Owner, $gate->allows('forceDelete', $deletedImage));
     }
 
     public function test_members_of_other_households_cannot_view_or_change_photos(): void

@@ -2,6 +2,7 @@
 
 namespace App\Policies;
 
+use App\Enums\MembershipRole;
 use App\Models\Location;
 use App\Models\User;
 
@@ -60,7 +61,10 @@ class LocationPolicy
      */
     public function forceDelete(User $user, Location $location): bool
     {
-        return false;
+        return $user->memberships()
+            ->where('household_id', $location->household_id)
+            ->where('role', MembershipRole::Owner->value)
+            ->exists();
     }
 
     private function belongsToHousehold(User $user, Location $location): bool

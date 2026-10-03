@@ -2,6 +2,7 @@
 
 namespace App\Policies;
 
+use App\Enums\MembershipRole;
 use App\Models\Category;
 use App\Models\User;
 
@@ -60,7 +61,10 @@ class CategoryPolicy
      */
     public function forceDelete(User $user, Category $category): bool
     {
-        return false;
+        return $user->memberships()
+            ->where('household_id', $category->household_id)
+            ->where('role', MembershipRole::Owner->value)
+            ->exists();
     }
 
     private function belongsToHousehold(User $user, Category $category): bool

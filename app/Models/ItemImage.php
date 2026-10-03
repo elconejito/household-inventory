@@ -8,8 +8,6 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\SoftDeletes;
-use Illuminate\Support\Facades\Storage;
-use Throwable;
 
 #[Fillable([
     'item_id', 'disk', 'thumbnail_path', 'thumbnail_mime_type', 'thumbnail_width', 'thumbnail_height',
@@ -30,20 +28,6 @@ class ItemImage extends Model
             'uploaded_at' => 'immutable_datetime',
             'deleted_at' => 'immutable_datetime',
         ];
-    }
-
-    protected static function booted(): void
-    {
-        static::forceDeleted(function (ItemImage $itemImage): void {
-            try {
-                Storage::disk($itemImage->disk)->delete([
-                    $itemImage->thumbnail_path,
-                    $itemImage->display_path,
-                ]);
-            } catch (Throwable $exception) {
-                report($exception);
-            }
-        });
     }
 
     public function item(): BelongsTo

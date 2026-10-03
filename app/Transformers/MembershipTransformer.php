@@ -8,11 +8,11 @@ use League\Fractal\TransformerAbstract;
 
 class MembershipTransformer extends TransformerAbstract
 {
-    protected array $availableIncludes = ['household'];
+    protected array $availableIncludes = ['household', 'user'];
 
     /**
      * @param  Membership  $membership
-     * @return array{type: string, id: string, role: string, joined_at: string}
+     * @return array{type: string, id: string, role: string, joined_at: string, deleted_at: ?string}
      */
     public function transform(mixed $membership): array
     {
@@ -21,6 +21,7 @@ class MembershipTransformer extends TransformerAbstract
             'id' => (string) $membership->getKey(),
             'role' => $membership->role->value,
             'joined_at' => $membership->joined_at->toISOString(),
+            'deleted_at' => $membership->deleted_at?->toISOString(),
         ];
     }
 
@@ -29,5 +30,12 @@ class MembershipTransformer extends TransformerAbstract
         return $membership->household === null
             ? $this->null()
             : $this->item($membership->household, new HouseholdTransformer);
+    }
+
+    public function includeUser(Membership $membership): ResourceInterface
+    {
+        return $membership->user === null
+            ? $this->null()
+            : $this->item($membership->user, new UserTransformer);
     }
 }

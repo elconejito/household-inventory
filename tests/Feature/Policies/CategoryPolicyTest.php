@@ -41,7 +41,7 @@ class CategoryPolicyTest extends TestCase
         $this->assertTrue($gate->allows('update', $category));
         $this->assertTrue($gate->allows('delete', $category));
         $this->assertTrue($gate->allows('restore', $archivedCategory));
-        $this->assertFalse($gate->allows('forceDelete', $category));
+        $this->assertSame($role === MembershipRole::Owner, $gate->allows('forceDelete', $category));
     }
 
     public function test_users_without_an_active_household_membership_cannot_catalog_write(): void

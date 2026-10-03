@@ -46,6 +46,20 @@ class ApiExceptionRenderer
             return $this->error(409, 'inventory_archive_blocked', 'Conflict', $exception->getMessage());
         }
 
+        if ($exception instanceof HouseholdAdministrationConflict) {
+            return $this->error(409, $exception->errorCode, 'Conflict', $exception->detail);
+        }
+
+        if ($exception instanceof PermanentDeletionBlocked) {
+            return response()->json(['errors' => [[
+                'status' => '409',
+                'code' => 'permanent_deletion_blocked',
+                'title' => 'Conflict',
+                'detail' => $exception->getMessage(),
+                'meta' => ['blockers' => $exception->blockers],
+            ]]], 409);
+        }
+
         if ($exception instanceof InvalidQuery || $exception instanceof InvalidDirection || $exception instanceof InvalidFilterValue) {
             return $this->error(
                 400,

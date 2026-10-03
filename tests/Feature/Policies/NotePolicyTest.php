@@ -43,7 +43,7 @@ class NotePolicyTest extends TestCase
         $this->assertTrue($gate->allows('update', $note));
         $this->assertTrue($gate->allows('delete', $note));
         $this->assertTrue($gate->allows('restore', $note));
-        $this->assertFalse($gate->allows('forceDelete', $note));
+        $this->assertSame($role === MembershipRole::Owner, $gate->allows('forceDelete', $note));
     }
 
     public function test_users_outside_the_parent_household_cannot_manage_notes(): void

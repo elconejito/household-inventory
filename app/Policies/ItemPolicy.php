@@ -2,6 +2,7 @@
 
 namespace App\Policies;
 
+use App\Enums\MembershipRole;
 use App\Models\Item;
 use App\Models\User;
 
@@ -60,7 +61,10 @@ class ItemPolicy
      */
     public function forceDelete(User $user, Item $item): bool
     {
-        return false;
+        return $user->memberships()
+            ->where('household_id', $item->household_id)
+            ->where('role', MembershipRole::Owner->value)
+            ->exists();
     }
 
     private function belongsToHousehold(User $user, Item $item): bool

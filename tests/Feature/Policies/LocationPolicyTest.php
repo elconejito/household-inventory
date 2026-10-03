@@ -41,7 +41,7 @@ class LocationPolicyTest extends TestCase
         $this->assertTrue($gate->allows('update', $location));
         $this->assertTrue($gate->allows('delete', $location));
         $this->assertTrue($gate->allows('restore', $archivedLocation));
-        $this->assertFalse($gate->allows('forceDelete', $location));
+        $this->assertSame($role === MembershipRole::Owner, $gate->allows('forceDelete', $location));
     }
 
     public function test_users_without_an_active_household_membership_cannot_manage_locations(): void
