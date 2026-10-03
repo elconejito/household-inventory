@@ -4,7 +4,7 @@ import { useQueryClient } from '@tanstack/vue-query';
 import { RouterLink, useRouter } from 'vue-router';
 import { parseApiErrors } from '../lib/api-errors';
 import { useSessionStore } from '../stores/session';
-import { householdQueryKeys, useHouseholdMutations, useHouseholdQuery, useInvitationsQuery, useMembersQuery } from '../queries/household';
+import { useHouseholdMutations, useHouseholdQuery, useInvitationsQuery, useMembersQuery } from '../queries/household';
 
 const router = useRouter();
 const session = useSessionStore();
@@ -20,6 +20,8 @@ const membersQuery = useMembersQuery(computed(() => memberStatus.value), compute
 const inviteQuery = useInvitationsQuery(computed(() => invitationPage.value), computed(() => owner.value));
 const nameError = ref('');
 const memberError = ref('');
+const memberSuccess = ref('');
+const sessionRefreshProblem = ref(false);
 const inviteError = ref('');
 const inviteSuccess = ref('');
 const householdSuccess = ref('');
@@ -37,9 +39,39 @@ watch(owner, (isOwner) => { if (!isOwner) invitationPage.value = 1; });
 watch(() => inviteQuery.data.value?.meta.last_page, (lastPage) => {
     if (lastPage && invitationPage.value > lastPage) invitationPage.value = lastPage;
 });
+watch(() => membersQuery.data.value?.meta.last_page, (lastPage) => {
+    if (lastPage && memberPage.value > lastPage) memberPage.value = lastPage;
+});
 
 const members = computed(() => membersQuery.data.value?.data ?? []);
 const invitations = computed(() => inviteQuery.data.value?.data ?? []);
+const memberMutationPending = computed(() => mutations.updateMember.isPending.value || mutations.removeMember.isPending.value || mutations.restoreMember.isPending.value);
+
+async function refreshAfterMembershipWrite(successMessage: string): Promise<void> {
+    memberSuccess.value = successMessage;
+    sessionRefreshProblem.value = false;
+
+    try {
+        const user = await session.refresh();
+        if (!user?.membership?.household?.id) await router.replace({ name: 'invitation-accept' });
+    } catch {
+        sessionRefreshProblem.value = true;
+    }
+}
+
+async function retrySessionRefresh(): Promise<void> {
+    sessionRefreshProblem.value = false;
+    try {
+        const user = await session.refresh();
+        if (!user?.membership?.household?.id) {
+            await router.replace({ name: 'invitation-accept' });
+            return;
+        }
+        await queryClient.invalidateQueries({ queryKey: ['memberships'] });
+    } catch {
+        sessionRefreshProblem.value = true;
+    }
+}
 async function saveHousehold(): Promise<void> {
     nameError.value = '';
     householdSuccess.value = '';
@@ -58,10 +90,14 @@ async function saveHousehold(): Promise<void> {
 
 async function changeRole(id: string, role: 'owner' | 'member', event: Event): Promise<void> {
     memberError.value = '';
+    memberSuccess.value = '';
+    sessionRefreshProblem.value = false;
     try {
         await mutations.updateMember.mutateAsync({ id, role });
-        const user = await session.refresh();
-        if (!user?.membership?.household?.id) await router.replace({ name: 'invitation-accept' });
+        if (session.user?.membership?.id === id && session.user.membership) {
+            session.user.membership.role = role;
+        }
+        await refreshAfterMembershipWrite('Membership role saved.');
     } catch (error) {
         await queryClient.invalidateQueries({ queryKey: ['memberships'] });
         const actualRole = members.value.find((member) => member.id === id)?.role;
@@ -73,21 +109,32 @@ async function changeRole(id: string, role: 'owner' | 'member', event: Event): P
 async function removeMember(id: string, name: string): Promise<void> {
     if (!window.confirm(`Remove ${name} from this household?`)) return;
     memberError.value = '';
+    memberSuccess.value = '';
+    sessionRefreshProblem.value = false;
     try {
         await mutations.removeMember.mutateAsync(id);
-        const user = await session.refresh();
-        if (!user?.membership?.household?.id) await router.replace({ name: 'invitation-accept' });
     } catch (error) {
         await queryClient.invalidateQueries({ queryKey: ['memberships'] });
         memberError.value = parseApiErrors(error).form || 'That person could not be removed.';
+        return;
     }
+
+    if (session.user?.membership?.id === id && session.user.membership) {
+        session.user.membership = null;
+        await router.replace({ name: 'invitation-accept' });
+        return;
+    }
+
+    await refreshAfterMembershipWrite('Membership removed.');
 }
 
 async function restoreMember(id: string): Promise<void> {
     memberError.value = '';
+    memberSuccess.value = '';
+    sessionRefreshProblem.value = false;
     try {
         await mutations.restoreMember.mutateAsync(id);
-        await session.refresh();
+        await refreshAfterMembershipWrite('Membership restored.');
     } catch (error) {
         memberError.value = parseApiErrors(error).form || 'That membership could not be restored.';
     }
@@ -151,14 +198,15 @@ async function leaveHousehold(): Promise<void> {
     memberError.value = '';
     try {
         await mutations.leave.mutateAsync();
-        const user = await session.refresh();
-        if (user) await queryClient.invalidateQueries({ queryKey: householdQueryKeys.household });
-        await router.replace({ name: 'invitation-accept' });
     } catch (error) {
         memberError.value = parseApiErrors(error).form || 'You could not leave this household. The final owner must transfer ownership first.';
-    } finally {
         leaving.value = false;
+        return;
     }
+
+    if (session.user) session.user.membership = null;
+    leaving.value = false;
+    await router.replace({ name: 'invitation-accept' });
 }
 
 function memberName(member: (typeof members.value)[number]): string {
@@ -207,6 +255,11 @@ function canManageInvitation(invitation: (typeof invitations.value)[number]): bo
                     <label v-if="owner" class="flex items-center gap-2 text-sm text-ink-muted">Show <select v-model="memberStatus" class="min-h-10 rounded-md border border-line bg-white px-2 text-sm text-ink"><option value="without">Active</option><option value="only">Archived</option></select></label>
                 </div>
                 <p v-if="memberError" class="mt-4 rounded-md border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800" role="alert">{{ memberError }}</p>
+                <p v-if="memberSuccess" class="mt-4 text-sm font-medium text-sage-dark" role="status">{{ memberSuccess }}</p>
+                <div v-if="sessionRefreshProblem" class="mt-3 flex flex-wrap items-center gap-3 rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900" role="alert">
+                    <span>Your change was saved, but your session could not be refreshed.</span>
+                    <button type="button" class="font-semibold underline" @click="retrySessionRefresh">Retry session refresh</button>
+                </div>
                 <div v-if="!owner" class="mt-4 divide-y divide-line rounded-md border border-line">
                     <div class="flex flex-wrap items-center justify-between gap-3 px-4 py-3"><div><p class="font-medium text-ink">{{ session.user?.name }}</p><p class="text-sm text-ink-muted">{{ session.user?.email }} · {{ session.user?.membership?.role }}</p></div><button type="button" :disabled="leaving" class="rounded-md border border-line px-3 py-2 text-sm font-medium text-rose-700 hover:bg-rose-50 disabled:opacity-50" @click="leaveHousehold">{{ leaving ? 'Leaving…' : 'Leave household' }}</button></div>
                 </div>
@@ -224,7 +277,7 @@ function canManageInvitation(invitation: (typeof invitations.value)[number]): bo
                         </div>
                     </li>
                 </ul>
-                <div v-if="owner && membersQuery.data.value && membersQuery.data.value.meta.last_page > 1" class="mt-4 flex items-center justify-between gap-3"><p class="text-sm text-ink-muted">Page {{ membersQuery.data.value.meta.current_page }} of {{ membersQuery.data.value.meta.last_page }}</p><div class="flex gap-2"><button type="button" :disabled="memberPage <= 1" class="min-h-10 rounded-md border border-line px-3 text-sm disabled:opacity-50" @click="memberPage--">Previous</button><button type="button" :disabled="memberPage >= membersQuery.data.value.meta.last_page" class="min-h-10 rounded-md border border-line px-3 text-sm disabled:opacity-50" @click="memberPage++">Next</button></div></div>
+                <div v-if="owner && membersQuery.data.value && membersQuery.data.value.meta.last_page > 1" class="mt-4 flex items-center justify-between gap-3"><p class="text-sm text-ink-muted">Page {{ membersQuery.data.value.meta.current_page }} of {{ membersQuery.data.value.meta.last_page }}</p><div class="flex gap-2"><button type="button" :disabled="memberPage <= 1 || membersQuery.isFetching.value || memberMutationPending" class="min-h-10 rounded-md border border-line px-3 text-sm disabled:opacity-50" @click="memberPage--">Previous</button><button type="button" :disabled="memberPage >= membersQuery.data.value.meta.last_page || membersQuery.isFetching.value || memberMutationPending" class="min-h-10 rounded-md border border-line px-3 text-sm disabled:opacity-50" @click="memberPage++">Next</button></div></div>
             </section>
 
             <section v-if="owner" class="mt-6 rounded-panel border border-line bg-white p-5 shadow-card sm:p-6" aria-labelledby="invitations-heading">

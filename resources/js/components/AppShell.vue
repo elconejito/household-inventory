@@ -34,11 +34,11 @@ async function signOut(): Promise<void> {
 <template>
     <div class="min-h-screen pb-24 md:pb-0">
         <header class="border-b border-line bg-white/90">
-            <div class="mx-auto flex min-h-[72px] max-w-7xl items-center justify-between gap-3 px-4 sm:px-8">
+            <div class="mx-auto flex min-h-[72px] max-w-7xl items-center justify-between gap-3 px-4 sm:px-8 max-[360px]:gap-1">
                 <RouterLink to="/" class="flex shrink-0 items-center gap-3 rounded-md focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-sage" aria-label="Household Inventory home">
                     <span class="grid size-10 place-items-center rounded-[10px] bg-sage text-lg font-semibold text-white" aria-hidden="true">H</span>
                     <span class="hidden text-[15px] font-semibold tracking-tight sm:inline">Household Inventory</span>
-                    <span class="text-[15px] font-semibold tracking-tight sm:hidden">Home inventory</span>
+                    <span class="text-[15px] font-semibold tracking-tight max-[360px]:hidden sm:hidden">Home inventory</span>
                 </RouterLink>
 
                 <nav class="hidden items-center gap-1 md:flex" aria-label="Main navigation">
@@ -53,12 +53,12 @@ async function signOut(): Promise<void> {
                     </RouterLink>
                 </nav>
 
-                <div class="flex shrink-0 items-center gap-3">
+                <div class="flex shrink-0 items-center gap-3 max-[360px]:gap-1">
                     <div class="hidden text-right sm:block">
                         <p class="max-w-40 truncate text-sm font-semibold text-ink">{{ session.user?.name }}</p>
                         <p class="max-w-40 truncate text-xs text-ink-muted">{{ session.user?.membership?.household?.name }}</p>
                     </div>
-                    <span class="grid size-10 place-items-center rounded-md border border-line bg-sage-soft text-sm font-semibold text-sage-dark" aria-hidden="true">{{ initials }}</span>
+                    <span class="grid size-10 place-items-center rounded-md border border-line bg-sage-soft text-sm font-semibold text-sage-dark max-[360px]:hidden" aria-hidden="true">{{ initials }}</span>
                     <RouterLink to="/settings" class="inline-flex min-h-10 items-center rounded-md px-2 text-xs font-medium text-ink-muted transition hover:bg-surface-soft hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sage sm:px-3 sm:text-sm">Settings</RouterLink>
                     <button
                         type="button"

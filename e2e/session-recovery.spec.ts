@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 
-test('recovers an initial session failure without loading protected data or losing the requested page', async ({ page }) => {
+test('recovers an initial session failure without loading protected data or losing the requested page', async ({ page }, testInfo) => {
     let sessionChecks = 0;
     let protectedRequests = 0;
     await page.route('**/api/user?**', async (route) => {
@@ -31,6 +31,10 @@ test('recovers an initial session failure without loading protected data or losi
     await expect(page.getByRole('heading', { name: 'Add an item', exact: true })).toBeVisible();
     await expect.poll(() => protectedRequests).toBe(1);
     expect(sessionChecks).toBe(2);
+    await page.setViewportSize({ width: 320, height: 740 });
+    await expect(page.getByRole('link', { name: 'Settings', exact: true })).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(320);
+    await page.screenshot({ path: testInfo.outputPath('recovered-inventory-320.png'), fullPage: true });
 });
 
 test('recovers an invitation session check while keeping its token out of the recovery URL', async ({ page }) => {

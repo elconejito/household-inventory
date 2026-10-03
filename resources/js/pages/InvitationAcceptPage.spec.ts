@@ -78,4 +78,21 @@ describe('invitation acceptance', () => {
         expect(router.currentRoute.value.query.redirect).toBe('/invitations/accept');
         expect(JSON.stringify(router.currentRoute.value.query)).not.toContain('invite-secret');
     });
+
+    it('associates validation messages with the matching invitation fields', async () => {
+        const validationError = new AxiosError('Validation failed');
+        Object.defineProperty(validationError, 'response', { value: { data: { errors: [{ source: { pointer: '/data/email' }, detail: 'Use the invited email address.' }] } } });
+        vi.mocked(http.post).mockRejectedValueOnce(validationError);
+        await wrapper!.get('#accept-name').setValue('Sam');
+        await wrapper!.get('#accept-email').setValue('wrong@example.com');
+        await wrapper!.get('#accept-password').setValue('test-password');
+        await wrapper!.get('#accept-password-confirmation').setValue('test-password');
+        await wrapper!.get('form').trigger('submit');
+        await flushPromises();
+
+        const emailInput = wrapper!.get('#accept-email');
+        expect(emailInput.attributes('aria-invalid')).toBe('true');
+        expect(emailInput.attributes('aria-describedby')).toBe('accept-email-error');
+        expect(wrapper!.get('#accept-email-error').text()).toBe('Use the invited email address.');
+    });
 });

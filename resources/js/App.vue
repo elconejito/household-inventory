@@ -8,7 +8,7 @@ const session = useSessionStore();
 const queryClient = useQueryClient();
 
 watch(
-    () => [session.user?.id, session.user?.membership?.household?.id],
+    () => [session.user?.id, session.user?.membership?.household?.id, session.user?.membership?.role],
     () => queryClient.clear(),
     { flush: 'sync' },
 );

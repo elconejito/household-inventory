@@ -40,6 +40,8 @@ describe('application shell', () => {
         expect(wrapper.get('h1').text()).toBe('Inventory');
         expect(wrapper.get('a[href="/inventory"]').attributes('aria-current')).toBe('page');
         expect(wrapper.findAll('nav a').map((link) => link.text())).toContain('Activity');
+        expect(wrapper.findAll('a[aria-label="Household Inventory home"] span').find((span) => span.text() === 'Home inventory')!.classes()).toContain('max-[360px]:hidden');
+        expect(wrapper.get('header .bg-sage-soft').classes()).toContain('max-[360px]:hidden');
 
         await wrapper.get('a[href="/activity"]').trigger('click');
         await flushPromises();

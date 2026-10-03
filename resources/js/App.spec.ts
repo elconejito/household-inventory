@@ -6,7 +6,7 @@ import App from './App.vue';
 import { useSessionStore } from './stores/session';
 
 describe('household query cache', () => {
-    it('discards inventory when the session ends or changes household', () => {
+    it('discards inventory when the session ends or changes household authority', () => {
         const pinia = createPinia();
         setActivePinia(pinia);
         const session = useSessionStore(pinia);
@@ -30,6 +30,10 @@ describe('household query cache', () => {
         queryClient.setQueryData(['inventory-movements'], [{ id: '3' }]);
         session.user.membership!.household!.id = '3';
         expect(queryClient.getQueryData(['inventory-movements'])).toBeUndefined();
+
+        queryClient.setQueryData(['memberships', 'without', 1], [{ id: 'owner-only' }]);
+        session.user.membership!.role = 'member';
+        expect(queryClient.getQueryData(['memberships', 'without', 1])).toBeUndefined();
 
         wrapper.unmount();
         queryClient.clear();
