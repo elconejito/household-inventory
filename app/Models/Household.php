@@ -44,4 +44,9 @@ class Household extends Model
     {
         return $this->hasMany(Location::class);
     }
+
+    public function inventoryMovements(): HasMany
+    {
+        return $this->hasMany(InventoryMovement::class);
+    }
 }

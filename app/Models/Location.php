@@ -41,4 +41,9 @@ class Location extends Model
     {
         return $this->hasMany(self::class, 'parent_id');
     }
+
+    public function inventoryLevels(): HasMany
+    {
+        return $this->hasMany(InventoryLevel::class);
+    }
 }

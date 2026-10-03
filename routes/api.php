@@ -3,6 +3,8 @@
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CategoryController;
 use App\Http\Controllers\Api\HealthController;
+use App\Http\Controllers\Api\InventoryLevelController;
+use App\Http\Controllers\Api\InventoryMovementController;
 use App\Http\Controllers\Api\ItemController;
 use App\Http\Controllers\Api\LocationController;
 use Illuminate\Support\Facades\Route;
@@ -40,4 +42,13 @@ Route::middleware('auth:sanctum')->group(function (): void {
     Route::patch('/locations/{location}', [LocationController::class, 'update'])->name('locations.update');
     Route::delete('/locations/{location}', [LocationController::class, 'destroy'])->name('locations.destroy');
     Route::post('/locations/{location}/restore', [LocationController::class, 'restore'])->name('locations.restore');
+
+    Route::get('/inventory-levels', [InventoryLevelController::class, 'index'])->name('inventory-levels.index');
+    Route::post('/inventory-levels', [InventoryLevelController::class, 'store'])->name('inventory-levels.store');
+    Route::get('/inventory-levels/{inventory_level}', [InventoryLevelController::class, 'show'])->name('inventory-levels.show');
+    Route::patch('/inventory-levels/{inventory_level}', [InventoryLevelController::class, 'update'])->name('inventory-levels.update');
+
+    Route::get('/inventory-movements', [InventoryMovementController::class, 'index'])->name('inventory-movements.index');
+    Route::post('/inventory-movements', [InventoryMovementController::class, 'store'])->name('inventory-movements.store');
+    Route::get('/inventory-movements/{inventory_movement}', [InventoryMovementController::class, 'show'])->name('inventory-movements.show');
 });

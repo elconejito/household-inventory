@@ -41,6 +41,8 @@ class ItemTest extends TestCase
                 'name' => 'Paper Towels',
                 'counting_unit' => 'roll',
                 'description' => null,
+                'total_quantity' => 0,
+                'counting_unit_plural' => 'rolls',
             ]])
             ->assertHeader('Location', route('items.show', ['item' => $item->id]));
 

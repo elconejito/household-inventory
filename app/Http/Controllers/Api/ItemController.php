@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Actions\ArchiveItem;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\IndexItemRequest;
 use App\Http\Requests\StoreItemRequest;
@@ -11,11 +12,14 @@ use App\Models\Item;
 use App\Models\User;
 use App\Serialization\ApiResponse;
 use App\Transformers\ItemTransformer;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Spatie\QueryBuilder\AllowedFilter;
+use Spatie\QueryBuilder\AllowedInclude;
 use Spatie\QueryBuilder\Exceptions\InvalidIncludeQuery;
 use Spatie\QueryBuilder\QueryBuilder;
 use Symfony\Component\HttpFoundation\Response;
@@ -32,7 +36,7 @@ class ItemController extends Controller
         $household = $this->household($request->user());
         $includes = $this->requestedIncludes($request->query('include'));
 
-        $query = QueryBuilder::for($household->items()->getQuery())
+        $query = QueryBuilder::for($household->items()->withInventorySummary())
             ->allowedFilters(
                 AllowedFilter::partial('search', 'name'),
                 AllowedFilter::partial('name'),
@@ -40,7 +44,13 @@ class ItemController extends Controller
             )
             ->allowedSorts('name')
             ->defaultSort('name')
-            ->allowedIncludes('categories')
+            ->allowedIncludes(
+                'categories',
+                AllowedInclude::callback('inventory_levels',
+                    fn (Builder|Relation $levels) => $levels->whereHas('location'), 'inventoryLevels'),
+                AllowedInclude::callback('inventory_levels.location',
+                    fn (Builder|Relation $levels) => $levels->whereHas('location')->with('location'), 'inventoryLevels'),
+            )
             ->orderBy('items.id');
 
         $paginator = $query
@@ -89,9 +99,7 @@ class ItemController extends Controller
             return $item;
         });
 
-        if (in_array('categories', $includes, true)) {
-            $item->load('categories');
-        }
+        $this->loadPresentation($item, $includes);
 
         return response()
             ->json($apiResponse->item($item, $transformer, $includes), 201)
@@ -105,14 +113,12 @@ class ItemController extends Controller
         ItemTransformer $transformer,
     ): JsonResponse {
         $household = $this->household($request->user());
-        $item = $household->items()->findOrFail($item);
+        $item = $household->items()->withInventorySummary()->findOrFail($item);
 
         Gate::authorize('view', $item);
         $includes = $this->requestedIncludes($request->query('include'));
 
-        if (in_array('categories', $includes, true)) {
-            $item->load('categories');
-        }
+        $this->loadPresentation($item, $includes);
 
         return response()->json($apiResponse->item($item, $transformer, $includes));
     }
@@ -142,20 +148,18 @@ class ItemController extends Controller
             }
         });
 
-        if (in_array('categories', $includes, true)) {
-            $item->load('categories');
-        }
+        $this->loadPresentation($item, $includes);
 
         return response()->json($apiResponse->item($item, $transformer, $includes));
     }
 
-    public function destroy(Request $request, string $item): Response
+    public function destroy(Request $request, string $item, ArchiveItem $archive): Response
     {
         $household = $this->household($request->user());
         $item = $household->items()->findOrFail($item);
 
         Gate::authorize('delete', $item);
-        $item->delete();
+        $archive->archive($household, $item);
 
         return response()->noContent();
     }
@@ -176,9 +180,7 @@ class ItemController extends Controller
         $includes = $this->requestedIncludes($request->query('include'));
         $item->restore();
 
-        if (in_array('categories', $includes, true)) {
-            $item->load('categories');
-        }
+        $this->loadPresentation($item, $includes);
 
         return response()->json($apiResponse->item($item, $transformer, $includes));
     }
@@ -197,7 +199,7 @@ class ItemController extends Controller
             return [];
         }
 
-        $allowedIncludes = ['categories'];
+        $allowedIncludes = ['categories', 'inventory_levels', 'inventory_levels.location'];
         if (! is_string($includeParameter)) {
             throw InvalidIncludeQuery::includesNotAllowed(collect(['include']), collect($allowedIncludes));
         }
@@ -210,5 +212,31 @@ class ItemController extends Controller
         }
 
         return $includes;
+    }
+
+    /**
+     * @param  array<int, string>  $includes
+     */
+    private function loadPresentation(Item $item, array $includes): void
+    {
+        if (! array_key_exists('total_quantity', $item->getAttributes())) {
+            $item->loadSum([
+                'inventoryLevels as total_quantity' => fn (Builder $levels) => $levels->whereHas('location'),
+            ], 'quantity');
+        }
+
+        if (in_array('categories', $includes, true)) {
+            $item->load('categories');
+        }
+
+        if (in_array('inventory_levels', $includes, true) || in_array('inventory_levels.location', $includes, true)) {
+            $item->load(['inventoryLevels' => function (Builder|Relation $levels) use ($includes): void {
+                $levels->whereHas('location');
+
+                if (in_array('inventory_levels.location', $includes, true)) {
+                    $levels->with('location');
+                }
+            }]);
+        }
     }
 }

@@ -74,6 +74,8 @@ class ManageLocationHierarchy
                 abort(409);
             }
 
+            abort_if($location->inventoryLevels()->where('quantity', '>', 0)->exists(), 409);
+
             $location->delete();
         });
     }
