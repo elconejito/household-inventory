@@ -5,11 +5,20 @@ export type ItemCategory = {
     name: string;
 };
 
+export type ItemLocation = {
+    id: string;
+    name: string;
+    description: string | null;
+    parent?: ItemLocation | null;
+};
+
 export type InventoryItem = {
     id: string;
     name: string;
     counting_unit: string;
+    counting_unit_plural?: string;
     description: string | null;
+    total_quantity?: number;
     categories?: ItemCategory[];
 };
 
@@ -44,7 +53,17 @@ export type NewItem = {
 };
 
 type ItemResponse = {
-    data: InventoryItem;
+    data: InventoryItem & {
+        total_quantity?: number;
+        inventory_levels?: Array<{
+            id: string;
+            quantity: number;
+            alert_threshold: number | null;
+            stock_status: string;
+            alert_status: string;
+            location: ItemLocation;
+        }>;
+    };
 };
 
 export async function getItems(params: ItemListParams): Promise<ItemListResponse> {
@@ -58,6 +77,14 @@ export async function getItems(params: ItemListParams): Promise<ItemListResponse
     });
 
     return response.data;
+}
+
+export async function getItem(id: string): Promise<ItemResponse['data']> {
+    const response = await http.get<ItemResponse>(`/items/${id}`, {
+        params: { include: 'categories,inventory_levels.location' },
+    });
+
+    return response.data.data;
 }
 
 export async function createItem(item: NewItem): Promise<InventoryItem> {

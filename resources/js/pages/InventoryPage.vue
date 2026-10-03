@@ -226,9 +226,10 @@ function errorMessage(): string {
                 </div>
             </div>
 
-            <div v-if="itemsQuery.data.value?.data.length" class="hidden grid-cols-[minmax(0,1.3fr)_9rem_minmax(0,1fr)] gap-6 border-b border-line bg-surface-soft/60 px-6 py-2.5 text-xs font-semibold uppercase tracking-wide text-ink-muted sm:grid" aria-hidden="true">
+            <div v-if="itemsQuery.data.value?.data.length" class="hidden grid-cols-[minmax(0,1.3fr)_9rem_8rem_minmax(0,1fr)] gap-6 border-b border-line bg-surface-soft/60 px-6 py-2.5 text-xs font-semibold uppercase tracking-wide text-ink-muted sm:grid" aria-hidden="true">
                 <span>Item</span>
                 <span>Counting unit</span>
+                <span>On hand</span>
                 <span>Categories</span>
             </div>
 
@@ -266,15 +267,16 @@ function errorMessage(): string {
 
                 <ul v-else class="divide-y divide-line" aria-label="Inventory items">
                     <li v-for="item in itemsQuery.data.value.data" :key="item.id" class="px-5 py-4 sm:px-6 sm:py-5">
-                        <article class="grid gap-2 sm:grid-cols-[minmax(0,1.3fr)_9rem_minmax(0,1fr)] sm:items-start sm:gap-6">
+                        <article class="grid gap-2 sm:grid-cols-[minmax(0,1.3fr)_9rem_8rem_minmax(0,1fr)] sm:items-start sm:gap-6">
                             <div class="min-w-0">
-                                <h3 class="break-words text-base font-semibold text-ink">{{ item.name }}</h3>
+                                <h3 class="break-words text-base font-semibold text-ink"><RouterLink :to="{ name: 'inventory-item', params: { item: item.id } }" class="rounded-sm hover:text-sage-dark hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sage">{{ item.name }}</RouterLink></h3>
                                 <p v-if="item.description" class="mt-1 line-clamp-2 whitespace-pre-line text-sm leading-5 text-ink-muted">{{ item.description }}</p>
                             </div>
                             <p class="text-sm text-ink-muted sm:pt-0.5">
                                 <span class="sr-only">Counting unit: </span>
                                 Counted by <span class="font-medium text-ink">{{ item.counting_unit }}</span>
                             </p>
+                            <p class="text-sm font-semibold text-ink sm:pt-0.5">{{ item.total_quantity ?? 0 }} <span class="font-normal text-ink-muted">on hand</span></p>
                             <div class="flex min-w-0 flex-wrap gap-2 sm:pt-0.5">
                                 <span v-for="category in item.categories ?? []" :key="category.id" class="max-w-full truncate rounded-md bg-sage-soft px-2.5 py-1 text-xs font-medium text-sage-dark">{{ category.name }}</span>
                                 <span v-if="!item.categories?.length" class="text-sm text-ink-muted">{{ item.description ? 'No categories yet' : 'No description or categories yet' }}</span>
