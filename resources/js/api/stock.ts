@@ -72,6 +72,49 @@ export type MovementFilters = {
     movementType: string;
 };
 
+export type InventoryAlert = {
+    id: string;
+    alert_type: 'buy_soon' | string;
+    created_at: string;
+    resolved_at: string | null;
+    item: InventoryItem;
+};
+
+export type AlertListParams = { page: number; perPage: number };
+export type InventoryAlertStatus = 'empty' | 'low' | 'triggered';
+
+export async function getTriggeredLevels(params: AlertListParams, status: InventoryAlertStatus): Promise<PageCollection<InventoryLevel & { item: InventoryItem }>> {
+    const response = await http.get<PageCollection<InventoryLevel & { item: InventoryItem }>>('/inventory-levels', {
+        params: { 'filter[alert_status]': status, include: 'item,location', per_page: params.perPage, page: params.page },
+    });
+
+    return response.data;
+}
+
+export async function getActiveAlerts(params: AlertListParams, itemId?: string): Promise<PageCollection<InventoryAlert>> {
+    const response = await http.get<PageCollection<InventoryAlert>>('/inventory-alerts', {
+        params: {
+            'filter[status]': 'active',
+            ...(itemId ? { 'filter[item_id]': itemId } : {}),
+            include: 'item', per_page: params.perPage, page: params.page,
+        },
+    });
+
+    return response.data;
+}
+
+export async function createBuySoon(itemId: string): Promise<InventoryAlert> {
+    const response = await http.post<Resource<InventoryAlert>>('/inventory-alerts', { data: { item_id: itemId, alert_type: 'buy_soon' } });
+
+    return response.data.data;
+}
+
+export async function resolveAlert(alertId: string): Promise<InventoryAlert> {
+    const response = await http.post<Resource<InventoryAlert>>(`/inventory-alerts/${alertId}/resolve`);
+
+    return response.data.data;
+}
+
 export async function getLocations(page: number): Promise<PageCollection<Location>> {
     const response = await http.get<PageCollection<Location>>('/locations', {
         params: { include: 'parent', per_page: 100, page },

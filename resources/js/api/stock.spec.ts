@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import { http } from '../lib/http';
-import { buildLocationPath, getMovements } from './stock';
+import { buildLocationPath, createBuySoon, getActiveAlerts, getMovements, getTriggeredLevels, resolveAlert } from './stock';
 
-vi.mock('../lib/http', () => ({ http: { get: vi.fn() } }));
+vi.mock('../lib/http', () => ({ http: { get: vi.fn(), post: vi.fn() } }));
 
 describe('stock activity API', () => {
     it('builds full hierarchy paths from the location collection', () => {
@@ -31,5 +31,31 @@ describe('stock activity API', () => {
                 'filter[movement_type]': 'transfer',
             },
         });
+    });
+});
+
+describe('dashboard alert API', () => {
+    it('requests separate paginated automatic and manual alert collections', async () => {
+        vi.mocked(http.get).mockResolvedValue({ data: { data: [], meta: { current_page: 2, last_page: 3, total: 25 } } });
+
+        await getTriggeredLevels({ page: 2, perPage: 10 }, 'low');
+        await getTriggeredLevels({ page: 1, perPage: 10 }, 'empty');
+        await getActiveAlerts({ page: 1, perPage: 10 });
+        await getActiveAlerts({ page: 1, perPage: 10 }, '42');
+
+        expect(http.get).toHaveBeenNthCalledWith(1, '/inventory-levels', { params: { 'filter[alert_status]': 'low', include: 'item,location', per_page: 10, page: 2 } });
+        expect(http.get).toHaveBeenNthCalledWith(2, '/inventory-levels', { params: { 'filter[alert_status]': 'empty', include: 'item,location', per_page: 10, page: 1 } });
+        expect(http.get).toHaveBeenNthCalledWith(3, '/inventory-alerts', { params: { 'filter[status]': 'active', include: 'item', per_page: 10, page: 1 } });
+        expect(http.get).toHaveBeenNthCalledWith(4, '/inventory-alerts', { params: { 'filter[status]': 'active', 'filter[item_id]': '42', include: 'item', per_page: 10, page: 1 } });
+    });
+
+    it('creates and resolves a Buy soon alert with the documented request bodies', async () => {
+        vi.mocked(http.post).mockResolvedValue({ data: { data: { id: '8', alert_type: 'buy_soon' } } } as never);
+
+        await createBuySoon('42');
+        await resolveAlert('8');
+
+        expect(http.post).toHaveBeenNthCalledWith(1, '/inventory-alerts', { data: { item_id: '42', alert_type: 'buy_soon' } });
+        expect(http.post).toHaveBeenNthCalledWith(2, '/inventory-alerts/8/resolve');
     });
 });

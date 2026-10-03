@@ -3,12 +3,16 @@ import { computed, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { parseApiErrors, type FormErrors } from '../lib/api-errors';
 import { buildLocationPath, type InventoryLevel } from '../api/stock';
-import { useCreateLocationMutation, useLocationsQuery, useRecordMovementMutation, useStockItemQuery, useUpdateThresholdMutation } from '../queries/stock';
+import { useActiveAlertsQuery, useBuySoonMutation, useCreateLocationMutation, useLocationsQuery, useRecordMovementMutation, useResolveAlertMutation, useStockItemQuery, useUpdateThresholdMutation } from '../queries/stock';
 
 type Action = 'restock' | 'transfer-out' | 'transfer-in' | 'correction' | 'disposal' | 'threshold';
 const route = useRoute();
 const itemId = computed(() => String(route.params.item));
 const itemQuery = useStockItemQuery(itemId);
+const alertParams = computed(() => ({ page: 1, perPage: 10 }));
+const itemAlertQuery = useActiveAlertsQuery(alertParams, itemId);
+const buySoonMutation = useBuySoonMutation();
+const resolveAlertMutation = useResolveAlertMutation();
 const locationsQuery = useLocationsQuery();
 const movementMutation = useRecordMovementMutation();
 const thresholdMutation = useUpdateThresholdMutation();
@@ -28,6 +32,8 @@ const showCreateLocation = ref(false);
 const locationErrors = ref<FormErrors>({ fields: {}, form: '' });
 const actionError = ref('');
 const pending = computed(() => movementMutation.isPending.value || thresholdMutation.isPending.value);
+const manualAlert = computed(() => itemAlertQuery.data.value?.data[0] ?? null);
+const alertPending = computed(() => buySoonMutation.isPending.value || resolveAlertMutation.isPending.value);
 
 const locationOptions = computed(() => (locationsQuery.data.value ?? []).map((location) => ({ location, path: locationPath(location) })));
 const otherLocations = computed(() => locationOptions.value.filter(({ location }) => location.id !== selectedLevel.value?.location.id));
@@ -189,6 +195,19 @@ async function quickConsume(level: InventoryLevel): Promise<void> {
         actionError.value = parseApiErrors(error).form || 'The stock change could not be saved.';
     }
 }
+
+async function toggleBuySoon(): Promise<void> {
+    if (alertPending.value) return;
+    try {
+        if (manualAlert.value) {
+            await resolveAlertMutation.mutateAsync(manualAlert.value.id);
+        } else {
+            await buySoonMutation.mutateAsync(itemId.value);
+        }
+    } catch (error) {
+        actionError.value = parseApiErrors(error).form || 'The Buy soon status could not be updated.';
+    }
+}
 </script>
 
 <template>
@@ -215,6 +234,17 @@ async function quickConsume(level: InventoryLevel): Promise<void> {
 
             <p v-if="success" class="mt-5 rounded-md border border-sage/20 bg-sage-soft px-4 py-3 text-sm font-medium text-sage-dark" role="status">{{ success }}</p>
             <p v-if="actionError" class="mt-5 rounded-md border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800" role="alert">{{ actionError }}</p>
+
+            <section class="mt-6 rounded-panel border border-line bg-white p-5 shadow-card" aria-labelledby="buy-soon-title">
+                <div class="flex flex-wrap items-center justify-between gap-3">
+                    <div><h2 id="buy-soon-title" class="font-semibold text-ink">Buy soon</h2><p class="mt-1 text-sm text-ink-muted">A personal reminder for your next shop.</p></div>
+                    <button type="button" :disabled="alertPending || itemAlertQuery.isPending.value || itemAlertQuery.isError.value" class="min-h-10 rounded-md border border-line px-3 text-sm font-medium disabled:opacity-50" @click="toggleBuySoon">{{ manualAlert ? 'Resolve Buy soon' : 'Mark Buy soon' }}</button>
+                </div>
+                <p v-if="itemAlertQuery.isError.value" class="mt-3 text-sm text-rose-700" role="alert">Buy soon status could not be loaded. <button type="button" class="underline" @click="itemAlertQuery.refetch()">Try again</button></p>
+                <p v-else-if="itemAlertQuery.isPending.value" class="mt-2 text-sm text-ink-muted" role="status">Checking Buy soon status…</p>
+                <p v-else-if="manualAlert" class="mt-2 text-sm text-sage-dark" aria-live="polite">Marked to buy soon.</p>
+                <p v-else class="mt-2 text-sm text-ink-muted" aria-live="polite">No active Buy soon reminder.</p>
+            </section>
 
             <section class="mt-7 rounded-panel border border-line bg-white shadow-card" aria-labelledby="locations-heading">
                 <div class="flex flex-wrap items-center justify-between gap-3 border-b border-line px-5 py-4 sm:px-6">

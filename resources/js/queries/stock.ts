@@ -1,14 +1,35 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query';
 import { computed, type ComputedRef } from 'vue';
 import { getItem, getItems } from '../api/items';
-import { createLocation, getLocations, getMovements, recordMovement, updateThreshold, type MovementFilters } from '../api/stock';
+import { createBuySoon, createLocation, getActiveAlerts, getLocations, getMovements, getTriggeredLevels, recordMovement, resolveAlert, updateThreshold, type AlertListParams, type InventoryAlertStatus, type MovementFilters } from '../api/stock';
 
 export const stockQueryKeys = {
     detail: (id: string) => ['items', 'detail', id] as const,
     locations: ['locations'] as const,
     movements: ['inventory-movements'] as const,
     movementList: (filters: MovementFilters) => ['inventory-movements', filters] as const,
+    triggeredLevels: (params: AlertListParams, status: InventoryAlertStatus) => ['inventory-levels', status, params] as const,
+    activeAlerts: (params: AlertListParams, itemId?: string) => ['inventory-alerts', 'active', params, itemId] as const,
 };
+
+export function useTriggeredLevelsQuery(params: ComputedRef<AlertListParams>, status: InventoryAlertStatus) {
+    return useQuery({ queryKey: computed(() => stockQueryKeys.triggeredLevels(params.value, status)), queryFn: () => getTriggeredLevels(params.value, status) });
+}
+
+export function useActiveAlertsQuery(params: ComputedRef<AlertListParams>, itemId?: ComputedRef<string>) {
+    return useQuery({
+        queryKey: computed(() => stockQueryKeys.activeAlerts(params.value, itemId?.value)),
+        queryFn: () => getActiveAlerts(params.value, itemId?.value),
+    });
+}
+
+export function useBuySoonMutation() {
+    return useStockMutation(createBuySoon);
+}
+
+export function useResolveAlertMutation() {
+    return useStockMutation(resolveAlert);
+}
 
 export function useStockItemQuery(id: string | ComputedRef<string>) {
     const resolvedId = computed(() => typeof id === 'string' ? id : id.value);
@@ -57,6 +78,7 @@ function useStockMutation<TVariables>(mutationFn: (variables: TVariables) => Pro
                 queryClient.invalidateQueries({ queryKey: stockQueryKeys.locations }),
                 queryClient.invalidateQueries({ queryKey: stockQueryKeys.movements }),
                 queryClient.invalidateQueries({ queryKey: ['activity'] }),
+                queryClient.invalidateQueries({ queryKey: ['inventory-alerts'] }),
             ]);
         },
     });

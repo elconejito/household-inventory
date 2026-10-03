@@ -20,6 +20,13 @@ export type InventoryItem = {
     description: string | null;
     total_quantity?: number;
     categories?: ItemCategory[];
+    inventory_levels?: Array<{
+        id: string;
+        quantity: number;
+        alert_threshold: number | null;
+        alert_status: string;
+        location: ItemLocation;
+    }>;
 };
 
 export type ItemListParams = {
@@ -66,13 +73,13 @@ type ItemResponse = {
     };
 };
 
-export async function getItems(params: ItemListParams): Promise<ItemListResponse> {
+export async function getItems(params: ItemListParams, include = 'categories'): Promise<ItemListResponse> {
     const response = await http.get<ItemListResponse>('/items', {
         params: {
             ...(params.search ? { 'filter[search]': params.search } : {}),
             page: params.page,
             per_page: params.perPage,
-            include: 'categories',
+            include,
         },
     });
 

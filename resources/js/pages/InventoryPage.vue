@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { computed, nextTick, onUnmounted, ref, watch } from 'vue';
+import { useRoute } from 'vue-router';
 import { parseApiErrors, type FormErrors } from '../lib/api-errors';
 import { useCreateItemMutation, useItemsQuery } from '../queries/items';
 
 const pageSize = 10;
+const route = useRoute();
 const search = ref('');
 const debouncedSearch = ref('');
 const page = ref(1);
@@ -23,6 +25,12 @@ const listParams = computed(() => ({
 }));
 const itemsQuery = useItemsQuery(listParams);
 const createMutation = useCreateItemMutation();
+
+watch(() => route.query.create, (value) => {
+    if (value === '1') {
+        showCreateForm.value = true;
+    }
+}, { immediate: true });
 
 watch(search, (value) => {
     if (searchTimeout) {

@@ -10,6 +10,7 @@ vi.mock('../lib/http', () => ({
         post: vi.fn(),
     },
 }));
+vi.mock('vue-router', () => ({ useRoute: () => ({ query: {} }) }));
 
 describe('inventory page', () => {
     let queryClient: QueryClient;

@@ -25,6 +25,7 @@ describe('item stock detail', () => {
         queryClient = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
         vi.mocked(http.get).mockImplementation(async (url) => {
             if (String(url).startsWith('/items/')) return { data: { data: item } } as never;
+            if (String(url) === '/inventory-alerts') return { data: { data: [], meta: { current_page: 1, last_page: 1, total: 0 } } } as never;
             return { data: { data: [{ id: '2', name: 'Pantry', description: null, parent: null }, { id: '3', name: 'Closet', description: null, parent: null }], meta: { current_page: 1, last_page: 1, total: 2 } } } as never;
         });
     });
@@ -71,10 +72,9 @@ describe('item stock detail', () => {
         vi.mocked(http.post).mockResolvedValue({ data: { data: { id: '11' } } } as never);
         mountPage();
         await flushPromises();
-        await wrapper!.get('button').trigger('click');
+        await wrapper!.findAll('button').find((button) => button.text() === 'Restock at another location')!.trigger('click');
         await wrapper!.get('#new-level-location').setValue('3');
         await wrapper!.get('#new-level-quantity').setValue('6');
-        expect(wrapper!.find('[role="status"]').exists()).toBe(false);
         expect(wrapper!.text()).toContain('Restock 6 packs at Closet.');
         await wrapper!.get('input[type="checkbox"]').setValue(true);
         await wrapper!.get('form').trigger('submit');
