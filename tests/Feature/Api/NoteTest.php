@@ -88,6 +88,35 @@ class NoteTest extends TestCase
             ->assertJsonPath('data.1.id', (string) $later->id);
     }
 
+    public function test_archived_notes_are_explicitly_listed_without_exposing_other_households(): void
+    {
+        [$user, $category] = $this->householdCategory();
+        $active = $this->createNote($category, 'Keep visible', $user);
+        $archived = $this->createNote($category, 'Removed note', $user);
+        $archived->delete();
+        $category->delete();
+
+        $this->actingAs($user, 'web')->getJson('/api/categories/'.$category->id.'/notes?filter[trashed]=only')
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.id', (string) $archived->id);
+        $this->getJson('/api/categories/'.$category->id.'/notes')
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.id', (string) $active->id);
+        $this->getJson('/api/categories/'.$category->id.'/notes?filter[trashed]=invalid')->assertUnprocessable();
+    }
+
+    public function test_archived_notes_return_404_for_another_household(): void
+    {
+        [$user, $category] = $this->householdCategory();
+        $this->createNote($category, 'Private archived note', $user)->delete();
+        $category->delete();
+        [$otherUser] = $this->householdCategory();
+
+        $this->actingAs($otherUser, 'web')->getJson('/api/categories/'.$category->id.'/notes?filter[trashed]=only')->assertNotFound();
+    }
+
     public static function notableTypes(): array
     {
         return [

@@ -19,6 +19,7 @@ class IndexItemImageRequest extends FormRequest
     public function rules(): array
     {
         return [
+            'filter.trashed' => ['sometimes', 'string', Rule::in(['with', 'only', 'without'])],
             'per_page' => ['sometimes', 'integer', Rule::in([10, 25, 50, 100])],
             'page' => ['sometimes', 'integer', 'min:1'],
         ];

@@ -32,7 +32,7 @@ class NoteController extends Controller
         Gate::authorize('viewAny', [Note::class, $notable]);
         $includes = $this->requestedIncludes($request->query('include'));
         $paginator = QueryBuilder::for($notable->notes()->getQuery()->reorder())
-            ->allowedFilters(AllowedFilter::exact('created_by'))
+            ->allowedFilters(AllowedFilter::exact('created_by'), AllowedFilter::trashed())
             ->allowedSorts('created_at')
             ->defaultSort('-created_at')
             ->allowedIncludes(AllowedInclude::relationship('created_by', 'creator'))

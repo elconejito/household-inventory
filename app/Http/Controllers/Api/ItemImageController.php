@@ -18,6 +18,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Storage;
+use Spatie\QueryBuilder\AllowedFilter;
 use Spatie\QueryBuilder\AllowedInclude;
 use Spatie\QueryBuilder\QueryBuilder;
 use Symfony\Component\HttpFoundation\Response;
@@ -31,11 +32,11 @@ class ItemImageController extends Controller
         ItemImageTransformer $transformer,
     ): JsonResponse {
         $household = $this->household($request->user());
-        $item = $household->items()->findOrFail($item);
+        $item = $household->items()->withTrashed()->findOrFail($item);
         Gate::authorize('viewAny', ItemImage::class);
 
         $query = QueryBuilder::for(ItemImage::query()->where('item_id', $item->getKey()), $request)
-            ->allowedFilters()
+            ->allowedFilters(AllowedFilter::trashed())
             ->allowedSorts()
             ->allowedIncludes(AllowedInclude::relationship('uploaded_by', 'uploader'))
             ->defaultSort('-is_primary', 'uploaded_at', 'id');
@@ -187,7 +188,7 @@ class ItemImageController extends Controller
     private function requestedIncludes(Request $request): array
     {
         $query = QueryBuilder::for(ItemImage::query(), $request)
-            ->allowedFilters()
+            ->allowedFilters(AllowedFilter::trashed())
             ->allowedSorts()
             ->allowedIncludes(AllowedInclude::relationship('uploaded_by', 'uploader'));
 

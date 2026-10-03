@@ -24,6 +24,7 @@ class IndexNoteRequest extends FormRequest
     public function rules(): array
     {
         return [
+            'filter.trashed' => ['sometimes', 'string', Rule::in(['with', 'only', 'without'])],
             'filter.created_by' => ['sometimes', 'integer', 'min:1'],
             'per_page' => ['sometimes', 'integer', Rule::in([10, 25, 50, 100])],
             'page' => ['sometimes', 'integer', 'min:1'],

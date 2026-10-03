@@ -126,6 +126,39 @@ class ItemImageTest extends TestCase
         $this->getJson('/api/items/'.$item->id.'/images?per_page=20')->assertUnprocessable();
     }
 
+    public function test_archived_photos_can_be_listed_explicitly_even_for_archived_items(): void
+    {
+        Storage::fake('inventory-images');
+        [$user, $household] = $this->householdMember();
+        $item = Item::factory()->for($household)->create();
+        $active = $this->storedImage($item, $user, ['is_primary' => true]);
+        $archived = $this->storedImage($item, $user, ['is_primary' => false]);
+        $archived->delete();
+        $item->delete();
+
+        $this->actingAs($user, 'web')->getJson('/api/items/'.$item->id.'/images?filter[trashed]=only')
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.id', (string) $archived->id);
+        $this->getJson('/api/items/'.$item->id.'/images')
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.id', (string) $active->id);
+        $this->getJson('/api/items/'.$item->id.'/images?filter[trashed]=invalid')->assertUnprocessable();
+    }
+
+    public function test_archived_photos_return_404_for_another_household(): void
+    {
+        Storage::fake('inventory-images');
+        [$user, $household] = $this->householdMember();
+        $item = Item::factory()->for($household)->create();
+        $this->storedImage($item, $user)->delete();
+        $item->delete();
+        [$otherUser] = $this->householdMember();
+
+        $this->actingAs($otherUser, 'web')->getJson('/api/items/'.$item->id.'/images?filter[trashed]=only')->assertNotFound();
+    }
+
     public function test_primary_photo_can_be_changed_deleted_and_restored_without_replacing_current_primary(): void
     {
         Storage::fake('inventory-images');
