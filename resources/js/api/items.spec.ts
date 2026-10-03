@@ -14,7 +14,7 @@ describe('item API client', () => {
         vi.clearAllMocks();
     });
 
-    it('requests the searched item page with categories included', async () => {
+    it('requests the searched item page with categories and primary images included', async () => {
         vi.mocked(http.get).mockResolvedValue({
             data: { data: [], links: {}, meta: {} },
         });
@@ -26,7 +26,7 @@ describe('item API client', () => {
                 'filter[search]': 'paper goods',
                 page: 2,
                 per_page: 10,
-                include: 'categories',
+                include: 'categories,images',
             },
         });
     });

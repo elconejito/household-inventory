@@ -4,6 +4,8 @@ import { useRoute } from 'vue-router';
 import { parseApiErrors, type FormErrors } from '../lib/api-errors';
 import { buildLocationPath, type InventoryLevel } from '../api/stock';
 import { useActiveAlertsQuery, useBuySoonMutation, useCreateLocationMutation, useLocationsQuery, useRecordMovementMutation, useResolveAlertMutation, useStockItemQuery, useUpdateThresholdMutation } from '../queries/stock';
+import NotesPanel from '../components/NotesPanel.vue';
+import ItemImagesPanel from '../components/ItemImagesPanel.vue';
 
 type Action = 'restock' | 'transfer-out' | 'transfer-in' | 'correction' | 'disposal' | 'threshold';
 const route = useRoute();
@@ -232,6 +234,8 @@ async function toggleBuySoon(): Promise<void> {
                 </div>
             </div>
 
+            <ItemImagesPanel class="mt-6" :item-id="itemId" />
+
             <p v-if="success" class="mt-5 rounded-md border border-sage/20 bg-sage-soft px-4 py-3 text-sm font-medium text-sage-dark" role="status">{{ success }}</p>
             <p v-if="actionError" class="mt-5 rounded-md border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800" role="alert">{{ actionError }}</p>
 
@@ -259,7 +263,7 @@ async function toggleBuySoon(): Promise<void> {
                 </div>
                 <ul v-else class="divide-y divide-line">
                     <li v-for="level in itemQuery.data.value.inventory_levels" :key="level.id" class="grid gap-3 px-5 py-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:px-6">
-                        <div><h3 class="font-semibold text-ink">{{ locationPath(level.location) }}</h3><p class="mt-1 text-sm text-ink-muted">{{ level.quantity }} {{ unitFor(level.quantity) }}<span v-if="level.alert_threshold !== null"> · alert at {{ level.alert_threshold }}</span></p></div>
+                        <div><h3 class="font-semibold text-ink"><RouterLink :to="{ name: 'location-detail', params: { location: level.location.id } }" class="hover:underline">{{ locationPath(level.location) }}</RouterLink></h3><p class="mt-1 text-sm text-ink-muted">{{ level.quantity }} {{ unitFor(level.quantity) }}<span v-if="level.alert_threshold !== null"> · alert at {{ level.alert_threshold }}</span></p></div>
                         <div class="flex flex-wrap gap-2">
                             <button v-if="level.quantity > 0" type="button" :disabled="pending" class="min-h-9 rounded-md border border-line px-3 text-sm font-medium hover:bg-surface-soft disabled:cursor-wait disabled:opacity-60" @click="quickConsume(level)">{{ movementMutation.isPending.value ? 'Saving…' : 'Use 1' }}</button>
                             <button type="button" :disabled="pending" class="min-h-9 rounded-md border border-line px-3 text-sm font-medium hover:bg-surface-soft disabled:cursor-wait disabled:opacity-60" @click="startAction('restock', level)">Restock</button>
@@ -293,6 +297,7 @@ async function toggleBuySoon(): Promise<void> {
                 </form>
             </section>
             <section v-if="showCreateLocation" class="mt-6 rounded-panel border border-line bg-white p-5" aria-labelledby="create-location-title"><h2 id="create-location-title" class="text-lg font-semibold text-ink">Create a location</h2><p v-if="locationErrors.form" class="mt-3 rounded-md border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800" role="alert">{{ locationErrors.form }}</p><p v-for="(message, field) in locationErrors.fields" :key="field" class="mt-3 text-sm text-rose-700" role="alert">{{ message }}</p><form class="mt-4 grid gap-4 sm:grid-cols-2" @submit.prevent="addLocation"><div class="grid gap-2"><label for="location-name" class="text-sm font-medium text-ink">Name</label><input id="location-name" v-model="newLocationName" required maxlength="255" class="min-h-11 rounded-md border border-line px-3"></div><div class="grid gap-2"><label for="location-parent" class="text-sm font-medium text-ink">Inside another location <span class="font-normal text-ink-muted">(optional)</span></label><select id="location-parent" v-model="newLocationParent" class="min-h-11 rounded-md border border-line bg-white px-3"><option value="">No parent</option><option v-for="option in locationOptions" :key="option.location.id" :value="option.location.id">{{ option.path }}</option></select></div><div class="flex gap-3 sm:col-span-2"><button :disabled="createLocationMutation.isPending.value" class="min-h-11 rounded-md bg-sage px-4 text-sm font-semibold text-white">Create location</button><button type="button" class="min-h-11 rounded-md border border-line px-4" @click="showCreateLocation = false">Cancel</button></div></form></section>
+            <NotesPanel class="mt-6" type="items" :context-id="itemId" />
         </template>
     </section>
 </template>

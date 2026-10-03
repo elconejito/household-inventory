@@ -275,7 +275,8 @@ function errorMessage(): string {
 
                 <ul v-else class="divide-y divide-line" aria-label="Inventory items">
                     <li v-for="item in itemsQuery.data.value.data" :key="item.id" class="px-5 py-4 sm:px-6 sm:py-5">
-                        <article class="grid gap-2 sm:grid-cols-[minmax(0,1.3fr)_9rem_8rem_minmax(0,1fr)] sm:items-start sm:gap-6">
+                        <article class="grid gap-3 sm:grid-cols-[3.5rem_minmax(0,1.3fr)_9rem_8rem_minmax(0,1fr)] sm:items-start sm:gap-4">
+                            <img v-if="item.images?.find((image) => image.is_primary)" :src="item.images.find((image) => image.is_primary)?.thumbnail_url" :alt="item.images.find((image) => image.is_primary)?.caption || ''" class="size-14 rounded-md bg-surface-soft object-cover" loading="lazy">
                             <div class="min-w-0">
                                 <h3 class="break-words text-base font-semibold text-ink"><RouterLink :to="{ name: 'inventory-item', params: { item: item.id } }" class="rounded-sm hover:text-sage-dark hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sage">{{ item.name }}</RouterLink></h3>
                                 <p v-if="item.description" class="mt-1 line-clamp-2 whitespace-pre-line text-sm leading-5 text-ink-muted">{{ item.description }}</p>
@@ -286,7 +287,7 @@ function errorMessage(): string {
                             </p>
                             <p class="text-sm font-semibold text-ink sm:pt-0.5">{{ item.total_quantity ?? 0 }} <span class="font-normal text-ink-muted">on hand</span></p>
                             <div class="flex min-w-0 flex-wrap gap-2 sm:pt-0.5">
-                                <span v-for="category in item.categories ?? []" :key="category.id" class="max-w-full truncate rounded-md bg-sage-soft px-2.5 py-1 text-xs font-medium text-sage-dark">{{ category.name }}</span>
+                                <RouterLink v-for="category in item.categories ?? []" :key="category.id" :to="{ name: 'category-detail', params: { category: category.id } }" class="max-w-full truncate rounded-md bg-sage-soft px-2.5 py-1 text-xs font-medium text-sage-dark hover:underline">{{ category.name }}</RouterLink>
                                 <span v-if="!item.categories?.length" class="text-sm text-ink-muted">{{ item.description ? 'No categories yet' : 'No description or categories yet' }}</span>
                             </div>
                         </article>

@@ -3,12 +3,14 @@ import { computed, ref, watch } from 'vue';
 import { parseApiErrors } from '../lib/api-errors';
 import { useAllItemsQuery, useLocationsQuery, useMovementsQuery } from '../queries/stock';
 import { buildLocationPath, type Location } from '../api/stock';
+import NotesPanel from '../components/NotesPanel.vue';
 
 const page = ref(1);
 const itemId = ref('');
 const locationId = ref('');
 const locationMode = ref<'either' | 'from' | 'to'>('either');
 const movementType = ref('');
+const openNoteContexts = ref(new Set<string>());
 const locationsQuery = useLocationsQuery();
 const itemList = useAllItemsQuery();
 const filters = computed(() => ({ page: page.value, perPage: 10, itemId: itemId.value, locationId: locationId.value, locationMode: locationMode.value, movementType: movementType.value }));
@@ -34,6 +36,13 @@ function timestamp(value: string): string {
 
 function retry(): void {
     void movementsQuery.refetch();
+}
+
+function toggleNotes(id: string, event: Event): void {
+    const updated = new Set(openNoteContexts.value);
+    if ((event.currentTarget as HTMLDetailsElement).open) updated.add(id);
+    else updated.delete(id);
+    openNoteContexts.value = updated;
 }
 </script>
 
@@ -65,6 +74,7 @@ function retry(): void {
                                 <li v-for="entry in movement.entries" :key="entry.id" class="flex flex-wrap items-center gap-x-2"><span class="font-medium text-ink">{{ locationPath(entry.location) }}</span><span>{{ entry.quantity_delta > 0 ? '+' : '' }}{{ entry.quantity_delta }} {{ unitFor(movement, entry.quantity_delta) }}</span><span>· {{ entry.balance_after }} after</span></li>
                             </ul>
                             <p v-if="movement.recorded_by" class="mt-2 text-xs text-ink-muted">Recorded by {{ movement.recorded_by.name }}</p>
+                            <details class="mt-3" @toggle="toggleNotes(movement.id, $event)"><summary class="w-fit cursor-pointer text-sm font-medium text-sage-dark">Notes</summary><NotesPanel v-if="openNoteContexts.has(movement.id)" class="mt-3" type="inventory-movements" :context-id="movement.id" /></details>
                         </article>
                     </li>
                 </ol>

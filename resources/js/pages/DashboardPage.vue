@@ -6,6 +6,7 @@ import { getItems, type InventoryItem } from '../api/items';
 import { buildLocationPath, getActiveAlerts, type InventoryLevel, type InventoryAlert } from '../api/stock';
 import { parseApiErrors } from '../lib/api-errors';
 import { useActiveAlertsQuery, useBuySoonMutation, useLocationsQuery, useRecordMovementMutation, useResolveAlertMutation, useTriggeredLevelsQuery } from '../queries/stock';
+import NotesPanel from '../components/NotesPanel.vue';
 
 const pageSize = 10;
 const search = ref('');
@@ -39,6 +40,7 @@ const locationsQuery = useLocationsQuery();
 const movementMutation = useRecordMovementMutation();
 const buySoonMutation = useBuySoonMutation();
 const resolveMutation = useResolveAlertMutation();
+const openAlertNoteContexts = ref(new Set<string>());
 const itemIds = computed(() => (itemQuery.data.value?.data ?? []).map((item) => item.id));
 const itemAlertQuery = useQuery({
     queryKey: computed(() => ['inventory-alerts', 'active-by-visible-item', itemIds.value]),
@@ -169,6 +171,13 @@ function retryQueries(): void {
     void emptyQuery.refetch();
     void lowQuery.refetch();
     void activeAlertQuery.refetch();
+}
+
+function toggleAlertNotes(id: string, event: Event): void {
+    const updated = new Set(openAlertNoteContexts.value);
+    if ((event.currentTarget as HTMLDetailsElement).open) updated.add(id);
+    else updated.delete(id);
+    openAlertNoteContexts.value = updated;
 }
 
 function changePage(which: 'results' | 'empty' | 'low' | 'buySoon', delta: number): void {
@@ -367,9 +376,10 @@ function changePage(which: 'results' | 'empty' | 'low' | 'buySoon', delta: numbe
                 <div v-else-if="activeAlertQuery.isPending.value" class="p-5 text-sm text-ink-muted" role="status">Loading…</div>
                 <p v-else-if="!activeAlertQuery.data.value?.data.length" class="p-5 text-sm text-ink-muted">Nothing marked to buy soon.</p>
                 <ul v-else class="divide-y divide-line">
-                    <li v-for="alert in activeAlertQuery.data.value.data" :key="alert.id" class="flex items-center justify-between gap-3 p-4">
-                        <RouterLink :to="{ name: 'inventory-item', params: { item: alert.item.id } }" class="min-w-0 font-medium text-ink hover:underline">{{ alert.item.name }}</RouterLink>
-                        <button type="button" :disabled="pending" class="min-h-10 shrink-0 rounded-md border border-line px-3 text-sm disabled:opacity-50" @click="resolveBuySoon(alert.id)">Resolve</button>
+                    <li v-for="alert in activeAlertQuery.data.value.data" :key="alert.id" class="grid gap-3 p-4">
+                        <div class="flex items-center justify-between gap-3"><RouterLink :to="{ name: 'inventory-item', params: { item: alert.item.id } }" class="min-w-0 font-medium text-ink hover:underline">{{ alert.item.name }}</RouterLink>
+                            <button type="button" :disabled="pending" class="min-h-10 shrink-0 rounded-md border border-line px-3 text-sm disabled:opacity-50" @click="resolveBuySoon(alert.id)">Resolve</button></div>
+                        <details @toggle="toggleAlertNotes(alert.id, $event)"><summary class="w-fit cursor-pointer text-sm font-medium text-sage-dark">Notes</summary><NotesPanel v-if="openAlertNoteContexts.has(alert.id)" class="mt-3" type="inventory-alerts" :context-id="alert.id" /></details>
                     </li>
                 </ul>
                 <div v-if="activeAlertQuery.data.value && activeAlertQuery.data.value.meta.last_page > 1" class="flex justify-between border-t border-line px-4 py-2 text-sm"><button class="min-h-10 text-sage-dark disabled:opacity-40" :disabled="buySoonPage <= 1" @click="changePage('buySoon', -1)">Previous</button><span class="self-center">{{ buySoonPage }} / {{ activeAlertQuery.data.value.meta.last_page }}</span><button class="min-h-10 text-sage-dark disabled:opacity-40" :disabled="buySoonPage >= activeAlertQuery.data.value.meta.last_page" @click="changePage('buySoon', 1)">Next</button></div>

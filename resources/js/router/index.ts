@@ -5,6 +5,7 @@ import ActivityPage from '../pages/ActivityPage.vue';
 import DashboardPage from '../pages/DashboardPage.vue';
 import InventoryPage from '../pages/InventoryPage.vue';
 import ItemDetailPage from '../pages/ItemDetailPage.vue';
+import ContextDetailPage from '../pages/ContextDetailPage.vue';
 import LoginPage from '../pages/LoginPage.vue';
 import RegisterPage from '../pages/RegisterPage.vue';
 import { useSessionStore } from '../stores/session';
@@ -49,6 +50,8 @@ export const routes: RouteRecordRaw[] = [
                 name: 'inventory-item',
                 component: ItemDetailPage,
             },
+            { path: 'categories/:category', name: 'category-detail', component: ContextDetailPage },
+            { path: 'locations/:location', name: 'location-detail', component: ContextDetailPage },
             {
                 path: 'activity',
                 name: 'activity',

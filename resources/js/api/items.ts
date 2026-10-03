@@ -5,6 +5,8 @@ export type ItemCategory = {
     name: string;
 };
 
+export type ItemThumbnail = { id: string; is_primary: boolean; thumbnail_url: string; caption: string | null };
+
 export type ItemLocation = {
     id: string;
     name: string;
@@ -20,6 +22,7 @@ export type InventoryItem = {
     description: string | null;
     total_quantity?: number;
     categories?: ItemCategory[];
+    images?: ItemThumbnail[];
     inventory_levels?: Array<{
         id: string;
         quantity: number;
@@ -73,7 +76,7 @@ type ItemResponse = {
     };
 };
 
-export async function getItems(params: ItemListParams, include = 'categories'): Promise<ItemListResponse> {
+export async function getItems(params: ItemListParams, include = 'categories,images'): Promise<ItemListResponse> {
     const response = await http.get<ItemListResponse>('/items', {
         params: {
             ...(params.search ? { 'filter[search]': params.search } : {}),

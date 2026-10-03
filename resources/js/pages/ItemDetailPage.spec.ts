@@ -5,7 +5,7 @@ import { http } from '../lib/http';
 import { AxiosError } from 'axios';
 import ItemDetailPage from './ItemDetailPage.vue';
 
-vi.mock('../lib/http', () => ({ http: { get: vi.fn(), post: vi.fn(), patch: vi.fn() } }));
+vi.mock('../lib/http', () => ({ http: { get: vi.fn(), post: vi.fn(), patch: vi.fn(), delete: vi.fn() } }));
 vi.mock('vue-router', () => ({ useRoute: () => ({ params: { item: '7' } }) }));
 
 const item = {
@@ -24,6 +24,8 @@ describe('item stock detail', () => {
         vi.clearAllMocks();
         queryClient = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
         vi.mocked(http.get).mockImplementation(async (url) => {
+            if (String(url).includes('/images')) return { data: { data: [] } } as never;
+            if (String(url).endsWith('/notes')) return { data: { data: [], meta: { current_page: 1, last_page: 1, total: 0 } } } as never;
             if (String(url).startsWith('/items/')) return { data: { data: item } } as never;
             if (String(url) === '/inventory-alerts') return { data: { data: [], meta: { current_page: 1, last_page: 1, total: 0 } } } as never;
             return { data: { data: [{ id: '2', name: 'Pantry', description: null, parent: null }, { id: '3', name: 'Closet', description: null, parent: null }], meta: { current_page: 1, last_page: 1, total: 2 } } } as never;
@@ -38,6 +40,10 @@ describe('item stock detail', () => {
 
     function mountPage(): void {
         wrapper = mount(ItemDetailPage, { global: { plugins: [[VueQueryPlugin, { queryClient }]], stubs: { RouterLink: { template: '<a><slot /></a>' } } } });
+    }
+
+    function actionForm() {
+        return wrapper!.findAll('form').find((form) => form.find('input[type="checkbox"]').exists() || form.find('#stock-threshold').exists())!;
     }
 
     it('omits one-tap consumption at zero stock and offers transfer in from positive locations', async () => {
@@ -61,7 +67,7 @@ describe('item stock detail', () => {
         await pantry.findAll('button').find((button) => button.text() === 'Correct')!.trigger('click');
         await wrapper!.get('#observed-quantity').setValue('4');
         await wrapper!.get('input[type="checkbox"]').setValue(true);
-        await wrapper!.get('form').trigger('submit');
+        await actionForm().trigger('submit');
         await flushPromises();
 
         expect(http.post).toHaveBeenCalledWith('/inventory-movements', { data: { movement_type: 'correction', item_id: '7', location_id: '2', observed_quantity: 4 } });
@@ -77,7 +83,7 @@ describe('item stock detail', () => {
         await wrapper!.get('#new-level-quantity').setValue('6');
         expect(wrapper!.text()).toContain('Restock 6 packs at Closet.');
         await wrapper!.get('input[type="checkbox"]').setValue(true);
-        await wrapper!.get('form').trigger('submit');
+        await actionForm().trigger('submit');
         await flushPromises();
 
         expect(http.post).toHaveBeenCalledTimes(1);
@@ -91,7 +97,7 @@ describe('item stock detail', () => {
         await pantry.findAll('button').find((button) => button.text() === 'Threshold')!.trigger('click');
         await wrapper!.get('#stock-threshold').setValue('2');
         expect(wrapper!.find('input[type="checkbox"]').exists()).toBe(false);
-        await wrapper!.get('form').trigger('submit');
+        await actionForm().trigger('submit');
         await flushPromises();
 
         expect(http.patch).toHaveBeenCalledWith('/inventory-levels/9', { data: { alert_threshold: 2 } });
@@ -105,7 +111,7 @@ describe('item stock detail', () => {
         await flushPromises();
 
         expect(http.post).toHaveBeenCalledWith('/inventory-movements', { data: { movement_type: 'consumption', item_id: '7', location_id: '3', quantity: 1 } });
-        expect(wrapper!.find('form').exists()).toBe(false);
+        expect(wrapper!.findAll('form').some((form) => form.find('input[type="checkbox"]').exists())).toBe(false);
         expect(wrapper!.get('[role="status"]').text()).toContain('Used 1 pack from Closet.');
     });
 
@@ -120,7 +126,7 @@ describe('item stock detail', () => {
         expect(wrapper!.get('#stock-quantity').attributes('max')).toBe('5');
         expect(wrapper!.text()).toContain('Move 2 packs from Closet to Pantry.');
         await wrapper!.get('input[type="checkbox"]').setValue(true);
-        await wrapper!.get('form').trigger('submit');
+        await actionForm().trigger('submit');
         await flushPromises();
 
         expect(http.post).toHaveBeenCalledWith('/inventory-movements', {
@@ -152,7 +158,7 @@ describe('item stock detail', () => {
         expect(restockButton.attributes('disabled')).toBeDefined();
         await restockButton.trigger('click');
 
-        expect(wrapper!.find('form').exists()).toBe(false);
+        expect(wrapper!.findAll('form').some((form) => form.find('input[type="checkbox"]').exists())).toBe(false);
         expect(http.post).toHaveBeenCalledTimes(1);
 
         finishMovement?.({ data: { data: { id: '22' } } });

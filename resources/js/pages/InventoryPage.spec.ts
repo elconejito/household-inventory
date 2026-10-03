@@ -44,6 +44,7 @@ describe('inventory page', () => {
             counting_unit: 'bottle',
             description: 'Keep under the sink.',
             categories: [],
+            images: [{ id: 'image-31', is_primary: true, thumbnail_url: '/api/item-images/image-31/thumbnail', caption: null }],
         };
         const refreshedCollection = {
             ...emptyCollection,
@@ -82,5 +83,6 @@ describe('inventory page', () => {
         await flushPromises();
         expect(wrapper.text()).toContain('Dish soap was added to your inventory.');
         expect(wrapper.get('li').text()).toContain('Dish soap');
+        expect(wrapper.get('li img').attributes('src')).toBe('/api/item-images/image-31/thumbnail');
     });
 });
