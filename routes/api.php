@@ -3,6 +3,7 @@
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CategoryController;
 use App\Http\Controllers\Api\HealthController;
+use App\Http\Controllers\Api\InventoryAlertController;
 use App\Http\Controllers\Api\InventoryLevelController;
 use App\Http\Controllers\Api\InventoryMovementController;
 use App\Http\Controllers\Api\ItemController;
@@ -51,4 +52,9 @@ Route::middleware('auth:sanctum')->group(function (): void {
     Route::get('/inventory-movements', [InventoryMovementController::class, 'index'])->name('inventory-movements.index');
     Route::post('/inventory-movements', [InventoryMovementController::class, 'store'])->name('inventory-movements.store');
     Route::get('/inventory-movements/{inventory_movement}', [InventoryMovementController::class, 'show'])->name('inventory-movements.show');
+
+    Route::get('/inventory-alerts', [InventoryAlertController::class, 'index'])->name('inventory-alerts.index');
+    Route::post('/inventory-alerts', [InventoryAlertController::class, 'store'])->name('inventory-alerts.store');
+    Route::get('/inventory-alerts/{inventory_alert}', [InventoryAlertController::class, 'show'])->name('inventory-alerts.show');
+    Route::post('/inventory-alerts/{inventory_alert}/resolve', [InventoryAlertController::class, 'resolve'])->name('inventory-alerts.resolve');
 });

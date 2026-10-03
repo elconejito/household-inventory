@@ -15,4 +15,9 @@ class FlatDataSerializer extends ArraySerializer
     {
         return $resourceKey === 'data' ? ['data' => $data] : $data;
     }
+
+    public function null(): ?array
+    {
+        return null;
+    }
 }

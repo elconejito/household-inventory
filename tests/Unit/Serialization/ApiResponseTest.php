@@ -4,11 +4,41 @@ namespace Tests\Unit\Serialization;
 
 use App\Serialization\ApiResponse;
 use League\Fractal\Resource\Collection;
+use League\Fractal\Resource\ResourceInterface;
 use League\Fractal\TransformerAbstract;
 use PHPUnit\Framework\TestCase;
 
 class ApiResponseTest extends TestCase
 {
+    public function test_requested_absent_single_relationships_are_null_and_empty_collections_are_arrays(): void
+    {
+        $transformer = new class extends TransformerAbstract
+        {
+            protected array $availableIncludes = ['resolver', 'notes'];
+
+            public function transform(mixed $alert): array
+            {
+                return ['type' => 'inventory-alerts', 'id' => '7'];
+            }
+
+            public function includeResolver(mixed $alert): ResourceInterface
+            {
+                return $this->null();
+            }
+
+            public function includeNotes(mixed $alert): Collection
+            {
+                return $this->collection([], new self);
+            }
+        };
+
+        $response = (new ApiResponse)->item([], $transformer, ['resolver', 'notes']);
+
+        $this->assertSame([
+            'data' => ['type' => 'inventory-alerts', 'id' => '7', 'resolver' => null, 'notes' => []],
+        ], $response);
+    }
+
     public function test_omits_available_relationships_until_they_are_explicitly_requested(): void
     {
         $transformer = $this->itemTransformer();

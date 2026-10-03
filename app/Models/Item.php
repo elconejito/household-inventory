@@ -50,6 +50,11 @@ class Item extends Model
         return $this->hasMany(InventoryMovement::class);
     }
 
+    public function inventoryAlerts(): HasMany
+    {
+        return $this->hasMany(InventoryAlert::class);
+    }
+
     #[Scope]
     protected function withInventorySummary(Builder $query): Builder
     {

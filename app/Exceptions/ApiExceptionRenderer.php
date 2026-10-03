@@ -38,6 +38,14 @@ class ApiExceptionRenderer
             return $this->notFound();
         }
 
+        if ($exception instanceof ActiveInventoryAlertExists) {
+            return $this->error(409, 'active_inventory_alert_exists', 'Conflict', $exception->getMessage());
+        }
+
+        if ($exception instanceof InventoryArchiveBlocked) {
+            return $this->error(409, 'inventory_archive_blocked', 'Conflict', $exception->getMessage());
+        }
+
         if ($exception instanceof InvalidQuery || $exception instanceof InvalidDirection || $exception instanceof InvalidFilterValue) {
             return $this->error(
                 400,
