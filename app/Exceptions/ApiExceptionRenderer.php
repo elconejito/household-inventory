@@ -73,16 +73,25 @@ class ApiExceptionRenderer
             ? $exception->getStatusCode()
             : 500;
 
-        return match ($status) {
+        $response = match ($status) {
             400 => $this->error(400, 'bad_request', 'Bad Request', 'The request could not be understood.'),
             401 => $this->error(401, 'unauthenticated', 'Unauthenticated', 'Authentication is required.'),
             403 => $this->error(403, 'forbidden', 'Forbidden', 'You are not allowed to perform this action.'),
             404 => $this->notFound(),
             405 => $this->error(405, 'method_not_allowed', 'Method Not Allowed', 'The request method is not allowed.'),
             409 => $this->error(409, 'conflict', 'Conflict', 'The request conflicts with the current state.'),
+            413 => $this->error(413, 'payload_too_large', 'Payload Too Large', 'The upload exceeds the server request-size limit. Choose a smaller file and try again.'),
+            419 => $this->error(419, 'session_expired', 'Page Expired', 'Your session has expired. Refresh the page and try again.'),
             429 => $this->error(429, 'rate_limited', 'Too Many Requests', 'Too many requests were received.'),
+            503 => $this->error(503, 'service_unavailable', 'Service Unavailable', 'The service is temporarily unavailable. Please try again later.'),
             default => $this->error(500, 'server_error', 'Server Error', 'An unexpected error occurred.'),
         };
+
+        if ($exception instanceof HttpExceptionInterface) {
+            $response->withHeaders($exception->getHeaders());
+        }
+
+        return $response;
     }
 
     private function renderValidationErrors(ValidationException $exception): JsonResponse

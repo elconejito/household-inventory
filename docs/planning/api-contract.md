@@ -328,8 +328,13 @@ The renderer maps common exceptions to appropriate statuses:
 - not found: `404`
 - invalid include, field, filter, sort, or pagination parameter: `400` unless it fails an explicit FormRequest validation rule and is therefore `422`
 - domain-state conflict: `409`
+- request body exceeds the server upload limit: `413`
+- expired CSRF session: `419`, with refresh-and-retry guidance
 - rate limited: `429`
+- temporarily unavailable: `503`
 - unexpected server failure: `500`, without exposing implementation details
+
+HTTP error headers such as `Retry-After` and `Allow` are retained alongside the shared JSON error envelope. Failed writes are not automatically retried by the SPA.
 
 Each error object contains:
 
