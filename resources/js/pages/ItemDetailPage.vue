@@ -7,6 +7,9 @@ import { useActiveAlertsQuery, useBuySoonMutation, useCreateLocationMutation, us
 import NotesPanel from '../components/NotesPanel.vue';
 import ItemImagesPanel from '../components/ItemImagesPanel.vue';
 import ArchiveResourceButton from '../components/ArchiveResourceButton.vue';
+import ItemEditor from '../components/ItemEditor.vue';
+import type { ItemEditSnapshot, ItemUpdate, NewItem } from '../api/items';
+import { useUpdateItemMutation } from '../queries/items';
 
 type Action = 'restock' | 'transfer-out' | 'transfer-in' | 'correction' | 'disposal' | 'threshold';
 const route = useRoute();
@@ -20,6 +23,10 @@ const locationsQuery = useLocationsQuery();
 const movementMutation = useRecordMovementMutation();
 const thresholdMutation = useUpdateThresholdMutation();
 const createLocationMutation = useCreateLocationMutation();
+const updateItemMutation = useUpdateItemMutation();
+const showEditForm = ref(false);
+const editErrors = ref<FormErrors>({ fields: {}, form: '' });
+const editSuccess = ref('');
 const activeAction = ref<Action | null>(null);
 const selectedLevel = ref<InventoryLevel | null>(null);
 const quantity = ref('1');
@@ -81,7 +88,68 @@ watch(itemId, () => {
     errors.value = { fields: {}, form: '' };
     success.value = '';
     actionError.value = '';
+    showEditForm.value = false;
+    editErrors.value = { fields: {}, form: '' };
+    editSuccess.value = '';
 });
+
+let handledRestockRequest = '';
+watch(() => [itemId.value, route.query.restock_location, itemQuery.data.value, locationsQuery.data.value, pending.value] as const, ([currentItemId, requestedLocation, item, locations, stockChangePending]) => {
+    if (!requestedLocation) {
+        handledRestockRequest = '';
+        return;
+    }
+
+    const requestedLocationId = Array.isArray(requestedLocation) ? requestedLocation[0] : requestedLocation;
+    if (!requestedLocationId || !item || !locations?.some((location) => location.id === String(requestedLocationId)) || stockChangePending) return;
+    const requestKey = `${currentItemId}:${requestedLocationId}`;
+    if (requestKey === handledRestockRequest) return;
+
+    const existingLevel = item.inventory_levels?.find((level) => level.location.id === String(requestedLocationId));
+    startAction('restock', existingLevel ?? null);
+    if (!existingLevel) targetLocationId.value = String(requestedLocationId);
+    if (activeAction.value !== 'restock') return;
+    handledRestockRequest = requestKey;
+});
+
+function normalizedCategoryIds(categories: Array<{ id: string }> | undefined): string[] {
+    return [...new Set((categories ?? []).map((category) => String(category.id)))].sort();
+}
+
+async function saveItemDetails(values: NewItem, initialItem: ItemEditSnapshot | null): Promise<void> {
+    const item = itemQuery.data.value;
+    if (!item || !initialItem || itemId.value !== initialItem.id || updateItemMutation.isPending.value) return;
+    const operationItemId = initialItem.id;
+    const changes: ItemUpdate = {};
+
+    if (values.name !== initialItem.name) changes.name = values.name;
+    if (values.counting_unit !== initialItem.counting_unit) changes.counting_unit = values.counting_unit;
+    if (values.description !== initialItem.description) changes.description = values.description;
+
+    const currentCategoryIds = normalizedCategoryIds(initialItem.category_ids.map((id) => ({ id })));
+    const nextCategoryIds = normalizedCategoryIds(values.category_ids?.map((id) => ({ id })));
+    if (currentCategoryIds.length !== nextCategoryIds.length || currentCategoryIds.some((id, index) => id !== nextCategoryIds[index])) {
+        changes.category_ids = nextCategoryIds;
+    }
+
+    editErrors.value = { fields: {}, form: '' };
+    editSuccess.value = '';
+    if (Object.keys(changes).length === 0) {
+        showEditForm.value = false;
+        editSuccess.value = 'Item details are unchanged.';
+        return;
+    }
+
+    try {
+        await updateItemMutation.mutateAsync({ id: operationItemId, item: changes });
+        if (itemId.value !== operationItemId) return;
+        showEditForm.value = false;
+        editSuccess.value = 'Item details saved.';
+    } catch (error) {
+        if (itemId.value !== operationItemId) return;
+        editErrors.value = parseApiErrors(error);
+    }
+}
 
 function cancelAction(): void {
     if (pending.value) {
@@ -239,6 +307,7 @@ async function toggleBuySoon(): Promise<void> {
                     <p class="eyebrow">Item stock</p>
                     <h1 id="page-title" class="page-title mt-2">{{ itemQuery.data.value.name }}</h1>
                     <p v-if="itemQuery.data.value.description" class="mt-2 text-sm text-ink-muted">{{ itemQuery.data.value.description }}</p>
+                    <button type="button" class="mt-3 min-h-10 rounded-md border border-line px-3 text-sm font-medium text-ink hover:bg-surface-soft focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sage" :aria-expanded="showEditForm" aria-controls="edit-item-panel" @click="showEditForm = !showEditForm; editSuccess = ''; editErrors = { fields: {}, form: '' }">{{ showEditForm ? 'Cancel edit' : 'Edit item' }}</button>
                 </div>
                 <div class="rounded-panel border border-line bg-white px-5 py-3 text-right shadow-card">
                     <p class="text-xs font-semibold uppercase tracking-wide text-ink-muted">Total on hand</p>
@@ -247,6 +316,9 @@ async function toggleBuySoon(): Promise<void> {
             </div>
 
             <div class="mt-4"><ArchiveResourceButton type="items" :id="itemId" label="Item" /></div>
+
+            <p v-if="editSuccess" class="mt-4 rounded-md border border-sage/20 bg-sage-soft px-4 py-3 text-sm font-medium text-sage-dark" role="status">{{ editSuccess }}</p>
+            <ItemEditor v-if="showEditForm" id="edit-item-panel" class="mt-5" :item="itemQuery.data.value" :saving="updateItemMutation.isPending.value" :errors="editErrors" @submit="saveItemDetails" @cancel="showEditForm = false" />
 
             <ItemImagesPanel class="mt-6" :item-id="itemId" />
 
