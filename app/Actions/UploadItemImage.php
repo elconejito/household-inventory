@@ -214,8 +214,11 @@ class UploadItemImage
             $canonicalResolvedPath .= '/';
         }
 
-        return $canonicalResolvedPath
-            .($unresolvedSegments === [] ? '' : '/'.implode('/', $unresolvedSegments));
+        if ($unresolvedSegments === []) {
+            return $canonicalResolvedPath;
+        }
+
+        return rtrim($resolvedPath, '/').'/'.implode('/', $unresolvedSegments);
     }
 
     private function pathAnchor(string $path): ?string

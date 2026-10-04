@@ -271,6 +271,36 @@ class ItemImageTest extends TestCase
         $this->assertDatabaseCount('item_images', 3);
     }
 
+    public function test_upload_keeps_nonexistent_posix_roots_single_slash_and_case_sensitive(): void
+    {
+        [$user, $household] = $this->householdMember();
+        $item = Item::factory()->for($household)->create();
+        $uncreatedRoot = '/household-uncreated-'.Str::uuid();
+        $root = $uncreatedRoot.'/Private/images';
+        config([
+            'inventory.images_disk' => 'nonexistent-posix-root',
+            'filesystems.disks.nonexistent-posix-root' => [
+                'driver' => 'local',
+                'root' => $root,
+                'visibility' => 'private',
+            ],
+            'filesystems.links' => [
+                public_path('images') => $uncreatedRoot.'/private',
+            ],
+        ]);
+        $disk = Storage::fake('nonexistent-posix-root', ['visibility' => 'private']);
+
+        $response = $this->actingAs($user, 'web')->post('/api/items/'.$item->id.'/images', [
+            'image' => $this->uploadedPng(),
+        ], ['Accept' => 'application/json']);
+
+        $image = ItemImage::query()->firstOrFail();
+        $response->assertCreated();
+        $this->assertCount(2, $disk->allFiles());
+        $this->assertSame('private', $disk->getVisibility($image->thumbnail_path));
+        $this->assertDirectoryDoesNotExist($uncreatedRoot);
+    }
+
     public function test_upload_fails_closed_when_symlink_traversal_or_dangling_root_cannot_be_resolved(): void
     {
         $temporaryRoot = sys_get_temp_dir().'/household-image-storage-'.Str::uuid();
