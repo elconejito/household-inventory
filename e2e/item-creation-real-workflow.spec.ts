@@ -127,11 +127,21 @@ test('saves an item with an optional primary photo and opens its detail page', a
     expect(thumbnailPath).not.toContain('/storage/');
     expect(displayPath).not.toContain('/storage/');
 
-    const thumbnail = await page.request.get(String(photos[0]!.thumbnail_url));
-    const display = await page.request.get(String(photos[0]!.display_url));
-    expect(thumbnail.ok()).toBe(true);
-    expect(display.ok()).toBe(true);
+    const imageHeaders = {
+        Accept: 'image/avif,image/webp,*/*',
+        Origin: 'http://127.0.0.1:8000',
+        Referer: 'http://127.0.0.1:8000/',
+    };
+    const thumbnail = await page.request.get(String(photos[0]!.thumbnail_url), { headers: imageHeaders });
+    const thumbnailBody = await thumbnail.body();
+    expect(thumbnail.status(), JSON.stringify({ status: thumbnail.status(), headers: thumbnail.headers(), bodyBytes: thumbnailBody.length })).toBe(200);
+    expect(thumbnail.headers()['content-type']).toContain('image/');
+    const display = await page.request.get(String(photos[0]!.display_url), { headers: imageHeaders });
+    const displayBody = await display.body();
+    expect(display.status(), JSON.stringify({ status: display.status(), headers: display.headers(), bodyBytes: displayBody.length })).toBe(200);
+    expect(display.headers()['content-type']).toContain('image/');
     await expect(page.getByRole('region', { name: 'Photos', exact: true })).toContainText('Primary photo');
+    await expect.poll(() => page.getByRole('img', { name: 'Primary item photo', exact: true }).evaluate((image) => (image as HTMLImageElement).naturalWidth)).toBeGreaterThan(0);
     await page.screenshot({ path: testInfo.outputPath('new-item-primary-photo-desktop.png'), fullPage: true });
     await page.setViewportSize({ width: 320, height: 740 });
     await expect(page.getByRole('heading', { level: 1, name: itemName, exact: true })).toBeVisible();
