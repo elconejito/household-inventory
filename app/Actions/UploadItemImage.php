@@ -114,6 +114,11 @@ class UploadItemImage
             throw new RuntimeException('The configured image storage disk has an unsafe root.');
         }
 
+        $canonicalRoot = $this->canonicalPath($root);
+        if ($canonicalRoot === null) {
+            throw new RuntimeException('The configured image storage disk has an unsafe root.');
+        }
+
         $exposedRoots = [public_path(), storage_path('app/public')];
         $links = config('filesystems.links', []);
         if (! is_array($links)) {
@@ -121,31 +126,25 @@ class UploadItemImage
         }
 
         foreach ($links as $target) {
-            if (! is_string($target) || $this->canonicalPath($target) === null) {
+            $canonicalTarget = is_string($target) ? $this->canonicalPath($target) : null;
+            if ($canonicalTarget === null) {
                 throw new RuntimeException('The configured image storage links are invalid.');
             }
 
-            $exposedRoots[] = $target;
+            $exposedRoots[] = $canonicalTarget;
         }
 
         foreach ($exposedRoots as $exposedRoot) {
-            if ($this->isPathWithin($root, $exposedRoot)) {
+            $canonicalExposedRoot = $this->canonicalPath($exposedRoot);
+            if ($canonicalExposedRoot === null) {
+                throw new RuntimeException('The configured image storage paths cannot be verified.');
+            }
+
+            if ($canonicalRoot === $canonicalExposedRoot
+                || str_starts_with($canonicalRoot, rtrim($canonicalExposedRoot, DIRECTORY_SEPARATOR).DIRECTORY_SEPARATOR)) {
                 throw new RuntimeException('The configured image storage disk is exposed by a public path.');
             }
         }
-    }
-
-    private function isPathWithin(string $path, string $parent): bool
-    {
-        $canonicalPath = $this->canonicalPath($path);
-        $canonicalParent = $this->canonicalPath($parent);
-
-        if ($canonicalPath === null || $canonicalParent === null) {
-            return false;
-        }
-
-        return $canonicalPath === $canonicalParent
-            || str_starts_with($canonicalPath, rtrim($canonicalParent, DIRECTORY_SEPARATOR).DIRECTORY_SEPARATOR);
     }
 
     private function canonicalPath(string $path): ?string
@@ -155,44 +154,44 @@ class UploadItemImage
             return null;
         }
 
-        $segments = [];
+        $resolvedPath = DIRECTORY_SEPARATOR;
+        $unresolvedSegments = [];
         foreach (explode(DIRECTORY_SEPARATOR, $path) as $segment) {
             if ($segment === '' || $segment === '.') {
                 continue;
             }
 
             if ($segment === '..') {
-                array_pop($segments);
+                if ($unresolvedSegments !== []) {
+                    return null;
+                }
+
+                $resolvedPath = dirname($resolvedPath);
 
                 continue;
             }
 
-            $segments[] = $segment;
-        }
+            if ($unresolvedSegments === []) {
+                $candidatePath = rtrim($resolvedPath, DIRECTORY_SEPARATOR).DIRECTORY_SEPARATOR.$segment;
+                if (file_exists($candidatePath) || is_link($candidatePath)) {
+                    $realCandidatePath = realpath($candidatePath);
+                    if ($realCandidatePath === false) {
+                        return null;
+                    }
 
-        $normalizedPath = DIRECTORY_SEPARATOR.implode(DIRECTORY_SEPARATOR, $segments);
-        $existingPath = $normalizedPath;
-        $remainingSegments = [];
+                    $resolvedPath = $realCandidatePath;
 
-        while (! file_exists($existingPath) && ! is_link($existingPath)) {
-            $parent = dirname($existingPath);
-            if ($parent === $existingPath) {
-                return null;
+                    continue;
+                }
             }
 
-            array_unshift($remainingSegments, basename($existingPath));
-            $existingPath = $parent;
+            $unresolvedSegments[] = $segment;
         }
 
-        $realExistingPath = realpath($existingPath);
-        if ($realExistingPath === false) {
-            return null;
-        }
+        $canonicalResolvedPath = rtrim($resolvedPath, DIRECTORY_SEPARATOR);
+        $canonicalResolvedPath = $canonicalResolvedPath === '' ? DIRECTORY_SEPARATOR : $canonicalResolvedPath;
 
-        $canonicalExistingPath = rtrim($realExistingPath, DIRECTORY_SEPARATOR);
-        $canonicalExistingPath = $canonicalExistingPath === '' ? DIRECTORY_SEPARATOR : $canonicalExistingPath;
-
-        return $canonicalExistingPath
-            .($remainingSegments === [] ? '' : DIRECTORY_SEPARATOR.implode(DIRECTORY_SEPARATOR, $remainingSegments));
+        return $canonicalResolvedPath
+            .($unresolvedSegments === [] ? '' : DIRECTORY_SEPARATOR.implode(DIRECTORY_SEPARATOR, $unresolvedSegments));
     }
 }

@@ -11,6 +11,7 @@ use App\Models\User;
 use Illuminate\Foundation\Testing\LazilyRefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Tests\TestCase;
 use Throwable;
 
@@ -170,6 +171,72 @@ class ItemImageTest extends TestCase
         $this->assertCount(2, $disk->allFiles());
         $this->assertSame('private', $disk->getVisibility($image->thumbnail_path));
         $this->assertSame('private', $disk->getVisibility($image->display_path));
+    }
+
+    public function test_upload_fails_closed_when_symlink_traversal_or_dangling_root_cannot_be_resolved(): void
+    {
+        $temporaryRoot = sys_get_temp_dir().'/household-image-storage-'.Str::uuid();
+        $safeDirectory = $temporaryRoot.'/safe';
+        $exposedDirectory = $temporaryRoot.'/exposed';
+        $linkPath = $safeDirectory.'/link';
+        $danglingLinkPath = $temporaryRoot.'/dangling';
+        mkdir($safeDirectory, 0700, true);
+        mkdir($exposedDirectory.'/child', 0700, true);
+        symlink($exposedDirectory.'/child', $linkPath);
+        symlink($temporaryRoot.'/missing-target', $danglingLinkPath);
+
+        try {
+            [$user, $household] = $this->householdMember();
+            $item = Item::factory()->for($household)->create();
+            $this->actingAs($user, 'web');
+
+            config([
+                'inventory.images_disk' => 'symlink-traversal',
+                'filesystems.disks.symlink-traversal' => [
+                    'driver' => 'local',
+                    'root' => $linkPath.'/../new-images',
+                    'visibility' => 'private',
+                ],
+                'filesystems.links' => [
+                    public_path('images') => $exposedDirectory,
+                ],
+            ]);
+            Storage::fake('symlink-traversal');
+
+            $traversalResponse = $this->post('/api/items/'.$item->id.'/images', [
+                'image' => $this->uploadedPng(),
+            ], ['Accept' => 'application/json']);
+
+            $traversalResponse->assertServerError();
+            Storage::disk('symlink-traversal')->assertDirectoryEmpty('/');
+
+            config([
+                'inventory.images_disk' => 'dangling-root',
+                'filesystems.disks.dangling-root' => [
+                    'driver' => 'local',
+                    'root' => $danglingLinkPath,
+                    'visibility' => 'private',
+                ],
+                'filesystems.links' => [],
+            ]);
+            Storage::fake('dangling-root');
+
+            $danglingResponse = $this->post('/api/items/'.$item->id.'/images', [
+                'image' => $this->uploadedPng(),
+            ], ['Accept' => 'application/json']);
+
+            $danglingResponse->assertServerError();
+            $this->assertStringNotContainsString($temporaryRoot, $danglingResponse->getContent());
+            Storage::disk('dangling-root')->assertDirectoryEmpty('/');
+            $this->assertDatabaseCount('item_images', 0);
+        } finally {
+            unlink($linkPath);
+            unlink($danglingLinkPath);
+            rmdir($safeDirectory);
+            rmdir($exposedDirectory.'/child');
+            rmdir($exposedDirectory);
+            rmdir($temporaryRoot);
+        }
     }
 
     public function test_upload_rejects_spoofed_metadata_and_unsupported_images(): void
