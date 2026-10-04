@@ -12,6 +12,7 @@ describe('stock indicators', () => {
             { label: 'Monitored', tone: 'neutral' },
         ]);
         expect(getStockLevelIndicators({ quantity: 1, alert_threshold: 2, alert_status: 'low' })).toEqual([{ label: 'Low stock', tone: 'low' }]);
+        expect(getStockLevelIndicators({ quantity: 1, alert_threshold: null, alert_status: 'low' })).toEqual([{ label: 'Unmonitored', tone: 'neutral' }]);
         expect(getStockLevelIndicators({ quantity: 3, alert_threshold: 2, alert_status: 'okay' })).toEqual([{ label: 'In stock', tone: 'neutral' }]);
     });
 

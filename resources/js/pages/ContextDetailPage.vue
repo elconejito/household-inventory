@@ -5,10 +5,13 @@ import { useRoute } from 'vue-router';
 import NotesPanel from '../components/NotesPanel.vue';
 import ArchiveResourceButton from '../components/ArchiveResourceButton.vue';
 import InventoryTabs from '../components/InventoryTabs.vue';
+import ItemStockSummary from '../components/ItemStockSummary.vue';
+import StockStatusBadge from '../components/StockStatusBadge.vue';
 import LocationStockActions, { type LocationStockAction } from '../components/LocationStockActions.vue';
 import { getCategory, getLocation } from '../api/note-contexts';
 import { buildLocationPath, type Location as StockLocation } from '../api/stock';
 import { parseApiErrors, type FormErrors } from '../lib/api-errors';
+import { getStockLevelIndicators, hasActiveBuySoonAlert } from '../lib/stock-indicators';
 import { useCategoryItemsQuery, useLocationLevelsQuery, useUpdateCatalogLocationMutation, useUpdateCategoryMutation } from '../queries/catalog';
 import { useAllItemsQuery, useLocationsQuery, useRecordMovementMutation } from '../queries/stock';
 
@@ -23,7 +26,7 @@ const contextQuery = useQuery({
     enabled: computed(() => Boolean(contextId.value)),
 });
 const title = computed(() => contextType.value === 'categories' ? 'Category' : 'Location');
-const locationOptions = useLocationsQuery(computed(() => contextType.value === 'locations'));
+const locationOptions = useLocationsQuery();
 const allItemsQuery = useAllItemsQuery(computed(() => contextType.value === 'locations'));
 const categorySearch = ref('');
 const debouncedCategorySearch = ref('');
@@ -50,6 +53,7 @@ const stockActionErrors = ref<FormErrors>({ fields: {}, form: '' });
 
 const categoryParams = computed(() => ({ search: debouncedCategorySearch.value, page: categoryPage.value, perPage: categoryPageSize.value }));
 const categoryItemsQuery = useCategoryItemsQuery(categoryId, categoryParams);
+const categoryHasImages = computed(() => categoryItemsQuery.data.value?.data.some((item) => item.images?.some((image) => image.is_primary)) ?? false);
 const location = computed(() => contextQuery.data.value as StockLocation | undefined);
 const locationPath = computed(() => location.value ? buildLocationPath(location.value, locationOptions.data.value ?? []) : '');
 const descendantLocationIds = computed(() => {
@@ -340,7 +344,17 @@ function closeStockAction(force = false): void {
                 <div v-else-if="categoryItemsQuery.isError.value" class="p-5" role="alert"><p class="text-sm text-rose-700">{{ parseError(categoryItemsQuery.error.value, 'Category items could not be loaded.') }}</p><button type="button" class="mt-2 text-sm text-sage-dark underline" @click="categoryItemsQuery.refetch()">Try again</button></div>
                 <div v-else-if="categoryItemsQuery.data.value?.data.length === 0" class="grid min-h-40 place-items-center p-6 text-center"><div><h3 class="font-semibold text-ink">{{ debouncedCategorySearch ? 'No items match that search' : 'No items in this category yet' }}</h3><p class="mt-1 text-sm text-ink-muted">{{ debouncedCategorySearch ? 'Try another name or clear your search.' : 'Items assigned to this category will appear here.' }}</p></div></div>
                 <ul v-else class="divide-y divide-line" aria-label="Items in this category">
-                    <li v-for="item in categoryItemsQuery.data.value?.data ?? []" :key="item.id" class="flex flex-wrap items-center justify-between gap-3 px-5 py-4 sm:px-6"><div class="min-w-0"><RouterLink :to="{ name: 'inventory-item', params: { item: item.id } }" class="font-semibold text-ink hover:text-sage-dark hover:underline">{{ item.name }}</RouterLink><p v-if="item.description" class="mt-1 whitespace-pre-line text-sm text-ink-muted">{{ item.description }}</p></div><p class="text-sm text-ink-muted">Counted by {{ item.counting_unit }}</p></li>
+                    <li v-for="item in categoryItemsQuery.data.value?.data ?? []" :key="item.id" class="grid gap-3 px-5 py-4 sm:items-start sm:px-6" :class="categoryHasImages ? 'sm:grid-cols-[3.5rem_minmax(0,1fr)_minmax(0,1fr)]' : 'sm:grid-cols-2'">
+                        <img v-if="item.images?.find((image) => image.is_primary)" :src="item.images.find((image) => image.is_primary)?.thumbnail_url" :alt="item.images.find((image) => image.is_primary)?.caption || ''" class="size-14 rounded-md bg-surface-soft object-cover" loading="lazy">
+                        <span v-else-if="categoryHasImages" class="hidden size-14 sm:block" aria-hidden="true"></span>
+                        <div class="min-w-0">
+                            <RouterLink :to="{ name: 'inventory-item', params: { item: item.id } }" class="break-words font-semibold text-ink hover:text-sage-dark hover:underline">{{ item.name }}</RouterLink>
+                            <p v-if="item.description" class="mt-1 line-clamp-2 whitespace-pre-line break-words text-sm text-ink-muted">{{ item.description }}</p>
+                            <p class="mt-1 text-sm text-ink-muted">Counted by {{ item.counting_unit }}</p>
+                            <div v-if="hasActiveBuySoonAlert(item.active_alerts)" class="mt-2"><StockStatusBadge label="Buy soon" tone="reminder" /></div>
+                        </div>
+                        <ItemStockSummary :item="item" :locations="locationOptions.data.value ?? []" />
+                    </li>
                 </ul>
                 <div v-if="categoryItemsQuery.data.value && categoryItemsQuery.data.value.meta.last_page > 1" class="flex items-center justify-between gap-4 border-t border-line px-5 py-4 sm:px-6"><p class="text-sm text-ink-muted">Page {{ categoryItemsQuery.data.value.meta.current_page }} of {{ categoryItemsQuery.data.value.meta.last_page }}</p><div class="flex gap-2"><button type="button" :disabled="categoryPage <= 1 || categoryItemsQuery.isFetching.value" class="min-h-10 rounded-md border border-line px-3 text-sm disabled:opacity-50" @click="changePage('category', categoryPage - 1)">Previous</button><button type="button" :disabled="categoryPage >= categoryItemsQuery.data.value.meta.last_page || categoryItemsQuery.isFetching.value" class="min-h-10 rounded-md border border-line px-3 text-sm disabled:opacity-50" @click="changePage('category', categoryPage + 1)">Next</button></div></div>
             </section>
@@ -360,7 +374,7 @@ function closeStockAction(force = false): void {
                     <div class="flex flex-wrap items-center justify-between gap-4 border-b border-line px-5 py-4 sm:px-6">
                         <div><h2 id="location-stock-heading" class="text-base font-semibold text-ink">Stock by location</h2><p v-if="locationLevelsQuery.data.value" class="mt-1 text-sm text-ink-muted">{{ locationLevelsQuery.data.value.meta.total }} stock {{ locationLevelsQuery.data.value.meta.total === 1 ? 'record' : 'records' }}</p></div>
                         <div class="flex flex-wrap items-center gap-3">
-                            <label for="inventory-scope" class="text-sm font-medium text-ink">Inventory scope</label><select id="inventory-scope" :value="inventoryScope" class="min-h-10 rounded-md border border-line bg-white px-3 text-sm" @change="setInventoryScope(($event.target as HTMLSelectElement).value)"><option value="all">All within this location</option><option value="direct">Directly here</option></select>
+                            <template v-if="directChildren.length"><label for="inventory-scope" class="text-sm font-medium text-ink">Inventory scope</label><select id="inventory-scope" :value="inventoryScope" class="min-h-10 rounded-md border border-line bg-white px-3 text-sm" @change="setInventoryScope(($event.target as HTMLSelectElement).value)"><option value="all">All within this location</option><option value="direct">Directly here</option></select></template>
                             <label for="inventory-page-size" class="sr-only">Stock records per page</label><select id="inventory-page-size" :value="inventoryPageSize" class="min-h-10 rounded-md border border-line bg-white px-3 text-sm" @change="changePageSize('inventory', ($event.target as HTMLSelectElement).value)"><option v-for="size in pageSizes" :key="size" :value="size">{{ size }} per page</option></select>
                         </div>
                     </div>
@@ -370,7 +384,18 @@ function closeStockAction(force = false): void {
                     <div v-else-if="locationLevelsQuery.isError.value" class="p-5" role="alert"><p class="text-sm text-rose-700">{{ parseError(locationLevelsQuery.error.value, 'Location stock could not be loaded.') }}</p><button type="button" class="mt-2 text-sm text-sage-dark underline" @click="locationLevelsQuery.refetch()">Try again</button></div>
                     <div v-else-if="locationLevelsQuery.data.value?.data.length === 0" class="grid min-h-32 place-items-center p-5 text-center"><p class="text-sm text-ink-muted">No stock records in this scope yet.</p></div>
                     <ul v-else class="divide-y divide-line">
-                        <li v-for="level in locationLevelsQuery.data.value?.data ?? []" :key="level.id" class="grid gap-3 px-5 py-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:px-6"><div class="min-w-0"><RouterLink :to="{ name: 'inventory-item', params: { item: level.item.id } }" class="font-semibold text-ink hover:text-sage-dark hover:underline">{{ level.item.name }}</RouterLink><p class="mt-1 text-sm text-ink-muted">{{ locationForPath(level.location) }} · {{ level.quantity }} {{ level.quantity === 1 ? level.item.counting_unit : (level.item.counting_unit_plural || level.item.counting_unit) }}</p></div><div class="grid gap-2 sm:justify-items-end"><span v-if="level.alert_threshold !== null" class="text-sm text-ink-muted">Alert at {{ level.alert_threshold }}</span><LocationStockActions :key="`${contextType}:${contextId}:${level.id}`" :level="level" :locations="locationOptions.data.value ?? []" :active-action="activeStockAction" :busy="stockMovementMutation.isPending.value" :errors="activeStockAction?.levelId === level.id ? stockActionErrors : { fields: {}, form: '' }" :locations-loading="locationOptions.isPending.value" :locations-error="locationOptions.isError.value" @activate="beginStockAction" @submit="saveStockAction" @close="closeStockAction" @retry-locations="locationOptions.refetch()"/></div></li>
+                        <li v-for="level in locationLevelsQuery.data.value?.data ?? []" :key="level.id" class="grid gap-3 px-5 py-4 sm:grid-cols-2 sm:items-start sm:px-6">
+                            <div class="min-w-0">
+                                <RouterLink :to="{ name: 'inventory-item', params: { item: level.item.id } }" class="break-words font-semibold text-ink hover:text-sage-dark hover:underline">{{ level.item.name }}</RouterLink>
+                                <p class="mt-1 break-words text-sm text-ink-muted">{{ locationForPath(level.location) }} · {{ level.quantity }} {{ level.quantity === 1 ? level.item.counting_unit : (level.item.counting_unit_plural || level.item.counting_unit) }}</p>
+                                <p v-if="level.alert_threshold !== null" class="mt-1 text-xs text-ink-muted">Alert at {{ level.alert_threshold }}</p>
+                                <div class="mt-2 flex flex-wrap gap-1.5" aria-label="Stock level status">
+                                    <StockStatusBadge v-for="indicator in getStockLevelIndicators(level)" :key="indicator.label" :label="indicator.label" :tone="indicator.tone" />
+                                    <StockStatusBadge v-if="hasActiveBuySoonAlert(level.item.active_alerts)" label="Buy soon" tone="reminder" />
+                                </div>
+                            </div>
+                            <LocationStockActions :key="`${contextType}:${contextId}:${level.id}`" :level="level" :locations="locationOptions.data.value ?? []" :active-action="activeStockAction" :busy="stockMovementMutation.isPending.value" :errors="activeStockAction?.levelId === level.id ? stockActionErrors : { fields: {}, form: '' }" :locations-loading="locationOptions.isPending.value" :locations-error="locationOptions.isError.value" @activate="beginStockAction" @submit="saveStockAction" @close="closeStockAction" @retry-locations="locationOptions.refetch()" />
+                        </li>
                     </ul>
                     <div v-if="locationLevelsQuery.data.value && locationLevelsQuery.data.value.meta.last_page > 1" class="flex items-center justify-between gap-4 border-t border-line px-5 py-4 sm:px-6"><p class="text-sm text-ink-muted">Page {{ locationLevelsQuery.data.value.meta.current_page }} of {{ locationLevelsQuery.data.value.meta.last_page }}</p><div class="flex gap-2"><button type="button" :disabled="inventoryPage <= 1 || locationLevelsQuery.isFetching.value" class="min-h-10 rounded-md border border-line px-3 text-sm disabled:opacity-50" @click="changePage('inventory', inventoryPage - 1)">Previous</button><button type="button" :disabled="inventoryPage >= locationLevelsQuery.data.value.meta.last_page || locationLevelsQuery.isFetching.value" class="min-h-10 rounded-md border border-line px-3 text-sm disabled:opacity-50" @click="changePage('inventory', inventoryPage + 1)">Next</button></div></div>
                 </section>

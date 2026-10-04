@@ -78,7 +78,7 @@ export async function getCategoryItems(categoryId: string, params: CatalogListPa
         params: {
             'filter[category_id]': categoryId,
             ...(params.search ? { 'filter[search]': params.search } : {}),
-            include: 'categories,images',
+            include: 'categories,images,inventory_levels.location,active_alerts',
             page: params.page,
             per_page: params.perPage,
         },
@@ -91,7 +91,7 @@ export async function getLocationLevels(locationIds: string[], page: number, per
     const response = await http.get<PageCollection<CatalogInventoryLevel>>('/inventory-levels', {
         params: {
             'filter[location_id]': locationIds.join(','),
-            include: 'item,location',
+            include: 'item.active_alerts,location',
             page,
             per_page: perPage,
         },

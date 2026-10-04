@@ -35,12 +35,12 @@ describe('catalog API', () => {
     it('loads a paginated category item list and a selected location set with paths', async () => {
         await getCategoryItems('8', { search: 'soap', page: 2, perPage: 50 });
         expect(http.get).toHaveBeenLastCalledWith('/items', {
-            params: { 'filter[category_id]': '8', 'filter[search]': 'soap', include: 'categories,images', page: 2, per_page: 50 },
+            params: { 'filter[category_id]': '8', 'filter[search]': 'soap', include: 'categories,images,inventory_levels.location,active_alerts', page: 2, per_page: 50 },
         });
 
         await getLocationLevels(['20', '21', '22'], 1, 25);
         expect(http.get).toHaveBeenLastCalledWith('/inventory-levels', {
-            params: { 'filter[location_id]': '20,21,22', include: 'item,location', page: 1, per_page: 25 },
+            params: { 'filter[location_id]': '20,21,22', include: 'item.active_alerts,location', page: 1, per_page: 25 },
         });
     });
 

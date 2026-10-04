@@ -83,7 +83,7 @@ describe('LocationStockActions', () => {
         await wrapper.setProps({ activeAction: { levelId: 'level-bin', action: 'move-in' } });
         await flushPromises();
 
-        expect(http.get).toHaveBeenCalledWith('/items/item-1', { params: { include: 'categories,inventory_levels.location' } });
+        expect(http.get).toHaveBeenCalledWith('/items/item-1', { params: { include: 'categories,inventory_levels.location,active_alerts' } });
         const source = wrapper.get('#move-in-source-level-bin');
         expect(source.findAll('option').map((option) => option.text())).toEqual(['Select a source', 'House / Closet (3 hoses available)', 'House / Garage (5 hoses available)']);
         expect(source.findAll('option').map((option) => option.element.value)).not.toContain('22');

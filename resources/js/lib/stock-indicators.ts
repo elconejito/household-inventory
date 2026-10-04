@@ -27,7 +27,7 @@ export function getStockLevelIndicators(level: StockIndicatorLevel): StockIndica
         ];
     }
 
-    if (level.alert_status === 'low') {
+    if (!isUnmonitored && level.alert_status === 'low') {
         return [{ label: 'Low stock', tone: 'low' }];
     }
 
