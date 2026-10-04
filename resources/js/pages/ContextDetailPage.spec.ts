@@ -20,6 +20,17 @@ describe('category and location note contexts', () => {
         vi.mocked(http.get).mockImplementation(async (url) => {
             if (String(url).endsWith('/notes')) return { data: { data: [], meta: { current_page: 1, last_page: 1, total: 0 } } } as never;
             if (String(url).startsWith('/categories/')) return { data: { data: { id: '12', name: 'Pantry supplies' } } } as never;
+            if (String(url) === '/locations') return { data: { data: [
+                { id: '20', name: 'House', description: null, parent: null },
+                { id: '21', name: 'Kitchen', description: null, parent: { id: '20', name: 'House', description: null, parent: null } },
+                { id: '22', name: 'Bin', description: null, parent: { id: '21', name: 'Kitchen', description: null, parent: { id: '20', name: 'House', description: null, parent: null } } },
+            ], meta: { current_page: 1, last_page: 1, total: 3 } } } as never;
+            if (String(url) === '/inventory-levels') return { data: { data: [{
+                id: 'level-1', quantity: 6, alert_threshold: null, stock_status: 'in_stock', alert_status: 'unmonitored',
+                location: { id: '22', name: 'Bin', description: null, parent: { id: '21', name: 'Kitchen', description: null, parent: { id: '20', name: 'House', description: null, parent: null } } },
+                item: { id: 'item-1', name: 'Hose', counting_unit: 'hose', counting_unit_plural: 'hoses', description: null },
+            }], meta: { current_page: 1, last_page: 1, total: 1 } } } as never;
+            if (String(url) === '/items') return { data: { data: [{ id: 'item-1', name: 'Hose', counting_unit: 'hose', counting_unit_plural: 'hoses', description: null }], meta: { current_page: 1, last_page: 1, total: 1 } } } as never;
             return { data: { data: { id: '21', name: 'Kitchen', description: 'Lower cabinets', parent: { id: '20', name: 'House', description: null, parent: null } } } } as never;
         });
     });
@@ -27,7 +38,7 @@ describe('category and location note contexts', () => {
     afterEach(() => { wrapper?.unmount(); wrapper = undefined; client.clear(); });
 
     function mountPage(): void {
-        wrapper = mount(ContextDetailPage, { global: { plugins: [createPinia(), [VueQueryPlugin, { queryClient: client }]], stubs: { RouterLink: { template: '<a><slot /></a>' }, ArchiveResourceButton: true } } });
+        wrapper = mount(ContextDetailPage, { global: { plugins: [createPinia(), [VueQueryPlugin, { queryClient: client }]], stubs: { RouterLink: { props: ['to'], template: '<a :data-to="JSON.stringify(to)"><slot /></a>' }, ArchiveResourceButton: true } } });
     }
 
     it('loads a category detail identity and offers its notes', async () => {
@@ -36,6 +47,7 @@ describe('category and location note contexts', () => {
         expect(http.get).toHaveBeenCalledWith('/categories/12');
         expect(wrapper!.get('h1').text()).toBe('Pantry supplies');
         expect(http.get).toHaveBeenCalledWith('/categories/12/notes', { params: { include: 'created_by', per_page: 10, page: 1 } });
+        expect(http.get).toHaveBeenCalledWith('/items', { params: { 'filter[category_id]': '12', include: 'categories,images', page: 1, per_page: 10 } });
     });
 
     it('shows the location hierarchy and requests notes for that location', async () => {
@@ -46,5 +58,13 @@ describe('category and location note contexts', () => {
         expect(wrapper!.get('h1').text()).toBe('Kitchen');
         expect(wrapper!.text()).toContain('House / Kitchen');
         expect(http.get).toHaveBeenCalledWith('/locations/21/notes', { params: { include: 'created_by', per_page: 10, page: 1 } });
+        expect(http.get).toHaveBeenCalledWith('/inventory-levels', { params: { 'filter[location_id]': '21,22', include: 'item,location', page: 1, per_page: 10 } });
+        expect(wrapper!.text()).toContain('6 hoses');
+        const rowRestockLink = wrapper!.findAll('a').find((link) => link.text() === 'Restock here');
+        expect(rowRestockLink?.attributes('data-to')).toContain('"restock_location":"22"');
+        await wrapper!.get('#item-to-restock').setValue('item-1');
+        await flushPromises();
+        const restockLinks = wrapper!.findAll('a').filter((link) => link.text() === 'Restock here');
+        expect(restockLinks.at(-1)?.attributes('data-to')).toContain('"restock_location":"21"');
     });
 });

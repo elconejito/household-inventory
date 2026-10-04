@@ -6,6 +6,7 @@ import DashboardPage from '../pages/DashboardPage.vue';
 import InventoryPage from '../pages/InventoryPage.vue';
 import ItemDetailPage from '../pages/ItemDetailPage.vue';
 import ContextDetailPage from '../pages/ContextDetailPage.vue';
+import CatalogBrowsePage from '../pages/CatalogBrowsePage.vue';
 import LoginPage from '../pages/LoginPage.vue';
 import RegisterPage from '../pages/RegisterPage.vue';
 import SettingsPage from '../pages/SettingsPage.vue';
@@ -51,6 +52,8 @@ export const routes: RouteRecordRaw[] = [
                 name: 'inventory',
                 component: InventoryPage,
             },
+            { path: 'inventory/locations', name: 'catalog-locations', component: CatalogBrowsePage },
+            { path: 'inventory/categories', name: 'catalog-categories', component: CatalogBrowsePage },
             {
                 path: 'inventory/:item',
                 name: 'inventory-item',
