@@ -68,8 +68,9 @@ test('creates and edits a catalog, assigns equal categories, and distinguishes p
     await page.getByRole('checkbox', { name: 'Garden supplies', exact: true }).check();
     await page.getByRole('checkbox', { name: 'Seasonal', exact: true }).check();
     await page.getByRole('button', { name: 'Save item', exact: true }).click();
-    await page.getByRole('link', { name: itemName, exact: true }).click();
+    await expect(page.getByRole('heading', { level: 1, name: itemName, exact: true })).toBeVisible();
     const itemUrl = page.url().split('?')[0]!;
+    expect(itemUrl).toMatch(/^.*\/inventory\/\d+$/);
     const itemId = itemUrl.split('/').at(-1)!;
 
     await page.getByRole('button', { name: 'Edit item', exact: true }).click();

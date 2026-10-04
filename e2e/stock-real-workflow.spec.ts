@@ -29,6 +29,22 @@ async function confirmAction(page: Page): Promise<void> {
     await expect(page.locator('section[aria-labelledby="action-title"]')).toBeHidden();
 }
 
+async function createResource(page: Page, path: string, data: Record<string, string | number>): Promise<{ id: string }> {
+    const csrfCookie = (await page.context().cookies()).find((cookie) => cookie.name === 'XSRF-TOKEN');
+    expect(csrfCookie).toBeDefined();
+    const response = await page.request.post(`/api/${path}`, {
+        headers: {
+            Accept: 'application/json',
+            Origin: 'http://127.0.0.1:8000',
+            Referer: 'http://127.0.0.1:8000/',
+            'X-XSRF-TOKEN': decodeURIComponent(csrfCookie!.value),
+        },
+        data: { data },
+    });
+    expect(response.status(), await response.text()).toBe(201);
+    return (await response.json()).data;
+}
+
 test('registers a household and manages real inventory stock and activity', async ({ page }, testInfo) => {
     const uniqueId = `${Date.now()}-${Math.floor(Math.random() * 100_000)}`;
     const itemName = `Playwright detergent ${uniqueId}`;
@@ -43,21 +59,26 @@ test('registers a household and manages real inventory stock and activity', asyn
     await page.getByRole('button', { name: 'Create account' }).click();
     await expect(page).toHaveURL('/');
 
+    const basement = await createResource(page, 'locations', { name: 'Basement' });
+    await createResource(page, 'locations', { name: 'Shelf', parent_id: Number(basement.id) });
+
     await page.getByRole('navigation', { name: 'Main navigation' }).getByRole('link', { name: 'Inventory' }).click();
     await page.getByRole('button', { name: 'Add item' }).click();
     await page.getByRole('textbox', { name: /^Name/ }).fill(itemName);
     await page.getByRole('textbox', { name: /^Counting unit/ }).fill('bottle');
-    await page.getByRole('button', { name: 'Save item' }).click();
-    await page.getByRole('link', { name: itemName }).click();
+    await page.getByRole('button', { name: 'Save and add stock', exact: true }).click();
+    await expect(page).toHaveURL(/\/inventory\/\d+\?restock=1$/);
+    await expect(page.locator('#new-level-location')).toBeVisible();
+    const itemId = new URL(page.url()).pathname.split('/').at(-1)!;
+    await page.locator('#new-level-location').selectOption({ label: 'Basement' });
+    await page.locator('#new-level-quantity').fill('10');
+    await expect(page.getByText('Restock 10 bottles at Basement.', { exact: true })).toBeVisible();
+    await page.getByLabel('I’ve checked this direction and quantity.').check();
+    const initialRestockRequest = page.waitForRequest((request) => request.method() === 'POST' && request.url().endsWith('/api/inventory-movements'));
+    await page.getByRole('button', { name: 'Save change', exact: true }).click();
+    expect((await initialRestockRequest).postDataJSON()).toEqual({ data: { movement_type: 'restock', item_id: itemId, location_id: basement.id, quantity: 10 } });
     await expect(page.getByRole('heading', { level: 1, name: itemName })).toBeVisible();
 
-    await createLocation(page, 'Basement');
-    await createLocation(page, 'Shelf', 'Basement');
-
-    await page.getByRole('button', { name: 'Restock at another location' }).click();
-    await page.getByLabel('Location', { exact: true }).selectOption({ label: 'Basement' });
-    await page.getByLabel(/Quantity/).fill('10');
-    await confirmAction(page);
     await expect(page.getByRole('status').filter({ hasText: 'Stock updated.' })).toBeVisible();
 
     await levelRow(page, 'Basement').getByRole('button', { name: 'Move out' }).click();
