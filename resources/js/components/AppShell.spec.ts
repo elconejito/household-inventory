@@ -32,11 +32,14 @@ describe('application shell', () => {
         await router.isReady();
 
         const wrapper = mount(App, {
+            attachTo: document.body,
             global: {
                 plugins: [pinia, [VueQueryPlugin, { queryClient }], router],
             },
         });
 
+        expect(wrapper.get('a[href="#main-content"]').text()).toBe('Skip to main content');
+        expect(wrapper.get('main#main-content').attributes('tabindex')).toBe('-1');
         expect(wrapper.get('h1').text()).toBe('Inventory');
         expect(wrapper.get('a[href="/inventory"]').attributes('aria-current')).toBe('page');
         expect(wrapper.findAll('nav a').map((link) => link.text())).toContain('Activity');
@@ -47,6 +50,16 @@ describe('application shell', () => {
         await flushPromises();
 
         expect(wrapper.get('h1').text()).toBe('Activity');
+        expect(wrapper.get('h1').attributes('tabindex')).toBe('-1');
+        expect(document.activeElement).toBe(wrapper.get('h1').element);
         expect(wrapper.get('a[href="/activity"]').attributes('aria-current')).toBe('page');
+
+        await router.push({ name: 'activity', query: { item_id: '7' } });
+        await flushPromises();
+
+        expect(document.activeElement).toBe(wrapper.get('h1').element);
+
+        wrapper.unmount();
+        queryClient.clear();
     });
 });

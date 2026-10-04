@@ -1,11 +1,13 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
-import { RouterLink, RouterView, useRouter } from 'vue-router';
+import { computed, nextTick, ref, watch } from 'vue';
+import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router';
 import { useSessionStore } from '../stores/session';
 
 const router = useRouter();
+const route = useRoute();
 const session = useSessionStore();
 const logoutError = ref('');
+const mainContent = ref<HTMLElement | null>(null);
 const navigation = [
     { label: 'Dashboard', to: '/', icon: '⌂' },
     { label: 'Inventory', to: '/inventory', icon: '▤' },
@@ -18,6 +20,17 @@ const initials = computed(() => session.user?.name
     .slice(0, 2)
     .map((part) => part.charAt(0).toUpperCase())
     .join('') ?? '');
+
+watch(() => route.path, async () => {
+    await nextTick();
+
+    const heading = mainContent.value?.querySelector('h1');
+    const target = heading ?? mainContent.value;
+    if (!target) return;
+
+    target.setAttribute('tabindex', '-1');
+    target.focus({ preventScroll: true });
+}, { flush: 'post' });
 
 async function signOut(): Promise<void> {
     logoutError.value = '';
@@ -33,6 +46,7 @@ async function signOut(): Promise<void> {
 
 <template>
     <div class="min-h-screen pb-24 md:pb-0">
+        <a href="#main-content" class="sr-only z-50 rounded-md bg-white px-4 py-3 font-semibold text-sage-dark shadow-card focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sage">Skip to main content</a>
         <header class="border-b border-line bg-white/90">
             <div class="mx-auto flex min-h-[72px] max-w-7xl items-center justify-between gap-3 px-4 sm:px-8 max-[360px]:gap-1">
                 <RouterLink to="/" class="flex shrink-0 items-center gap-3 rounded-md focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-sage" aria-label="Household Inventory home">
@@ -73,7 +87,7 @@ async function signOut(): Promise<void> {
             <p v-if="logoutError" class="mx-auto max-w-7xl px-5 pb-3 text-right text-sm text-rose-700 sm:px-8" role="alert">{{ logoutError }}</p>
         </header>
 
-        <main class="mx-auto w-full max-w-7xl px-5 py-8 sm:px-8 sm:py-10">
+        <main id="main-content" ref="mainContent" tabindex="-1" class="mx-auto w-full max-w-7xl px-5 py-8 outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sage sm:px-8 sm:py-10">
             <RouterView />
         </main>
 
