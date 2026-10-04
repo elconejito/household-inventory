@@ -271,12 +271,12 @@ class ItemImageTest extends TestCase
         $this->assertDatabaseCount('item_images', 3);
     }
 
-    public function test_upload_keeps_nonexistent_posix_roots_single_slash_and_case_sensitive(): void
+    public function test_upload_accepts_distinct_nonexistent_posix_sibling_roots_without_creating_them(): void
     {
         [$user, $household] = $this->householdMember();
         $item = Item::factory()->for($household)->create();
         $uncreatedRoot = '/household-uncreated-'.Str::uuid();
-        $root = $uncreatedRoot.'/Private/images';
+        $root = $uncreatedRoot.'/private/images';
         config([
             'inventory.images_disk' => 'nonexistent-posix-root',
             'filesystems.disks.nonexistent-posix-root' => [
@@ -285,7 +285,7 @@ class ItemImageTest extends TestCase
                 'visibility' => 'private',
             ],
             'filesystems.links' => [
-                public_path('images') => $uncreatedRoot.'/private',
+                public_path('images') => $uncreatedRoot.'/public',
             ],
         ]);
         $disk = Storage::fake('nonexistent-posix-root', ['visibility' => 'private']);
@@ -298,6 +298,43 @@ class ItemImageTest extends TestCase
         $response->assertCreated();
         $this->assertCount(2, $disk->allFiles());
         $this->assertSame('private', $disk->getVisibility($image->thumbnail_path));
+        $this->assertDirectoryDoesNotExist($uncreatedRoot);
+    }
+
+    public function test_upload_fails_closed_for_case_only_posix_exposure_on_case_insensitive_platforms(): void
+    {
+        [$user, $household] = $this->householdMember();
+        $item = Item::factory()->for($household)->create();
+        $uncreatedRoot = '/household-uncreated-'.Str::uuid();
+        config([
+            'inventory.images_disk' => 'case-only-posix-root',
+            'filesystems.disks.case-only-posix-root' => [
+                'driver' => 'local',
+                'root' => $uncreatedRoot.'/Private/images',
+                'visibility' => 'private',
+            ],
+            'filesystems.links' => [
+                public_path('images') => $uncreatedRoot.'/private',
+            ],
+        ]);
+        $disk = Storage::fake('case-only-posix-root', ['visibility' => 'private']);
+
+        $response = $this->actingAs($user, 'web')->post('/api/items/'.$item->id.'/images', [
+            'image' => $this->uploadedPng(),
+        ], ['Accept' => 'application/json']);
+
+        if (PHP_OS_FAMILY === 'Darwin') {
+            $response->assertServerError();
+            $this->assertDatabaseCount('item_images', 0);
+            $disk->assertDirectoryEmpty('/');
+        } else {
+            $image = ItemImage::query()->firstOrFail();
+            $response->assertCreated();
+            $this->assertCount(2, $disk->allFiles());
+            $this->assertSame('private', $disk->getVisibility($image->thumbnail_path));
+            $this->assertDatabaseCount('item_images', 1);
+        }
+
         $this->assertDirectoryDoesNotExist($uncreatedRoot);
     }
 

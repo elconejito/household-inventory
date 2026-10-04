@@ -159,8 +159,10 @@ class UploadItemImage
         $parent = $parent === '' ? '/' : $parent;
         $pathPrefix = $parent === '/' ? '/' : $parent.'/';
 
-        return ($isWindowsPath ? strcasecmp($path, $parent) === 0 : $path === $parent)
-            || ($isWindowsPath
+        $caseInsensitive = $isWindowsPath || PHP_OS_FAMILY === 'Darwin';
+
+        return ($caseInsensitive ? strcasecmp($path, $parent) === 0 : $path === $parent)
+            || ($caseInsensitive
                 ? strncasecmp($path, $pathPrefix, strlen($pathPrefix)) === 0
                 : str_starts_with($path, $pathPrefix));
     }
