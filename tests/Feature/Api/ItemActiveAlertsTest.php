@@ -2,7 +2,6 @@
 
 namespace Tests\Feature\Api;
 
-use App\Enums\InventoryAlertType;
 use App\Models\Household;
 use App\Models\InventoryAlert;
 use App\Models\InventoryLevel;
@@ -10,6 +9,7 @@ use App\Models\Item;
 use App\Models\Location;
 use App\Models\Membership;
 use App\Models\User;
+use DateTimeInterface;
 use Illuminate\Foundation\Testing\LazilyRefreshDatabase;
 use Tests\TestCase;
 
@@ -21,7 +21,7 @@ class ItemActiveAlertsTest extends TestCase
     {
         [$user, $household, $item] = $this->householdItem();
         $active = $this->alert($household, $item);
-        $resolved = $this->alert($household, $item, now()->subMinute());
+        $this->alert($household, $item, now()->subMinute());
         $this->actingAs($user, 'web');
 
         $this->getJson('/api/items')
@@ -31,7 +31,7 @@ class ItemActiveAlertsTest extends TestCase
             ->assertOk()
             ->assertJsonCount(1, 'data.0.active_alerts')
             ->assertJsonPath('data.0.active_alerts.0.id', (string) $active->id)
-            ->assertJsonMissing(['id' => (string) $resolved->id]);
+            ->assertJsonMissingPath('data.0.active_alerts.0.item');
         $this->getJson('/api/items/'.$item->id.'?include=active_alerts')
             ->assertOk()
             ->assertJsonCount(1, 'data.active_alerts')
@@ -42,10 +42,15 @@ class ItemActiveAlertsTest extends TestCase
     {
         [$user, $household, $item] = $this->householdItem();
         [, $foreignHousehold, $foreignItem] = $this->householdItem();
-        $foreignAlert = $this->alert($foreignHousehold, $foreignItem);
+        $this->alert($foreignHousehold, $foreignItem);
         $this->actingAs($user, 'web');
 
-        $this->getJson('/api/items?include=active_alerts')->assertOk()->assertJsonMissing(['id' => (string) $foreignAlert->id]);
+        $this->getJson('/api/items?include=active_alerts')
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.id', (string) $item->id)
+            ->assertJsonPath('data.0.active_alerts', []);
+        $this->getJson('/api/items/'.$foreignItem->id.'?include=active_alerts')->assertNotFound();
         $created = $this->postJson('/api/items?include=active_alerts', ['data' => ['name' => 'Created', 'counting_unit' => 'unit']]);
         $created->assertCreated()->assertJsonPath('data.active_alerts', []);
         $this->patchJson('/api/items/'.$item->id.'?include=active_alerts', ['data' => ['description' => 'Updated']])
@@ -88,13 +93,10 @@ class ItemActiveAlertsTest extends TestCase
         return [$user, $household, $item];
     }
 
-    private function alert(Household $household, Item $item, mixed $resolvedAt = null): InventoryAlert
+    private function alert(Household $household, Item $item, ?DateTimeInterface $resolvedAt = null): InventoryAlert
     {
-        return $household->inventoryAlerts()->create([
-            'item_id' => $item->getKey(),
-            'alert_type' => InventoryAlertType::BuySoon,
+        return InventoryAlert::factory()->for($household)->for($item)->create([
             'created_by' => $household->memberships()->firstOrFail()->user_id,
-            'created_at' => now(),
             'resolved_at' => $resolvedAt,
         ]);
     }

@@ -29,6 +29,7 @@ class ApiQueryPerformanceTest extends TestCase
             'category graph' => ['/api/categories?include=items,notes.created_by'],
             'location hierarchy' => ['/api/locations?include=parent,children,notes.created_by'],
             'dashboard conditions' => ['/api/inventory-levels?include=item,location&filter[alert_status]=low'],
+            'location active flags' => ['/api/inventory-levels?include=item.active_alerts,location'],
             'activity graph' => ['/api/inventory-movements?include=item,entries.location,recorded_by,notes.created_by'],
             'manual alerts' => ['/api/inventory-alerts?include=item,created_by,notes.created_by&filter[status]=active'],
         ];
