@@ -31,7 +31,7 @@ Establish the repository and conventions that every later slice uses.
 - Vite, Vue Router, Axios, TanStack Vue Query, Pinia, and Tailwind configuration at the repository root
 - MySQL environment configuration and an example environment file with no secrets
 - Laravel Sanctum stateful SPA authentication baseline
-- Pest, Vitest with Vue Test Utils, and Playwright test harnesses
+- PHPUnit, Vitest with Vue Test Utils, and Playwright test harnesses
 - Code-formatting and type-checking commands for PHP and TypeScript
 - SPA fallback route separated cleanly from unversioned `/api` routes
 - Base application shell, route-level error handling, and shared HTTP error normalization
@@ -130,7 +130,7 @@ Complete household administration after the inventory workflows are stable.
 
 - Owner and member policy distinctions
 - Owner-only household and membership settings
-- Invitation creation, copyable one-time link, optional email delivery, resend, revocation, expiration, and acceptance
+- Invitation creation, copyable one-time link, resend, revocation, expiration, and acceptance; outbound email delivery is deferred
 - Early invite conflicts for current-household members and accounts belonging to another household
 - Final-owner leave and demotion protection
 - Owner-only permanent deletion after prior soft deletion
@@ -173,6 +173,6 @@ These receive Playwright coverage as soon as the responsible slices exist:
 7. Invite a member and verify member versus owner capabilities.
 8. Archive, restore, and permanently delete eligible records while blocked records return useful conflicts.
 
-## Build readiness
+## Current delivery status
 
-The domain, database schema, API shape, frontend information architecture, visual direction, and milestone sequence are sufficiently defined to begin Milestone 0. Implementation discoveries may refine details, but no known product decision blocks scaffolding.
+The agreed 1.0 feature work is complete. The remaining release work is hardening and verification rather than additional product features. HEIC/HEIF support and outbound invitation email remain deferred. Local automated suites cover the implemented workflows, but final production-like acceptance still requires a chosen hosting target, HTTPS configuration, persistent private image storage, and verified backups. The [Technical Architecture](technical-architecture.md#production-readiness-checklist) contains the deployment checklist; no production deployment has been performed.

@@ -27,9 +27,9 @@ Item-image uploads accept JPEG, PNG, and WebP up to 20 MB in 1.0. HEIC/HEIF supp
 
 Transparency is preserved when present. The upload source is discarded after both derivatives are stored. HEIC/HEIF uploads return a clear validation error directing the user to export an accepted format rather than retaining an unprocessed original. Adding these formats later requires verifying a compatible decoder in both local and production runtimes; no additional decoder is required for 1.0.
 
-The `inventory-images` disk is private. The API exposes stable authenticated thumbnail and display routes and never exposes storage paths. With local storage Laravel streams the authorized file with private caching headers. After migration to S3, the same application routes may redirect to short-lived signed URLs without changing the resource contract or Vue components.
+The `inventory-images` disk is private. The API exposes stable authenticated thumbnail and display routes and never exposes storage paths. With local storage Laravel streams the authorized file with private caching headers. Uploads reject public disks and local roots exposed through the document root or configured storage links; both derivatives are explicitly written with private visibility. After a future migration to S3, the same application routes may redirect to short-lived signed URLs without changing the resource contract or Vue components. The S3 adapter is not currently installed; changing the disk environment variable alone is not a supported migration.
 
-Exact framework and package versions will be selected and locked when the application is scaffolded.
+Framework and package versions are locked in `composer.lock` and `package-lock.json`. Release builds install from those lockfiles rather than updating dependencies.
 
 ## Frontend baseline
 
@@ -76,6 +76,37 @@ Components prefer semantic HTML and native browser behavior. Native controls are
 - Text labels accompanying unfamiliar icons
 - Light theme in 1.0, with dark mode deferred
 
-## Planning status
+## Production-readiness checklist
 
-The household invitation lifecycle, core screen behavior, wireframe direction, and phased implementation sequence are settled. See [Implementation Roadmap](implementation-roadmap.md). The application is ready for Milestone 0 scaffolding.
+This is a checklist for the eventual deployment target, not evidence that production infrastructure has been provisioned or verified. No hosting provider, public domain, backup service, or deployment pipeline is assumed.
+
+### Runtime and secrets
+
+- Use PHP 8.4 with Laravel's required extensions, PDO MySQL, and GD with JPEG, PNG, and WebP support. Enable Exif for JPEG orientation handling. Confirm processing works in the web runtime as well as the CLI.
+- Set `APP_ENV=production`, `APP_DEBUG=false`, and `APP_URL` to the canonical HTTPS application URL. Invitation links use that configured URL rather than the incoming request host.
+- Provision a strong `APP_KEY` once and retain it securely across releases. Do not routinely regenerate it during deployments. Keep environment values, credentials, private files, and logs outside the public document root and out of source control.
+- Serve only Laravel's `public` directory. Configure HTTPS, accepted hostnames, and any trusted proxies on the chosen ingress; never broadly trust forwarded headers without knowing the proxy topology.
+- Set `SESSION_SECURE_COOKIE=true`; retain HTTP-only session cookies and the default `lax` SameSite policy. Configure Sanctum's stateful domains for the actual SPA origin. Avoid array-backed sessions or rate-limit caches in production.
+
+### Durable data and images
+
+- Use a persistent MySQL database and least-privilege application credentials. Review migrations and arrange a recoverable backup before applying them to production. Never run test migrations against the household's real database.
+- Keep the configured session and cache stores available across requests. Database-backed defaults are supported; multiple instances must share session and rate-limit state.
+- Launch with the private `inventory-images` local disk on persistent storage. A single-instance setup needs a durable volume across releases; multiple instances need a shared durable mount or an explicitly implemented private object-storage migration. Ephemeral container filesystems are not sufficient.
+- Do not expose the image root through web-server aliases or storage links. Uploaded source files are discarded; include both WebP derivatives in backups alongside the database. Verify a restore preserves the references and authenticated delivery.
+- Configure PHP and ingress upload limits to accept a 20 MB file plus multipart overhead, with `post_max_size` larger than `upload_max_filesize`. Allow sufficient memory for the processor's 40-megapixel limit and test representative large images on the target runtime. HEIC/HEIF remain deferred.
+- S3 is a future enhancement requiring the Flysystem adapter, credentials, private bucket access, and delivery/cleanup verification. It is not part of the local-disk launch baseline.
+
+### Release and verification
+
+- Build from lockfiles: `composer install --no-dev --prefer-dist --optimize-autoloader`, plus `npm ci` and `npm run build` in the build stage. Do not use `composer setup` against production: it is a development bootstrap script that generates a key and applies migrations.
+- Once the target environment is configured, run reviewed migrations and rebuild Laravel's configuration, route, and view caches. Give the runtime write access to `storage` and `bootstrap/cache` without making those directories public. See [Laravel deployment guidance](https://laravel.com/docs/13.x/deployment).
+- Run PHPUnit, including the opt-in MySQL concurrency tests, only against the dedicated local `household_inventory_test` database or isolated test databases. Clear the development configuration cache before test runs; the shared test case rejects cached configuration before test database refreshes can run.
+- Run frontend type checking, component tests, the production asset build, and Playwright's real-API workflows before release. The browser harness uses an explicit testing environment and canonical loopback origin; it must not reuse an application server connected to real household data.
+- Run Composer and npm dependency audits at release time. A clean audit is a point-in-time dependency check, not a substitute for application authorization tests. No repository CI pipeline is currently configured.
+- Perform staging smoke checks for login/logout and CSRF, owner/member isolation, inventory movements and conflicts, copied invitation links, image upload and protected delivery, and archive/restore/permanent deletion over HTTPS. Verify backups, restore procedure, error logging, and health checks on the chosen target before calling the deployment ready.
+- No application queue worker, scheduler, or outbound invitation email is required by the implemented 1.0 workflows. Invitations are shared through copyable links; workers and mail configuration become requirements only if those future workflows are implemented.
+
+## Implementation status
+
+The agreed 1.0 feature work is complete, including household administration, inventory workflows, notes, images, and destructive lifecycle protections. Release hardening and local automated verification are underway. HEIC/HEIF remain explicitly deferred. See [Implementation Roadmap](implementation-roadmap.md). Production deployment and target-specific verification require a separate hosting decision.
