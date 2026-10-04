@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CategoryController;
+use App\Http\Controllers\Api\CategoryItemController;
 use App\Http\Controllers\Api\HealthController;
 use App\Http\Controllers\Api\HouseholdController;
 use App\Http\Controllers\Api\HouseholdInvitationController;
@@ -63,6 +64,7 @@ Route::middleware('auth:sanctum')->group(function (): void {
     Route::delete('/categories/{category}', [CategoryController::class, 'destroy'])->name('categories.destroy');
     Route::post('/categories/{category}/restore', [CategoryController::class, 'restore'])->name('categories.restore');
     Route::delete('/categories/{category}/permanently', [PermanentDeletionController::class, 'category'])->name('categories.permanently');
+    Route::patch('/categories/{category}/items/{item}', [CategoryItemController::class, 'update'])->name('categories.items.update');
 
     Route::get('/locations', [LocationController::class, 'index'])->name('locations.index');
     Route::post('/locations', [LocationController::class, 'store'])->name('locations.store');
