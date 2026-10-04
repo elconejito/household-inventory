@@ -6,6 +6,7 @@ import { useCreateItemMutation, useItemCategoryOptionsQuery, useItemsQuery } fro
 import { useLocationsQuery } from '../queries/stock';
 import type { NewItem } from '../api/items';
 import ItemEditor from '../components/ItemEditor.vue';
+import InventoryTabs from '../components/InventoryTabs.vue';
 import { buildLocationPath } from '../api/stock';
 
 const route = useRoute();
@@ -154,6 +155,8 @@ function errorMessage(): string {
                 {{ showCreateForm ? 'Cancel' : 'Add item' }}
             </button>
         </div>
+
+        <InventoryTabs />
 
         <p v-if="successMessage" class="mt-5 rounded-md border border-sage/20 bg-sage-soft px-4 py-3 text-sm font-medium text-sage-dark" role="status" aria-live="polite">
             {{ successMessage }}

@@ -8,6 +8,7 @@ import NotesPanel from '../components/NotesPanel.vue';
 import ItemImagesPanel from '../components/ItemImagesPanel.vue';
 import ArchiveResourceButton from '../components/ArchiveResourceButton.vue';
 import ItemEditor from '../components/ItemEditor.vue';
+import InventoryTabs from '../components/InventoryTabs.vue';
 import type { ItemEditSnapshot, ItemUpdate, NewItem } from '../api/items';
 import { useUpdateItemMutation } from '../queries/items';
 
@@ -295,6 +296,7 @@ async function toggleBuySoon(): Promise<void> {
 <template>
     <section aria-labelledby="page-title">
         <RouterLink :to="{ name: 'inventory' }" class="text-sm font-medium text-sage-dark hover:underline">← Inventory</RouterLink>
+        <InventoryTabs />
         <div v-if="itemQuery.isPending.value" class="mt-5 grid min-h-52 place-items-center text-sm text-ink-muted" role="status">Loading item stock…</div>
         <div v-else-if="itemQuery.isError.value" class="mt-5 rounded-panel border border-line bg-white p-6" role="alert">
             <h1 id="page-title" class="text-xl font-semibold text-ink">We couldn’t load this item</h1>
@@ -303,10 +305,10 @@ async function toggleBuySoon(): Promise<void> {
         </div>
         <template v-else-if="itemQuery.data.value">
             <div class="mt-4 flex flex-wrap items-end justify-between gap-4">
-                <div>
+                <div class="min-w-0 max-w-full">
                     <p class="eyebrow">Item stock</p>
-                    <h1 id="page-title" class="page-title mt-2">{{ itemQuery.data.value.name }}</h1>
-                    <p v-if="itemQuery.data.value.description" class="mt-2 text-sm text-ink-muted">{{ itemQuery.data.value.description }}</p>
+                    <h1 id="page-title" class="page-title mt-2 break-words">{{ itemQuery.data.value.name }}</h1>
+                    <p v-if="itemQuery.data.value.description" class="mt-2 whitespace-pre-line text-sm text-ink-muted">{{ itemQuery.data.value.description }}</p>
                     <button type="button" class="mt-3 min-h-10 rounded-md border border-line px-3 text-sm font-medium text-ink hover:bg-surface-soft focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sage" :aria-expanded="showEditForm" aria-controls="edit-item-panel" @click="showEditForm = !showEditForm; editSuccess = ''; editErrors = { fields: {}, form: '' }">{{ showEditForm ? 'Cancel edit' : 'Edit item' }}</button>
                 </div>
                 <div class="rounded-panel border border-line bg-white px-5 py-3 text-right shadow-card">

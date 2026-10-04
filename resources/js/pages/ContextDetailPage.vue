@@ -242,8 +242,8 @@ function itemDetailLocation(itemId: string, exactLocationId = contextId.value): 
         <template v-else-if="contextQuery.data.value">
             <p class="eyebrow mt-5">{{ title }}</p>
             <div class="mt-2 flex flex-wrap items-end justify-between gap-4">
-                <div>
-                    <h1 id="context-title" class="page-title">{{ contextQuery.data.value.name }}</h1>
+                <div class="min-w-0 max-w-full">
+                    <h1 id="context-title" class="page-title break-words">{{ contextQuery.data.value.name }}</h1>
                     <p v-if="contextType === 'locations' && locationPath" class="mt-2 text-sm text-ink-muted">{{ locationPath }}</p>
                     <p v-if="contextType === 'locations' && location?.description" class="mt-2 whitespace-pre-line text-sm leading-6 text-ink-muted">{{ location.description }}</p>
                 </div>
@@ -328,7 +328,7 @@ function itemDetailLocation(itemId: string, exactLocationId = contextId.value): 
                     <div class="flex flex-wrap items-start justify-between gap-3"><div><h2 id="restock-here-heading" class="font-semibold text-ink">Restock here</h2><p class="mt-1 text-sm text-ink-muted">Choose any household item, including one not yet stored here.</p></div></div>
                     <div v-if="allItemsQuery.isError.value" class="mt-3 text-sm text-rose-700" role="alert">Items could not be loaded. <button type="button" class="underline" @click="allItemsQuery.refetch()">Try again</button></div>
                     <div v-else class="mt-4 flex flex-wrap items-end gap-3">
-                        <div class="grid min-w-60 flex-1 gap-2"><label for="item-to-restock" class="text-sm font-medium text-ink">Item to restock</label><select id="item-to-restock" v-model="itemToRestock" :disabled="allItemsQuery.isPending.value" class="min-h-11 rounded-md border border-line bg-white px-3 text-ink"><option value="" disabled>{{ allItemsQuery.isPending.value ? 'Loading items…' : 'Select an item' }}</option><option v-for="item in allItemsQuery.data.value ?? []" :key="item.id" :value="item.id">{{ item.name }}</option></select></div>
+                        <div class="grid min-w-0 flex-1 gap-2"><label for="item-to-restock" class="text-sm font-medium text-ink">Item to restock</label><select id="item-to-restock" v-model="itemToRestock" :disabled="allItemsQuery.isPending.value" class="min-h-11 min-w-0 w-full rounded-md border border-line bg-white px-3 text-ink"><option value="" disabled>{{ allItemsQuery.isPending.value ? 'Loading items…' : 'Select an item' }}</option><option v-for="item in allItemsQuery.data.value ?? []" :key="item.id" :value="item.id">{{ item.name }}</option></select></div>
                         <RouterLink v-if="itemToRestock" :to="itemDetailLocation(itemToRestock)" class="inline-flex min-h-11 items-center rounded-md bg-sage px-4 text-sm font-semibold text-white hover:bg-sage-dark">Restock here</RouterLink>
                     </div>
                 </section>
