@@ -25,7 +25,7 @@ class IndexInventoryLevelRequest extends FormRequest
     {
         return [
             'filter.item_id' => ['sometimes', 'integer', 'min:1'],
-            'filter.location_id' => ['sometimes', 'integer', 'min:1'],
+            'filter.location_id' => ['sometimes', 'string', 'max:4096', 'regex:/^[1-9][0-9]*(,[1-9][0-9]*)*$/'],
             'filter.quantity' => ['sometimes', 'integer', 'min:0'],
             'filter.alert_status' => ['sometimes', 'string', Rule::in(['triggered', 'empty', 'low', 'okay', 'unmonitored'])],
             'per_page' => ['sometimes', 'integer', Rule::in([10, 25, 50, 100])],

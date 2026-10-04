@@ -318,6 +318,54 @@ class LocationTest extends TestCase
         }
     }
 
+    public function test_location_index_filters_root_and_direct_children_only(): void
+    {
+        [$user, $household] = $this->householdMember();
+        $root = $household->locations()->create(['name' => 'Root Alpha']);
+        $otherRoot = $household->locations()->create(['name' => 'Root Zulu']);
+        $hierarchy = app(ManageLocationHierarchy::class);
+        $child = $hierarchy->create($household, ['name' => 'Child', 'parent_id' => $root->getKey()]);
+        $hierarchy->create($household, ['name' => 'Grandchild', 'parent_id' => $child->getKey()]);
+        $foreignHousehold = Household::factory()->create();
+        $foreignRoot = $foreignHousehold->locations()->create(['name' => 'Foreign Root']);
+        app(ManageLocationHierarchy::class)->create($foreignHousehold, ['name' => 'Foreign Child', 'parent_id' => $foreignRoot->getKey()]);
+        $this->actingAs($user, 'web');
+
+        $this->getJson('/api/locations?filter[parent_id]=root')
+            ->assertOk()
+            ->assertJsonCount(2, 'data')
+            ->assertJsonPath('data.0.id', (string) $root->getKey())
+            ->assertJsonPath('data.1.id', (string) $otherRoot->getKey());
+
+        $this->getJson('/api/locations?filter[parent_id]='.$root->getKey())
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.id', (string) $child->getKey());
+
+        $this->getJson('/api/locations?filter[parent_id]=root&filter[name]=Root%20Alpha')
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.id', (string) $root->getKey());
+    }
+
+    public function test_location_index_parent_filter_rejects_invalid_archived_and_foreign_ids(): void
+    {
+        [$user, $household] = $this->householdMember();
+        $archivedParent = $household->locations()->create(['name' => 'Archived Parent']);
+        $archivedParent->delete();
+        $foreignParent = Household::factory()->create()->locations()->create(['name' => 'Foreign Parent']);
+        $this->actingAs($user, 'web');
+
+        foreach ([
+            '/api/locations?filter[parent_id]=invalid',
+            '/api/locations?filter[parent_id]=99999999',
+            '/api/locations?filter[parent_id]='.$archivedParent->getKey(),
+            '/api/locations?filter[parent_id]='.$foreignParent->getKey(),
+        ] as $uri) {
+            $this->getJson($uri)->assertUnprocessable();
+        }
+    }
+
     public function test_archive_conflicts_with_active_children_and_restore_requires_active_parent(): void
     {
         [$user, $household] = $this->householdMember();

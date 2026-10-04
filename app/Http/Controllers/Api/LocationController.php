@@ -13,6 +13,7 @@ use App\Models\Membership;
 use App\Models\User;
 use App\Serialization\ApiResponse;
 use App\Transformers\LocationTransformer;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -39,6 +40,9 @@ class LocationController extends Controller
             ->allowedFilters(
                 AllowedFilter::partial('search', 'name'),
                 AllowedFilter::partial('name'),
+                AllowedFilter::callback('parent_id', fn (Builder $query, mixed $value): Builder => $value === 'root'
+                    ? $query->whereNull('parent_id')
+                    : $query->where('parent_id', $value)),
                 AllowedFilter::trashed(),
             )
             ->allowedSorts('name')

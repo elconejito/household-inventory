@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Actions\ManageLocationHierarchy;
 use App\Models\Household;
 use App\Models\InventoryLevel;
 use App\Models\InventoryMovement;
@@ -169,6 +170,49 @@ class InventoryMovementLedgerTest extends TestCase
             ->assertJsonCount(0, 'data');
         $this->getJson('/api/inventory-movements/'.$foreignMovement->id)->assertNotFound();
         $this->patchJson('/api/inventory-levels/'.$foreignLevel->id, ['data' => ['alert_threshold' => 2]])->assertNotFound();
+    }
+
+    public function test_inventory_level_index_accepts_exact_parent_and_child_location_ids_without_cross_household_rows(): void
+    {
+        [$user, $household, $item] = $this->inventoryContext();
+        $parent = $household->locations()->create(['name' => 'Pantry']);
+        $child = app(ManageLocationHierarchy::class)->create($household, ['name' => 'Top Shelf', 'parent_id' => $parent->getKey()]);
+        $parentLevel = InventoryLevel::factory()->for($item)->for($parent)->create(['quantity' => 3]);
+        $childLevel = InventoryLevel::factory()->for($item)->for($child)->create(['quantity' => 4]);
+
+        $foreignHousehold = Household::factory()->create();
+        $foreignItem = Item::factory()->for($foreignHousehold)->create();
+        $foreignLocation = $foreignHousehold->locations()->create(['name' => 'Foreign Pantry']);
+        InventoryLevel::factory()->for($foreignItem)->for($foreignLocation)->create(['quantity' => 9]);
+        $this->actingAs($user, 'web');
+
+        $this->getJson('/api/inventory-levels?filter[location_id]='.$parent->getKey().'&include=item,location')
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.id', (string) $parentLevel->getKey())
+            ->assertJsonPath('data.0.location.id', (string) $parent->getKey());
+
+        $locationIds = implode(',', [$parent->getKey(), $child->getKey(), $foreignLocation->getKey()]);
+        $response = $this->getJson('/api/inventory-levels?filter[location_id]='.$locationIds.'&include=item,location');
+        $response
+            ->assertOk()
+            ->assertJsonCount(2, 'data')
+            ->assertJsonPath('data.0.id', (string) $parentLevel->getKey())
+            ->assertJsonPath('data.0.location.id', (string) $parent->getKey())
+            ->assertJsonPath('data.0.item.id', (string) $item->getKey())
+            ->assertJsonPath('data.1.id', (string) $childLevel->getKey())
+            ->assertJsonPath('data.1.location.id', (string) $child->getKey());
+    }
+
+    public function test_inventory_level_location_filter_rejects_malformed_comma_separated_ids(): void
+    {
+        [$user] = $this->inventoryContext();
+        $this->actingAs($user, 'web');
+
+        foreach (['1,', ',1', '1,not-an-id', '0,1', '1,,2'] as $locationIds) {
+            $this->getJson('/api/inventory-levels?filter[location_id]='.$locationIds)
+                ->assertUnprocessable();
+        }
     }
 
     public function test_archived_items_and_locations_cannot_receive_movements(): void

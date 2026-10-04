@@ -42,6 +42,19 @@ class ItemController extends Controller
             ->allowedFilters(
                 AllowedFilter::partial('search', 'name'),
                 AllowedFilter::partial('name'),
+                AllowedFilter::callback('category_id', fn (Builder $query, mixed $value): Builder => $query->whereHas(
+                    'categories',
+                    fn (Builder $categories): Builder => $categories
+                        ->where('categories.household_id', $household->getKey())
+                        ->whereKey($value),
+                )),
+                AllowedFilter::callback('location_id', fn (Builder $query, mixed $value): Builder => $query->whereHas(
+                    'inventoryLevels',
+                    fn (Builder $levels): Builder => $levels
+                        ->where('location_id', $value)
+                        ->whereHas('location', fn (Builder $locations): Builder => $locations
+                            ->where('household_id', $household->getKey())),
+                )),
                 AllowedFilter::trashed(),
             )
             ->allowedSorts('name')

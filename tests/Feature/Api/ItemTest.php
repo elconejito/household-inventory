@@ -3,6 +3,7 @@
 namespace Tests\Feature\Api;
 
 use App\Models\Household;
+use App\Models\InventoryLevel;
 use App\Models\Item;
 use App\Models\Membership;
 use App\Models\User;
@@ -88,6 +89,65 @@ class ItemTest extends TestCase
         }
 
         $this->assertDatabaseCount('items', 0);
+    }
+
+    public function test_item_index_combines_category_and_exact_location_filters_without_narrowing_total_quantity(): void
+    {
+        [$user, $household] = $this->householdMember();
+        $category = $household->categories()->create(['name' => 'Kitchen']);
+        $otherCategory = $household->categories()->create(['name' => 'Laundry']);
+        $targetLocation = $household->locations()->create(['name' => 'Pantry']);
+        $otherLocation = $household->locations()->create(['name' => 'Basement']);
+        $matchingItem = Item::factory()->for($household)->create(['name' => 'Target Rice']);
+        $matchingItem->categories()->attach($category);
+        InventoryLevel::factory()->for($matchingItem)->for($targetLocation)->create(['quantity' => 3]);
+        InventoryLevel::factory()->for($matchingItem)->for($otherLocation)->create(['quantity' => 4]);
+
+        $sameCategoryElsewhere = Item::factory()->for($household)->create(['name' => 'Other Rice']);
+        $sameCategoryElsewhere->categories()->attach($category);
+        InventoryLevel::factory()->for($sameCategoryElsewhere)->for($otherLocation)->create(['quantity' => 2]);
+
+        $sameLocationOtherCategory = Item::factory()->for($household)->create(['name' => 'Target Soap']);
+        $sameLocationOtherCategory->categories()->attach($otherCategory);
+        InventoryLevel::factory()->for($sameLocationOtherCategory)->for($targetLocation)->create(['quantity' => 1]);
+        $this->actingAs($user, 'web');
+
+        $this->getJson('/api/items?filter[category_id]='.$category->getKey().'&filter[location_id]='.$targetLocation->getKey().'&filter[name]=Target&sort=name')
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.id', (string) $matchingItem->getKey())
+            ->assertJsonPath('data.0.total_quantity', 7);
+
+        $this->getJson('/api/items?filter[category_id]='.$category->getKey())
+            ->assertOk()
+            ->assertJsonCount(2, 'data');
+        $this->getJson('/api/items?filter[location_id]='.$targetLocation->getKey())
+            ->assertOk()
+            ->assertJsonCount(2, 'data');
+    }
+
+    public function test_item_index_filter_ids_must_be_active_and_belong_to_the_current_household(): void
+    {
+        [$user, $household] = $this->householdMember();
+        $archivedCategory = $household->categories()->create(['name' => 'Archived Category']);
+        $archivedCategory->delete();
+        $archivedLocation = $household->locations()->create(['name' => 'Archived Location']);
+        $archivedLocation->delete();
+        $foreignHousehold = Household::factory()->create();
+        $foreignCategory = $foreignHousehold->categories()->create(['name' => 'Foreign Category']);
+        $foreignLocation = $foreignHousehold->locations()->create(['name' => 'Foreign Location']);
+        $this->actingAs($user, 'web');
+
+        foreach ([
+            '/api/items?filter[category_id]=not-an-id',
+            '/api/items?filter[category_id]='.$archivedCategory->getKey(),
+            '/api/items?filter[category_id]='.$foreignCategory->getKey(),
+            '/api/items?filter[location_id]=not-an-id',
+            '/api/items?filter[location_id]='.$archivedLocation->getKey(),
+            '/api/items?filter[location_id]='.$foreignLocation->getKey(),
+        ] as $uri) {
+            $this->getJson($uri)->assertUnprocessable();
+        }
     }
 
     public function test_category_archived_after_validation_is_not_attached_when_creating_an_item(): void
