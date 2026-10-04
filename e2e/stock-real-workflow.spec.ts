@@ -58,7 +58,7 @@ test('registers a household and manages real inventory stock and activity', asyn
     await page.getByLabel('Location', { exact: true }).selectOption({ label: 'Basement' });
     await page.getByLabel(/Quantity/).fill('10');
     await confirmAction(page);
-    await expect(page.getByRole('status')).toContainText('Stock updated.');
+    await expect(page.getByRole('status').filter({ hasText: 'Stock updated.' })).toBeVisible();
 
     await levelRow(page, 'Basement').getByRole('button', { name: 'Move out' }).click();
     await page.getByLabel('Move to').selectOption({ label: 'Basement / Shelf' });
@@ -67,12 +67,12 @@ test('registers a household and manages real inventory stock and activity', asyn
     await confirmAction(page);
 
     await levelRow(page, 'Basement / Shelf').getByRole('button', { name: 'Use 1' }).click();
-    await expect(page.getByRole('status')).toContainText('Used 1 bottle from Basement / Shelf.');
+    await expect(page.getByRole('status').filter({ hasText: 'Used 1 bottle from Basement / Shelf.' })).toBeVisible();
 
     await levelRow(page, 'Basement / Shelf').getByRole('button', { name: 'Threshold' }).click();
     await page.getByLabel(/Alert when quantity falls to/).fill('2');
     await page.getByRole('button', { name: 'Save change' }).click();
-    await expect(page.getByRole('status')).toContainText('Low stock threshold updated.');
+    await expect(page.getByRole('status').filter({ hasText: 'Low stock threshold updated.' })).toBeVisible();
 
     await levelRow(page, 'Basement / Shelf').getByRole('button', { name: 'Correct' }).click();
     await page.getByLabel('Observed quantity').fill('0');

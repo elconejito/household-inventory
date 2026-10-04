@@ -117,10 +117,10 @@ class InventoryMovementRecorderTest extends TestCase
 
         $this->getJson('/api/inventory-movement-recorders?per_page=20')
             ->assertUnprocessable()
-            ->assertJsonPath('errors.0.source.pointer', '/per_page');
+            ->assertJsonPath('errors.0.source.pointer', '/data/per_page');
         $this->getJson('/api/inventory-movement-recorders?per_page=101')
             ->assertUnprocessable()
-            ->assertJsonPath('errors.0.source.pointer', '/per_page');
+            ->assertJsonPath('errors.0.source.pointer', '/data/per_page');
     }
 
     public function test_recorder_endpoint_rejects_unsupported_filters_sorts_and_includes(): void
