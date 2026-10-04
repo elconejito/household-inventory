@@ -7,9 +7,10 @@ import { useLocationsQuery } from '../queries/stock';
 import type { NewItem } from '../api/items';
 import ItemEditor from '../components/ItemEditor.vue';
 import InventoryTabs from '../components/InventoryTabs.vue';
+import ItemStockSummary from '../components/ItemStockSummary.vue';
 import StockStatusBadge from '../components/StockStatusBadge.vue';
 import { buildLocationPath } from '../api/stock';
-import { getMonitoredAttentionLevels, hasActiveBuySoonAlert } from '../lib/stock-indicators';
+import { hasActiveBuySoonAlert } from '../lib/stock-indicators';
 
 const route = useRoute();
 const search = ref('');
@@ -38,10 +39,6 @@ const pageHasPrimaryImage = computed(() => itemsQuery.data.value?.data.some((ite
 const createMutation = useCreateItemMutation();
 const categoryOptionsQuery = useItemCategoryOptionsQuery();
 const locationsQuery = useLocationsQuery();
-const selectedLocationName = computed(() => {
-    const selectedLocation = locationsQuery.data.value?.find((location) => location.id === locationId.value);
-    return selectedLocation ? buildLocationPath(selectedLocation, locationsQuery.data.value ?? []) : 'selected location';
-});
 const hasActiveFilters = computed(() => Boolean(debouncedSearch.value || categoryId.value || locationId.value));
 
 watch(() => route.query.create, (value) => {
@@ -96,14 +93,6 @@ async function submitCreateForm(itemData: NewItem): Promise<void> {
     } catch (error) {
         formErrors.value = parseApiErrors(error);
     }
-}
-
-function quantityAtLocation(item: { inventory_levels?: Array<{ location: { id: string }; quantity: number }> }): number {
-    return (item.inventory_levels ?? []).filter((level) => level.location.id === locationId.value).reduce((total, level) => total + level.quantity, 0);
-}
-
-function unitFor(item: { counting_unit: string; counting_unit_plural?: string }, quantity: number): string {
-    return quantity === 1 ? item.counting_unit : item.counting_unit_plural ?? item.counting_unit;
 }
 
 function clearFilters(): void {
@@ -272,7 +261,7 @@ function errorMessage(): string {
                                 <span class="sr-only">Counting unit: </span>
                                 Counted by <span class="font-medium text-ink">{{ item.counting_unit }}</span>
                             </p>
-                            <div class="text-sm font-semibold text-ink sm:pt-0.5"><p>{{ item.total_quantity ?? 0 }} {{ unitFor(item, item.total_quantity ?? 0) }} <span class="font-normal text-ink-muted">total on hand</span></p><p v-if="locationId" class="mt-1 text-xs font-normal text-ink-muted">At {{ selectedLocationName }}: {{ quantityAtLocation(item) }} {{ unitFor(item, quantityAtLocation(item)) }}</p><div v-if="getMonitoredAttentionLevels(item.inventory_levels ?? []).length" class="mt-2 flex flex-wrap gap-1.5"><StockStatusBadge v-for="{ level, indicator } in getMonitoredAttentionLevels(item.inventory_levels ?? [])" :key="level.id" :label="`${indicator.label} · ${buildLocationPath(level.location, locationsQuery.data.value ?? [])}`" :tone="indicator.tone" /></div><ul v-if="item.inventory_levels?.some((level) => level.quantity > 0)" class="mt-2 grid gap-1 text-xs font-normal text-ink-muted"><li v-for="level in item.inventory_levels.filter((candidate) => candidate.quantity > 0)" :key="level.id">{{ buildLocationPath(level.location, locationsQuery.data.value ?? []) }} — {{ level.quantity }} {{ unitFor(item, level.quantity) }}</li></ul></div>
+                            <ItemStockSummary :item="item" :locations="locationsQuery.data.value ?? []" :exact-location-id="locationId" />
                             <div class="flex min-w-0 flex-wrap gap-2 sm:pt-0.5">
                                 <RouterLink v-for="category in item.categories ?? []" :key="category.id" :to="{ name: 'category-detail', params: { category: category.id } }" class="max-w-full truncate rounded-md bg-sage-soft px-2.5 py-1 text-xs font-medium text-sage-dark hover:underline">{{ category.name }}</RouterLink>
                                 <span v-if="!item.categories?.length" class="text-sm text-ink-muted">{{ item.description ? 'No categories yet' : 'No description or categories yet' }}</span>
