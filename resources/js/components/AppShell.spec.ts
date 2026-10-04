@@ -38,6 +38,7 @@ describe('application shell', () => {
             },
         });
 
+        expect(document.activeElement).toBe(document.body);
         expect(wrapper.get('a[href="#main-content"]').text()).toBe('Skip to main content');
         expect(wrapper.get('main#main-content').attributes('tabindex')).toBe('-1');
         expect(wrapper.get('h1').text()).toBe('Inventory');
@@ -54,10 +55,19 @@ describe('application shell', () => {
         expect(document.activeElement).toBe(wrapper.get('h1').element);
         expect(wrapper.get('a[href="/activity"]').attributes('aria-current')).toBe('page');
 
+        const signOutButton = wrapper.get('header button').element as HTMLElement;
+        signOutButton.focus();
+        expect(document.activeElement).toBe(signOutButton);
+
         await router.push({ name: 'activity', query: { item_id: '7' } });
         await flushPromises();
 
-        expect(document.activeElement).toBe(wrapper.get('h1').element);
+        expect(document.activeElement).toBe(signOutButton);
+
+        await router.push({ name: 'activity', query: { item_id: '7' }, hash: '#activity-filters' });
+        await flushPromises();
+
+        expect(document.activeElement).toBe(signOutButton);
 
         wrapper.unmount();
         queryClient.clear();
