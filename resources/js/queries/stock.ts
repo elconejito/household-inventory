@@ -1,12 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query';
 import { computed, type ComputedRef } from 'vue';
 import { getItem, getItems } from '../api/items';
-import { createBuySoon, createLocation, getActiveAlerts, getLocations, getMovements, getTriggeredLevels, recordMovement, resolveAlert, updateThreshold, type AlertListParams, type InventoryAlertStatus, type MovementFilters } from '../api/stock';
+import { createBuySoon, createLocation, getActiveAlerts, getLocations, getMovementRecorders, getMovements, getTriggeredLevels, recordMovement, resolveAlert, updateThreshold, type AlertListParams, type InventoryAlertStatus, type MovementFilters } from '../api/stock';
 
 export const stockQueryKeys = {
     detail: (id: string) => ['items', 'detail', id] as const,
     locations: ['locations'] as const,
     movements: ['inventory-movements'] as const,
+    movementRecorders: ['inventory-movements', 'recorders'] as const,
     movementList: (filters: MovementFilters) => ['inventory-movements', filters] as const,
     triggeredLevels: (params: AlertListParams, status: InventoryAlertStatus) => ['inventory-levels', status, params] as const,
     activeAlerts: (params: AlertListParams, itemId?: string) => ['inventory-alerts', 'active', params, itemId] as const,
@@ -61,10 +62,22 @@ export function useAllItemsQuery(enabled: boolean | ComputedRef<boolean> = true)
     });
 }
 
-export function useMovementsQuery(filters: ComputedRef<MovementFilters>) {
+export function useMovementsQuery(filters: ComputedRef<MovementFilters>, enabled: boolean | ComputedRef<boolean> = true) {
     return useQuery({
         queryKey: computed(() => stockQueryKeys.movementList(filters.value)),
         queryFn: () => getMovements(filters.value),
+        enabled,
+    });
+}
+
+export function useMovementRecordersQuery() {
+    return useQuery({
+        queryKey: stockQueryKeys.movementRecorders,
+        queryFn: async () => {
+            const firstPage = await getMovementRecorders(1);
+            const rest = await Promise.all(Array.from({ length: Math.max(0, firstPage.meta.last_page - 1) }, (_, index) => getMovementRecorders(index + 2)));
+            return [...firstPage.data, ...rest.flatMap((page) => page.data)];
+        },
     });
 }
 

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { http } from '../lib/http';
-import { buildLocationPath, createBuySoon, getActiveAlerts, getMovements, getTriggeredLevels, resolveAlert } from './stock';
+import { buildLocationPath, createBuySoon, getActiveAlerts, getMovementRecorders, getMovements, getTriggeredLevels, resolveAlert } from './stock';
 
 vi.mock('../lib/http', () => ({ http: { get: vi.fn(), post: vi.fn() } }));
 
@@ -31,6 +31,25 @@ describe('stock activity API', () => {
                 'filter[movement_type]': 'transfer',
             },
         });
+    });
+
+    it('sends recorder and UTC date bounds with movement filters', async () => {
+        vi.mocked(http.get).mockResolvedValue({ data: { data: [], meta: { current_page: 1, last_page: 1, total: 0 } } });
+
+        await getMovements({ page: 1, perPage: 25, itemId: '', locationId: '', locationMode: 'either', movementType: '', recordedBy: '8', recordedFrom: '2026-10-01T04:00:00.000Z', recordedUntil: '2026-10-02T03:59:59.999Z' });
+
+        expect(http.get).toHaveBeenCalledWith('/inventory-movements', { params: {
+            include: 'item,entries.location,recorded_by', per_page: 25, page: 1,
+            'filter[recorded_by]': '8', 'filter[recorded_from]': '2026-10-01T04:00:00.000Z', 'filter[recorded_until]': '2026-10-02T03:59:59.999Z',
+        } });
+    });
+
+    it('loads recorder options using the privacy-safe paginated endpoint', async () => {
+        vi.mocked(http.get).mockResolvedValue({ data: { data: [{ type: 'users', id: '8', name: 'Sam' }], meta: { current_page: 1, last_page: 2, total: 101 } } });
+
+        await getMovementRecorders(2);
+
+        expect(http.get).toHaveBeenCalledWith('/inventory-movement-recorders', { params: { per_page: 100, page: 2 } });
     });
 });
 

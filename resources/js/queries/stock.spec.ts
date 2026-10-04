@@ -3,7 +3,7 @@ import { flushPromises, mount } from '@vue/test-utils';
 import { computed, defineComponent, ref } from 'vue';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { http } from '../lib/http';
-import { useAllItemsQuery, useLocationsQuery } from './stock';
+import { useAllItemsQuery, useLocationsQuery, useMovementRecordersQuery } from './stock';
 
 vi.mock('../lib/http', () => ({ http: { get: vi.fn() } }));
 
@@ -60,5 +60,28 @@ describe('catalog picker queries', () => {
         expect(wrapper.text()).toBe('Hose, Filter');
         expect(http.get).toHaveBeenCalledTimes(2);
         expect(http.get).toHaveBeenLastCalledWith('/items', expect.objectContaining({ params: expect.objectContaining({ page: 2, per_page: 100, include: '' }) }));
+    });
+
+    it('loads all recorder options through paginated privacy-safe results', async () => {
+        vi.mocked(http.get).mockImplementation(async (url, config) => {
+            if (url === '/inventory-movement-recorders') {
+                const page = Number((config?.params as { page?: number } | undefined)?.page);
+                return { data: { data: [{ type: 'users', id: String(page), name: `Person ${page}` }], meta: { last_page: 2 } } };
+            }
+            return { data: { data: [], meta: { last_page: 1 } } };
+        });
+        const component = defineComponent({
+            setup() {
+                const recorders = useMovementRecordersQuery();
+                return () => recorders.data.value?.map((recorder) => recorder.name).join(', ') ?? '';
+            },
+        });
+        wrapper = mount(component, { global: { plugins: [[VueQueryPlugin, { queryClient: client }]] } });
+        await flushPromises();
+
+        expect(wrapper.text()).toBe('Person 1, Person 2');
+        expect(http.get).toHaveBeenCalledTimes(2);
+        expect(http.get).toHaveBeenCalledWith('/inventory-movement-recorders', { params: { per_page: 100, page: 1 } });
+        expect(http.get).toHaveBeenCalledWith('/inventory-movement-recorders', { params: { per_page: 100, page: 2 } });
     });
 });

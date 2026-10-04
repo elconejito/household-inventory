@@ -70,7 +70,12 @@ export type MovementFilters = {
     locationId: string;
     locationMode: 'either' | 'from' | 'to';
     movementType: string;
+    recordedBy?: string;
+    recordedFrom?: string;
+    recordedUntil?: string;
 };
+
+export type MovementRecorder = { type: 'users'; id: string; name: string };
 
 export type InventoryAlert = {
     id: string;
@@ -146,7 +151,18 @@ export async function getMovements(filters: MovementFilters): Promise<PageCollec
             ...(filters.itemId ? { 'filter[item_id]': filters.itemId } : {}),
             ...(filters.locationId ? { [`filter[${filters.locationMode === 'either' ? 'location_id' : `${filters.locationMode}_location_id`}]`]: filters.locationId } : {}),
             ...(filters.movementType ? { 'filter[movement_type]': filters.movementType } : {}),
+            ...(filters.recordedBy ? { 'filter[recorded_by]': filters.recordedBy } : {}),
+            ...(filters.recordedFrom ? { 'filter[recorded_from]': filters.recordedFrom } : {}),
+            ...(filters.recordedUntil ? { 'filter[recorded_until]': filters.recordedUntil } : {}),
         },
+    });
+
+    return response.data;
+}
+
+export async function getMovementRecorders(page: number): Promise<PageCollection<MovementRecorder>> {
+    const response = await http.get<PageCollection<MovementRecorder>>('/inventory-movement-recorders', {
+        params: { per_page: 100, page },
     });
 
     return response.data;
