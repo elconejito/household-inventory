@@ -39,6 +39,8 @@ export type ItemListParams = {
     search: string;
     categoryId?: string;
     locationId?: string;
+    stockStatus?: 'in_stock' | 'empty';
+    attentionStatus?: 'needs_attention' | 'empty' | 'low' | 'buy_soon' | 'none';
     sort?: 'name' | '-name';
     page: number;
     perPage: number;
@@ -103,6 +105,8 @@ export async function getItems(params: ItemListParams, include = 'categories,ima
             ...(params.search ? { 'filter[search]': params.search } : {}),
             ...(params.categoryId ? { 'filter[category_id]': params.categoryId } : {}),
             ...(params.locationId ? { 'filter[location_id]': params.locationId } : {}),
+            ...(params.stockStatus ? { 'filter[stock_status]': params.stockStatus } : {}),
+            ...(params.attentionStatus ? { 'filter[attention_status]': params.attentionStatus } : {}),
             page: params.page,
             per_page: params.perPage,
             sort: params.sort ?? 'name',

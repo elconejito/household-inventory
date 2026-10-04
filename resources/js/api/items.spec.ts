@@ -50,6 +50,38 @@ describe('item API client', () => {
         });
     });
 
+    it('sends typed stock and attention filters only when selected', async () => {
+        vi.mocked(http.get).mockResolvedValue({ data: { data: [], links: {}, meta: {} } } as never);
+
+        await getItems({ search: '', stockStatus: 'empty', attentionStatus: 'needs_attention', page: 1, perPage: 10 });
+        await getItems({ search: '', stockStatus: 'in_stock', attentionStatus: 'none', page: 1, perPage: 10 });
+        await getItems({ search: '', attentionStatus: 'buy_soon', page: 1, perPage: 10 });
+
+        expect(http.get).toHaveBeenNthCalledWith(1, '/items', { params: {
+            'filter[stock_status]': 'empty',
+            'filter[attention_status]': 'needs_attention',
+            page: 1,
+            per_page: 10,
+            sort: 'name',
+            include: 'categories,images',
+        } });
+        expect(http.get).toHaveBeenNthCalledWith(2, '/items', { params: {
+            'filter[stock_status]': 'in_stock',
+            'filter[attention_status]': 'none',
+            page: 1,
+            per_page: 10,
+            sort: 'name',
+            include: 'categories,images',
+        } });
+        expect(http.get).toHaveBeenNthCalledWith(3, '/items', { params: {
+            'filter[attention_status]': 'buy_soon',
+            page: 1,
+            per_page: 10,
+            sort: 'name',
+            include: 'categories,images',
+        } });
+    });
+
     it('requests stock levels and active reminders for the item detail page', async () => {
         vi.mocked(http.get).mockResolvedValue({ data: { data: { id: '7', active_alerts: [] } } } as never);
 

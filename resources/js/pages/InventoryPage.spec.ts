@@ -34,6 +34,12 @@ describe('inventory page', () => {
         queryClient.clear();
     });
 
+    async function clickButton(label: string): Promise<void> {
+        const button = wrapper!.findAll('button').find((candidate) => candidate.text() === label);
+        expect(button, `button labeled ${label}`).toBeDefined();
+        await button!.trigger('click');
+    }
+
     it('creates an item, invalidates the item list, and shows the new row', async () => {
         const emptyCollection = {
             data: [],
@@ -109,17 +115,92 @@ describe('inventory page', () => {
 
         await wrapper.get('#item-category-filter').setValue('4');
         await wrapper.get('#item-location-filter').setValue('9');
+        await wrapper.get('#item-stock-filter').setValue('in_stock');
+        await wrapper.get('#item-attention-filter').setValue('none');
         await wrapper.get('#item-sort').setValue('-name');
         await wrapper.get('#item-page-size').setValue('25');
         await flushPromises();
 
+        expect(wrapper.text()).toContain('Stock and attention filters evaluate the whole item across every active location.');
+        expect(wrapper.text()).toContain('The Location filter limits the list to items tracked there');
         expect(http.get).toHaveBeenCalledWith('/items', { params: expect.objectContaining({
             'filter[category_id]': '4',
             'filter[location_id]': '9',
+            'filter[stock_status]': 'in_stock',
+            'filter[attention_status]': 'none',
             sort: '-name',
             per_page: 25,
             include: 'categories,images,inventory_levels.location,active_alerts',
         }) });
+    });
+
+    it('resets pagination and explains empty stock-filtered results with clear filters', async () => {
+        const item = { id: '12', name: 'Paper towels', counting_unit: 'roll', description: null, categories: [], images: [], inventory_levels: [], total_quantity: 0 };
+        vi.mocked(http.get).mockImplementation(async (url, config) => {
+            if (url === '/items') {
+                const params = config?.params as { page?: number } | undefined;
+                return { data: { data: [item], links: {}, meta: { current_page: params?.page ?? 1, last_page: 3, total: 25 } } } as never;
+            }
+            if (url === '/categories') return { data: { data: [], meta: { last_page: 1 } } } as never;
+            if (url === '/locations') return { data: { data: [], meta: { current_page: 1, last_page: 1, total: 0 } } } as never;
+            throw new Error(`Unexpected GET ${String(url)}`);
+        });
+        wrapper = mount(InventoryPage, { global: { plugins: [[VueQueryPlugin, { queryClient }]] } });
+        await flushPromises();
+        await clickButton('Next');
+        await flushPromises();
+        await wrapper.get('#item-stock-filter').setValue('empty');
+        await flushPromises();
+        const itemRequests = vi.mocked(http.get).mock.calls.filter(([url]) => url === '/items');
+        expect(itemRequests.at(-1)?.[1]).toEqual(expect.objectContaining({ params: expect.objectContaining({ page: 1, 'filter[stock_status]': 'empty' }) }));
+
+        vi.mocked(http.get).mockImplementation(async (url) => {
+            if (url === '/items') return { data: { data: [], links: {}, meta: { current_page: 1, last_page: 1, total: 0 } } } as never;
+            if (url === '/categories') return { data: { data: [], meta: { last_page: 1 } } } as never;
+            if (url === '/locations') return { data: { data: [], meta: { current_page: 1, last_page: 1, total: 0 } } } as never;
+            throw new Error(`Unexpected GET ${String(url)}`);
+        });
+        await wrapper.get('#item-attention-filter').setValue('low');
+        await flushPromises();
+
+        expect(wrapper.text()).toContain('No items match these filters');
+        expect(wrapper.findAll('button').some((button) => button.text() === 'Add your first item')).toBe(false);
+        expect(wrapper.findAll('button').some((button) => button.text() === 'Clear filters')).toBe(true);
+        await clickButton('Clear filters');
+        await flushPromises();
+        expect((wrapper.get('#item-stock-filter').element as HTMLSelectElement).value).toBe('');
+        expect((wrapper.get('#item-attention-filter').element as HTMLSelectElement).value).toBe('');
+    });
+
+    it('keeps the all-location item total when an exact location is selected with stock filters', async () => {
+        const item = {
+            id: '12', name: 'Paper towels', counting_unit: 'roll', counting_unit_plural: 'rolls', description: null, categories: [], images: [], total_quantity: 4,
+            inventory_levels: [
+                { id: 'level-1', quantity: 0, alert_threshold: null, stock_status: 'empty', alert_status: 'unmonitored', location: { id: '9', name: 'Pantry', description: null } },
+                { id: 'level-2', quantity: 4, alert_threshold: null, stock_status: 'in_stock', alert_status: 'unmonitored', location: { id: '10', name: 'Closet', description: null } },
+            ],
+        };
+        vi.mocked(http.get).mockImplementation(async (url) => {
+            if (url === '/items') return { data: { data: [item], links: {}, meta: { current_page: 1, last_page: 1, total: 1 } } } as never;
+            if (url === '/categories') return { data: { data: [], meta: { last_page: 1 } } } as never;
+            if (url === '/locations') return { data: { data: [{ id: '9', name: 'Pantry', description: null }, { id: '10', name: 'Closet', description: null }], meta: { current_page: 1, last_page: 1, total: 2 } } } as never;
+            throw new Error(`Unexpected GET ${String(url)}`);
+        });
+        wrapper = mount(InventoryPage, { global: { plugins: [[VueQueryPlugin, { queryClient }]] } });
+        await flushPromises();
+        await wrapper.get('#item-location-filter').setValue('9');
+        await wrapper.get('#item-stock-filter').setValue('in_stock');
+        await wrapper.get('#item-attention-filter').setValue('empty');
+        await flushPromises();
+
+        const row = wrapper.get('li article');
+        expect(row.text()).toContain('4 rolls total on hand');
+        expect(row.text()).toContain('At Pantry: 0 rolls');
+        expect(http.get).toHaveBeenCalledWith('/items', expect.objectContaining({ params: expect.objectContaining({
+            'filter[location_id]': '9',
+            'filter[stock_status]': 'in_stock',
+            'filter[attention_status]': 'empty',
+        }) }));
     });
 
     it('keeps no-photo item names in the wide first column on desktop', async () => {

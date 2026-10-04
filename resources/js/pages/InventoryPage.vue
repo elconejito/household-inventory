@@ -18,6 +18,8 @@ const page = ref(1);
 const perPage = ref<10 | 25 | 50 | 100>(10);
 const categoryId = ref('');
 const locationId = ref('');
+const stockStatus = ref<'' | 'in_stock' | 'empty'>('');
+const attentionStatus = ref<'' | 'needs_attention' | 'empty' | 'low' | 'buy_soon' | 'none'>('');
 const sort = ref<'name' | '-name'>('name');
 const showCreateForm = ref(false);
 const creationBusy = ref(false);
@@ -27,6 +29,8 @@ const listParams = computed(() => ({
     search: debouncedSearch.value,
     categoryId: categoryId.value,
     locationId: locationId.value,
+    stockStatus: stockStatus.value || undefined,
+    attentionStatus: attentionStatus.value || undefined,
     sort: sort.value,
     page: page.value,
     perPage: perPage.value,
@@ -35,7 +39,7 @@ const itemsQuery = useItemsQuery(listParams);
 const pageHasPrimaryImage = computed(() => itemsQuery.data.value?.data.some((item) => item.images?.some((image) => image.is_primary)) ?? false);
 const categoryOptionsQuery = useItemCategoryOptionsQuery();
 const locationsQuery = useLocationsQuery();
-const hasActiveFilters = computed(() => Boolean(debouncedSearch.value || categoryId.value || locationId.value));
+const hasActiveFilters = computed(() => Boolean(debouncedSearch.value || categoryId.value || locationId.value || stockStatus.value || attentionStatus.value));
 
 watch(() => route.query.create, (value) => {
     if (value === '1') {
@@ -54,7 +58,7 @@ watch(search, (value) => {
     }, 300);
 });
 
-watch([categoryId, locationId, sort, perPage], () => {
+watch([categoryId, locationId, stockStatus, attentionStatus, sort, perPage], () => {
     page.value = 1;
 });
 
@@ -78,6 +82,8 @@ function clearFilters(): void {
     debouncedSearch.value = '';
     categoryId.value = '';
     locationId.value = '';
+    stockStatus.value = '';
+    attentionStatus.value = '';
     sort.value = 'name';
     perPage.value = 10;
     page.value = 1;
@@ -151,34 +157,54 @@ function errorMessage(): string {
                 </div>
             </div>
 
-            <div class="grid gap-3 border-b border-line px-5 py-4 sm:grid-cols-2 lg:grid-cols-4 sm:px-6">
-                <div class="grid gap-1.5">
+            <div class="grid gap-3 border-b border-line px-5 py-4 sm:grid-cols-2 lg:grid-cols-3 sm:px-6">
+                <div class="grid min-w-0 gap-1.5">
                     <label for="item-category-filter" class="text-xs font-semibold text-ink-muted">Category</label>
-                    <select id="item-category-filter" v-model="categoryId" :disabled="categoryOptionsQuery.isPending.value || categoryOptionsQuery.isError.value" class="min-h-10 rounded-md border border-line bg-white px-3 text-sm disabled:bg-surface-soft">
+                    <select id="item-category-filter" v-model="categoryId" :disabled="categoryOptionsQuery.isPending.value || categoryOptionsQuery.isError.value" class="min-h-10 w-full min-w-0 max-w-full rounded-md border border-line bg-white px-3 text-sm disabled:bg-surface-soft">
                         <option value="">All categories</option>
                         <option v-for="category in categoryOptionsQuery.data.value ?? []" :key="category.id" :value="category.id">{{ category.name }}</option>
                     </select>
                     <p v-if="categoryOptionsQuery.isError.value" class="text-xs text-rose-700" role="alert">Categories unavailable. <button type="button" class="underline" @click="categoryOptionsQuery.refetch()">Retry</button></p>
                     <p v-else-if="categoryOptionsQuery.isPending.value" class="text-xs text-ink-muted" role="status">Loading categories…</p>
                 </div>
-                <div class="grid gap-1.5">
+                <div class="grid min-w-0 gap-1.5">
                     <label for="item-location-filter" class="text-xs font-semibold text-ink-muted">Location</label>
-                    <select id="item-location-filter" v-model="locationId" :disabled="locationsQuery.isPending.value || locationsQuery.isError.value" class="min-h-10 rounded-md border border-line bg-white px-3 text-sm disabled:bg-surface-soft">
+                    <select id="item-location-filter" v-model="locationId" :disabled="locationsQuery.isPending.value || locationsQuery.isError.value" class="min-h-10 w-full min-w-0 max-w-full rounded-md border border-line bg-white px-3 text-sm disabled:bg-surface-soft">
                         <option value="">All locations</option>
                         <option v-for="location in locationsQuery.data.value ?? []" :key="location.id" :value="location.id">{{ buildLocationPath(location, locationsQuery.data.value ?? []) }}</option>
                     </select>
                     <p v-if="locationsQuery.isError.value" class="text-xs text-rose-700" role="alert">Locations unavailable. <button type="button" class="underline" @click="locationsQuery.refetch()">Retry</button></p>
                     <p v-else-if="locationsQuery.isPending.value" class="text-xs text-ink-muted" role="status">Loading locations…</p>
                 </div>
-                <div class="grid gap-1.5">
-                    <label for="item-sort" class="text-xs font-semibold text-ink-muted">Sort by name</label>
-                    <select id="item-sort" v-model="sort" class="min-h-10 rounded-md border border-line bg-white px-3 text-sm"><option value="name">A to Z</option><option value="-name">Z to A</option></select>
+                <div class="grid min-w-0 gap-1.5">
+                    <label for="item-stock-filter" class="text-xs font-semibold text-ink-muted">Stock on hand</label>
+                    <select id="item-stock-filter" v-model="stockStatus" class="min-h-10 w-full min-w-0 max-w-full rounded-md border border-line bg-white px-3 text-sm">
+                        <option value="">All stock levels</option>
+                        <option value="in_stock">Stock on hand</option>
+                        <option value="empty">No stock on hand</option>
+                    </select>
                 </div>
-                <div class="grid gap-1.5">
+                <div class="grid min-w-0 gap-1.5">
+                    <label for="item-attention-filter" class="text-xs font-semibold text-ink-muted">Attention</label>
+                    <select id="item-attention-filter" v-model="attentionStatus" class="min-h-10 w-full min-w-0 max-w-full rounded-md border border-line bg-white px-3 text-sm">
+                        <option value="">All attention states</option>
+                        <option value="needs_attention">Needs attention</option>
+                        <option value="empty">Empty monitored location</option>
+                        <option value="low">Low monitored location</option>
+                        <option value="buy_soon">Buy soon</option>
+                        <option value="none">No attention needed</option>
+                    </select>
+                </div>
+                <div class="grid min-w-0 gap-1.5">
+                    <label for="item-sort" class="text-xs font-semibold text-ink-muted">Sort by name</label>
+                    <select id="item-sort" v-model="sort" class="min-h-10 w-full min-w-0 max-w-full rounded-md border border-line bg-white px-3 text-sm"><option value="name">A to Z</option><option value="-name">Z to A</option></select>
+                </div>
+                <div class="grid min-w-0 gap-1.5">
                     <label for="item-page-size" class="text-xs font-semibold text-ink-muted">Items per page</label>
-                    <select id="item-page-size" v-model.number="perPage" class="min-h-10 rounded-md border border-line bg-white px-3 text-sm"><option :value="10">10</option><option :value="25">25</option><option :value="50">50</option><option :value="100">100</option></select>
+                    <select id="item-page-size" v-model.number="perPage" class="min-h-10 w-full min-w-0 max-w-full rounded-md border border-line bg-white px-3 text-sm"><option :value="10">10</option><option :value="25">25</option><option :value="50">50</option><option :value="100">100</option></select>
                 </div>
             </div>
+            <p class="border-b border-line px-5 py-3 text-xs leading-5 text-ink-muted sm:px-6">Stock and attention filters evaluate the whole item across every active location. The Location filter limits the list to items tracked there and changes the per-location details shown.</p>
 
             <div v-if="itemsQuery.data.value?.data.length" class="hidden gap-6 border-b border-line bg-surface-soft/60 px-6 py-2.5 text-xs font-semibold uppercase tracking-wide text-ink-muted sm:grid" :class="pageHasPrimaryImage ? 'grid-cols-[3.5rem_minmax(0,1.3fr)_9rem_8rem_minmax(0,1fr)]' : 'grid-cols-[minmax(0,1.3fr)_9rem_8rem_minmax(0,1fr)]'" aria-hidden="true">
                 <span v-if="pageHasPrimaryImage" aria-hidden="true"></span>
@@ -215,7 +241,7 @@ function errorMessage(): string {
                             {{ hasActiveFilters ? 'Try changing your search or filters.' : 'Add a supply you keep at home to start building your list.' }}
                         </p>
                         <button v-if="hasActiveFilters" type="button" class="mt-4 inline-flex min-h-10 items-center justify-center rounded-md border border-line px-4 text-sm font-semibold text-ink hover:bg-surface-soft" @click="clearFilters">Clear filters</button>
-                        <button v-if="!debouncedSearch" type="button" class="mt-4 inline-flex min-h-10 items-center justify-center rounded-md bg-sage px-4 text-sm font-semibold text-white transition hover:bg-sage-dark focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sage" @click="toggleCreateForm">
+                        <button v-if="!hasActiveFilters" type="button" class="mt-4 inline-flex min-h-10 items-center justify-center rounded-md bg-sage px-4 text-sm font-semibold text-white transition hover:bg-sage-dark focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sage" @click="toggleCreateForm">
                             Add your first item
                         </button>
                     </div>
