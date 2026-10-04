@@ -20,6 +20,7 @@ export default defineConfig({
             env: {
                 ...process.env,
                 APP_ENV: 'testing',
+                APP_URL: 'http://127.0.0.1:8000',
                 APP_KEY: 'base64:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=',
                 DB_CONNECTION: 'mysql',
                 DB_DATABASE: 'household_inventory_test',
