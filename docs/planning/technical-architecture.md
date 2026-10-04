@@ -20,12 +20,12 @@ Domain discriminator columns use names that identify their context, such as `mov
 
 ### Image processing
 
-Item-image uploads accept JPEG, PNG, WebP, and HEIC/HEIF up to 20 MB. SVG and animated images are rejected. The processor applies embedded orientation, strips metadata including GPS data, and produces two non-upscaled, aspect-preserving WebP derivatives at an initial quality setting of approximately 85:
+Item-image uploads accept JPEG, PNG, and WebP up to 20 MB in 1.0. HEIC/HEIF support is deferred to a future version. SVG and animated images are rejected. The processor applies embedded orientation, strips metadata including GPS data, and produces two non-upscaled, aspect-preserving WebP derivatives at an initial quality setting of approximately 85:
 
 - Thumbnail: maximum 320 by 320 pixels
 - Display: maximum 1920 by 1080 pixels
 
-Transparency is preserved when present. The upload source is discarded after both derivatives are stored. HEIC/HEIF decoding support must be verified in the selected local and production image-processing runtime before launch; an unsupported decode returns a clear validation error rather than retaining an unprocessed original.
+Transparency is preserved when present. The upload source is discarded after both derivatives are stored. HEIC/HEIF uploads return a clear validation error directing the user to export an accepted format rather than retaining an unprocessed original. Adding these formats later requires verifying a compatible decoder in both local and production runtimes; no additional decoder is required for 1.0.
 
 The `inventory-images` disk is private. The API exposes stable authenticated thumbnail and display routes and never exposes storage paths. With local storage Laravel streams the authorized file with private caching headers. After migration to S3, the same application routes may redirect to short-lived signed URLs without changing the resource contract or Vue components.
 

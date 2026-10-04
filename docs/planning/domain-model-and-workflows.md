@@ -329,7 +329,8 @@ Rules:
 - Storage uses Laravel's filesystem abstraction so local and object storage can be selected by configuration.
 - The configured disk stores only a 320 by 320 maximum thumbnail and a 1920 by 1080 maximum display derivative, both aspect-preserving and without upscaling.
 - The temporary upload is discarded after both derivatives are persisted; no original file or original filename is retained.
-- JPEG, PNG, WebP, and HEIC/HEIF uploads up to 20 MB are accepted; SVG and animated images are rejected.
+- JPEG, PNG, and WebP uploads up to 20 MB are accepted in 1.0; SVG and animated images are rejected.
+- HEIC/HEIF support is deferred to a future version. For 1.0, these photos must be exported to an accepted format before uploading.
 - Orientation is normalized and metadata, including GPS data, is stripped before both derivatives are encoded as WebP with transparency preserved when applicable.
 
 ### Note

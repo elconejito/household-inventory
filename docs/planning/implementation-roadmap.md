@@ -112,7 +112,7 @@ Add the supporting context needed for less self-explanatory supplies.
 - Polymorphic Notes for Items, Categories, Locations, Inventory Movements, and Inventory Alerts
 - Plain-text note entry and editing with preserved line breaks, author, timestamps, edited state, newest-first order, and soft deletion
 - Item-specific multiple images with exactly one active primary image
-- JPEG, PNG, WebP, and supported HEIC/HEIF validation up to 20 MB
+- JPEG, PNG, and WebP validation up to 20 MB; HEIC/HEIF support deferred to a future version
 - Orientation normalization, metadata removal, and two WebP derivatives only: 320×320 thumbnail and 1920×1080 display bounds
 - Configurable private `inventory-images` disk using local storage initially
 - Authenticated image delivery routes exposing URLs rather than storage paths
