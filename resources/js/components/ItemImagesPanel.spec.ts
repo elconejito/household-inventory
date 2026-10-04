@@ -122,4 +122,53 @@ describe('item images panel', () => {
         expect(wrapper!.find('[role="alert"]').exists()).toBe(false);
         expect(wrapper!.find('#image-upload-8').exists()).toBe(true);
     });
+
+    it('does not clear the next item photo selection when an old upload succeeds', async () => {
+        let finishUpload: ((result: unknown) => void) | undefined;
+        vi.mocked(http.post).mockImplementation(() => new Promise((resolve) => { finishUpload = resolve; }) as never);
+        mountPanel();
+        await flushPromises();
+        const originalPhoto = new File(['original'], 'original.png', { type: 'image/png' });
+        const originalInput = wrapper!.get('#image-upload-7');
+        Object.defineProperty(originalInput.element, 'files', { configurable: true, value: [originalPhoto] });
+        await originalInput.trigger('change');
+        await wrapper!.findAll('form').at(-1)!.trigger('submit');
+        await flushPromises();
+        await wrapper!.setProps({ itemId: '8' });
+        await flushPromises();
+
+        const nextPhoto = new File(['next'], 'next.png', { type: 'image/png' });
+        const nextInput = wrapper!.get('#image-upload-8');
+        (nextInput.element as HTMLInputElement).disabled = false;
+        Object.defineProperty(nextInput.element, 'files', { configurable: true, value: [nextPhoto] });
+        await nextInput.trigger('change');
+        const nextCaption = wrapper!.get('#image-upload-caption-8');
+        (nextCaption.element as HTMLInputElement).disabled = false;
+        await nextCaption.setValue('Photo for item eight');
+
+        finishUpload!({ data: { data: { ...primary, id: 'image-3' } } });
+        await flushPromises();
+
+        expect((wrapper!.get('#image-upload-caption-8').element as HTMLInputElement).value).toBe('Photo for item eight');
+        expect((wrapper!.findAll('form').at(-1)!.get('button[type="submit"]').element as HTMLButtonElement).disabled).toBe(false);
+    });
+
+    it('does not reopen an old caption editor when its update fails on the next item', async () => {
+        let rejectUpdate: ((cause: unknown) => void) | undefined;
+        vi.mocked(http.patch).mockImplementation(() => new Promise((_resolve, reject) => { rejectUpdate = reject; }) as never);
+        mountPanel();
+        await flushPromises();
+        await wrapper!.findAll('button').find((button) => button.text() === 'Edit caption')!.trigger('click');
+        await wrapper!.get('#image-caption-image-1').setValue('Changed on item seven');
+        await wrapper!.findAll('form')[0].trigger('submit');
+        await flushPromises();
+        await wrapper!.setProps({ itemId: '8' });
+        await flushPromises();
+
+        rejectUpdate!(new Error('Item seven caption update failed'));
+        await flushPromises();
+
+        expect(wrapper!.find('#image-caption-image-1').exists()).toBe(false);
+        expect(wrapper!.find('[role="alert"]').exists()).toBe(false);
+    });
 });

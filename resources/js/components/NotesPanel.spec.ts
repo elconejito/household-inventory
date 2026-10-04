@@ -116,12 +116,16 @@ describe('notes panel', () => {
         await flushPromises();
         await wrapper!.setProps({ contextId: '8' });
         await flushPromises();
+        const nextContextNote = wrapper!.get('#new-note-items-8');
+        (nextContextNote.element as HTMLTextAreaElement).disabled = false;
+        await nextContextNote.setValue('Draft for item eight');
 
         finishSave!({ data: { data: note } });
         await flushPromises();
 
         expect(invalidate).toHaveBeenCalledWith({ queryKey: ['notes', 'items', '7'] });
         expect(invalidate).not.toHaveBeenCalledWith({ queryKey: ['notes', 'items', '8'] });
+        expect((wrapper!.get('#new-note-items-8').element as HTMLTextAreaElement).value).toBe('Draft for item eight');
     });
 
     it('does not show a late note-create failure in the next context', async () => {
