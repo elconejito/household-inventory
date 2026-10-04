@@ -34,6 +34,7 @@ describe('item stock detail', () => {
         vi.mocked(http.get).mockImplementation(async (url) => {
             if (String(url).includes('/images')) return { data: { data: [] } } as never;
             if (String(url).endsWith('/notes')) return { data: { data: [], meta: { current_page: 1, last_page: 1, total: 0 } } } as never;
+            if (String(url) === '/inventory-movements') return { data: { data: [], meta: { current_page: 1, last_page: 1, total: 0 } } } as never;
             if (String(url).startsWith('/items/')) return { data: { data: item } } as never;
             if (String(url) === '/inventory-alerts') return { data: { data: [], meta: { current_page: 1, last_page: 1, total: 0 } } } as never;
             return { data: { data: [{ id: '2', name: 'Pantry', description: null, parent: null }, { id: '3', name: 'Closet', description: null, parent: null }, { id: '4', name: 'Garage', description: null, parent: null }], meta: { current_page: 1, last_page: 1, total: 3 } } } as never;
@@ -80,6 +81,20 @@ describe('item stock detail', () => {
 
         expect(http.post).toHaveBeenCalledWith('/inventory-movements', { data: { movement_type: 'correction', item_id: '7', location_id: '2', observed_quantity: 4 } });
         expect(wrapper!.get('[role="alert"]').text()).toContain('Use a whole number.');
+    });
+
+    it('refreshes recent item activity after a stock movement succeeds', async () => {
+        vi.mocked(http.post).mockResolvedValue({ data: { data: { id: 'movement-11' } } } as never);
+        mountPage();
+        await flushPromises();
+        const movementRequestCount = () => vi.mocked(http.get).mock.calls.filter(([url]) => String(url) === '/inventory-movements').length;
+        expect(movementRequestCount()).toBe(1);
+
+        const closet = wrapper!.findAll('li').find((row) => row.text().includes('Closet'))!;
+        await closet.findAll('button').find((button) => button.text() === 'Use 1')!.trigger('click');
+        await flushPromises();
+
+        expect(movementRequestCount()).toBe(2);
     });
 
     it('restocks directly at a location without an existing stock level', async () => {

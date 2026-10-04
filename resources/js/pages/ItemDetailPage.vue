@@ -9,6 +9,7 @@ import ItemImagesPanel from '../components/ItemImagesPanel.vue';
 import ArchiveResourceButton from '../components/ArchiveResourceButton.vue';
 import ItemEditor from '../components/ItemEditor.vue';
 import InventoryTabs from '../components/InventoryTabs.vue';
+import RecentItemMovements from '../components/RecentItemMovements.vue';
 import type { ItemEditSnapshot, ItemUpdate, NewItem } from '../api/items';
 import { useUpdateItemMutation } from '../queries/items';
 
@@ -385,7 +386,8 @@ async function toggleBuySoon(): Promise<void> {
                 </form>
             </section>
             <section v-if="showCreateLocation" class="mt-6 rounded-panel border border-line bg-white p-5" aria-labelledby="create-location-title"><h2 id="create-location-title" class="text-lg font-semibold text-ink">Create a location</h2><p v-if="locationErrors.form" class="mt-3 rounded-md border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800" role="alert">{{ locationErrors.form }}</p><p v-for="(message, field) in locationErrors.fields" :key="field" class="mt-3 text-sm text-rose-700" role="alert">{{ message }}</p><form class="mt-4 grid gap-4 sm:grid-cols-2" @submit.prevent="addLocation"><div class="grid gap-2"><label for="location-name" class="text-sm font-medium text-ink">Name</label><input id="location-name" v-model="newLocationName" required maxlength="255" class="min-h-11 rounded-md border border-line px-3"></div><div class="grid gap-2"><label for="location-parent" class="text-sm font-medium text-ink">Inside another location <span class="font-normal text-ink-muted">(optional)</span></label><select id="location-parent" v-model="newLocationParent" class="min-h-11 rounded-md border border-line bg-white px-3"><option value="">No parent</option><option v-for="option in locationOptions" :key="option.location.id" :value="option.location.id">{{ option.path }}</option></select></div><div class="flex gap-3 sm:col-span-2"><button :disabled="createLocationMutation.isPending.value" class="min-h-11 rounded-md bg-sage px-4 text-sm font-semibold text-white">Create location</button><button type="button" class="min-h-11 rounded-md border border-line px-4" @click="showCreateLocation = false">Cancel</button></div></form></section>
-            <NotesPanel class="mt-6" type="items" :context-id="itemId" />
+            <RecentItemMovements v-if="itemQuery.data.value.id === itemId" :key="itemQuery.data.value.id" :item-id="itemQuery.data.value.id" :locations="locationsQuery.data.value ?? []" />
+            <NotesPanel class="mt-6" type="items" :context-id="itemQuery.data.value.id" />
         </template>
     </section>
 </template>
