@@ -148,8 +148,7 @@ class HouseholdAdministrationTest extends TestCase
         [$owner, $household] = $this->householdOwner();
 
         $created = $this->signInAs($owner)
-            ->withHeader('Host', 'attacker.invalid')
-            ->postJson('/api/household-invitations', ['data' => ['email' => 'invite@example.com']]);
+            ->postJson('http://attacker.invalid/api/household-invitations', ['data' => ['email' => 'invite@example.com']]);
         $created->assertCreated();
 
         $createdUrl = (string) $created->json('data.invitation_url');
@@ -161,7 +160,7 @@ class HouseholdAdministrationTest extends TestCase
         $this->assertSame($expectedUrlPrefix.$createdToken, $createdUrl);
         $this->assertSame(hash('sha256', $createdToken), $invitation->token_hash);
 
-        $resent = $this->postJson('/api/household-invitations/'.$invitation->id.'/resend');
+        $resent = $this->postJson('http://attacker.invalid/api/household-invitations/'.$invitation->id.'/resend');
         $resent->assertOk();
 
         $resentUrl = (string) $resent->json('data.invitation_url');
