@@ -25,8 +25,8 @@ describe('item editor', () => {
         queryClient.clear();
     });
 
-    function mountEditor(props: { item: typeof item | null; errors?: { fields: Record<string, string>; form: string } }) {
-        wrapper = mount(ItemEditor, { props, global: { plugins: [createPinia(), [VueQueryPlugin, { queryClient }]] } });
+    function mountEditor(props: { item: typeof item | null; errors?: { fields: Record<string, string>; form: string }; saving?: boolean }, slots?: Record<string, string>) {
+        wrapper = mount(ItemEditor, { props, slots, global: { plugins: [createPinia(), [VueQueryPlugin, { queryClient }]] } });
     }
 
     it('preserves a same-item draft when refreshed props arrive', async () => {
@@ -82,5 +82,37 @@ describe('item editor', () => {
             description: 'Under sink\nleft side',
             category_ids: ['1', '2'],
         });
+        expect(wrapper!.emitted('submit')?.[0]).toHaveLength(3);
+        expect(wrapper!.emitted('submit')?.[0]?.[2]).toBe('detail');
+    });
+
+    it('emits stock intent only from its submit button and defaults Enter submissions to detail', async () => {
+        mountEditor({ item: null });
+        await flushPromises();
+        const form = wrapper!.get('form').element as HTMLFormElement;
+        const stockButton = wrapper!.findAll('button[type="submit"]').find((button) => button.text() === 'Save and add stock')!.element as HTMLButtonElement;
+
+        form.dispatchEvent(new SubmitEvent('submit', { bubbles: true, cancelable: true, submitter: stockButton }));
+        form.dispatchEvent(new SubmitEvent('submit', { bubbles: true, cancelable: true }));
+
+        expect(wrapper!.emitted('submit')?.map((event) => event[2])).toEqual(['stock', 'detail']);
+    });
+
+    it('keeps the create-fields slot create-only and disables editable fields and cancel while saving', async () => {
+        mountEditor({ item: null, saving: true }, { 'create-fields': '<label>Photo<input type="file" /></label>' });
+        await flushPromises();
+
+        expect(wrapper!.find('input[type="file"]:disabled').exists()).toBe(true);
+        expect(wrapper!.get('#item-name').attributes('disabled')).toBeDefined();
+        expect(wrapper!.get('#item-counting-unit').attributes('disabled')).toBeDefined();
+        expect(wrapper!.get('#item-description').attributes('disabled')).toBeDefined();
+        expect(wrapper!.find('input[type="checkbox"]:disabled').exists()).toBe(true);
+        expect(wrapper!.findAll('button').find((button) => button.text() === 'Cancel')!.attributes('disabled')).toBeDefined();
+        const form = wrapper!.get('form').element as HTMLFormElement;
+        form.dispatchEvent(new SubmitEvent('submit', { bubbles: true, cancelable: true }));
+        expect(wrapper!.emitted('submit')).toBeUndefined();
+
+        await wrapper!.setProps({ item });
+        expect(wrapper!.find('[type="file"]').exists()).toBe(false);
     });
 });

@@ -6,12 +6,12 @@ import { http } from '../lib/http';
 import { AxiosError } from 'axios';
 import ItemDetailPage from './ItemDetailPage.vue';
 
-const { routeState } = vi.hoisted(() => ({ routeState: { params: { item: '7' }, query: {} as Record<string, string> } }));
+const { routeState } = vi.hoisted(() => ({ routeState: { params: { item: '7' }, query: {} as Record<string, string | string[]> } }));
 vi.mock('../lib/http', () => ({ http: { get: vi.fn(), post: vi.fn(), patch: vi.fn(), delete: vi.fn() } }));
 vi.mock('vue-router', async (importOriginal) => {
     const vue = await import('vue');
     const route = vue.reactive(routeState);
-    return { ...(await importOriginal<typeof import('vue-router')>()), useRoute: () => route, setMockItem: (id: string) => { route.params.item = id; }, setMockQuery: (query: Record<string, string>) => { route.query = query; } };
+    return { ...(await importOriginal<typeof import('vue-router')>()), useRoute: () => route, setMockItem: (id: string) => { route.params.item = id; }, setMockQuery: (query: Record<string, string | string[]>) => { route.query = query; } };
 });
 
 const item = {
@@ -29,7 +29,7 @@ describe('item stock detail', () => {
     beforeEach(async () => {
         vi.clearAllMocks();
         (await import('vue-router') as unknown as { setMockItem: (id: string) => void }).setMockItem('7');
-        (await import('vue-router') as unknown as { setMockQuery: (query: Record<string, string>) => void }).setMockQuery({});
+        (await import('vue-router') as unknown as { setMockQuery: (query: Record<string, string | string[]>) => void }).setMockQuery({});
         queryClient = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
         vi.mocked(http.get).mockImplementation(async (url) => {
             if (String(url).includes('/images')) return { data: { data: [] } } as never;
@@ -219,7 +219,7 @@ describe('item stock detail', () => {
     });
 
     it('opens a restock at the requested existing stock location and does not reopen after save', async () => {
-        (await import('vue-router') as unknown as { setMockQuery: (query: Record<string, string>) => void }).setMockQuery({ restock_location: '2' });
+        (await import('vue-router') as unknown as { setMockQuery: (query: Record<string, string | string[]>) => void }).setMockQuery({ restock_location: '2', restock: '1' });
         vi.mocked(http.post).mockResolvedValue({ data: { data: { id: '24' } } } as never);
         mountPage();
         await flushPromises();
@@ -239,7 +239,7 @@ describe('item stock detail', () => {
     });
 
     it('prefills a restock at the requested location when no stock level exists yet', async () => {
-        (await import('vue-router') as unknown as { setMockQuery: (query: Record<string, string>) => void }).setMockQuery({ restock_location: '4' });
+        (await import('vue-router') as unknown as { setMockQuery: (query: Record<string, string | string[]>) => void }).setMockQuery({ restock_location: '4' });
         mountPage();
         await flushPromises();
 
@@ -255,7 +255,7 @@ describe('item stock detail', () => {
         await flushPromises();
         const closet = wrapper!.findAll('li').find((row) => row.text().includes('Closet'))!;
         await closet.findAll('button').find((button) => button.text() === 'Use 1')!.trigger('click');
-        (await import('vue-router') as unknown as { setMockQuery: (query: Record<string, string>) => void }).setMockQuery({ restock_location: '2' });
+        (await import('vue-router') as unknown as { setMockQuery: (query: Record<string, string | string[]>) => void }).setMockQuery({ restock_location: '2' });
         await flushPromises();
 
         expect(wrapper!.findAll('#action-title')).toHaveLength(0);
@@ -264,6 +264,49 @@ describe('item stock detail', () => {
 
         expect(wrapper!.get('#action-title').text()).toBe('Restock');
         expect(wrapper!.text()).toContain('Restock 1 pack at Pantry.');
+    });
+
+    it('opens a generic restock once for restock=1 and keeps it closed after cancel or refetch', async () => {
+        (await import('vue-router') as unknown as { setMockQuery: (query: Record<string, string | string[]>) => void }).setMockQuery({ restock: '1' });
+        mountPage();
+        await flushPromises();
+
+        expect(wrapper!.get('#action-title').text()).toBe('Restock');
+        expect(wrapper!.find('#new-level-location').exists()).toBe(true);
+        expect((wrapper!.get('#new-level-location').element as HTMLSelectElement).value).toBe('');
+        await wrapper!.findAll('button').find((button) => button.text() === 'Cancel')!.trigger('click');
+        await queryClient.invalidateQueries({ queryKey: ['items', 'detail', '7'] });
+        await flushPromises();
+
+        expect(wrapper!.findAll('#action-title')).toHaveLength(0);
+    });
+
+    it('keeps malformed restock query values inert', async () => {
+        (await import('vue-router') as unknown as { setMockQuery: (query: Record<string, string | string[]>) => void }).setMockQuery({ restock: ['1'] });
+        mountPage();
+        await flushPromises();
+
+        expect(wrapper!.findAll('#action-title')).toHaveLength(0);
+    });
+
+    it('keeps generic restock open with no locations and disables saving until a location exists', async () => {
+        (await import('vue-router') as unknown as { setMockQuery: (query: Record<string, string | string[]>) => void }).setMockQuery({ restock: '1' });
+        vi.mocked(http.get).mockImplementation(async (url) => {
+            if (String(url) === '/locations') return { data: { data: [], meta: { current_page: 1, last_page: 1, total: 0 } } } as never;
+            if (String(url).includes('/images')) return { data: { data: [] } } as never;
+            if (String(url).endsWith('/notes')) return { data: { data: [], meta: { current_page: 1, last_page: 1, total: 0 } } } as never;
+            if (String(url) === '/inventory-movements') return { data: { data: [], meta: { current_page: 1, last_page: 1, total: 0 } } } as never;
+            if (String(url).startsWith('/items/')) return { data: { data: item } } as never;
+            if (String(url) === '/inventory-alerts') return { data: { data: [], meta: { current_page: 1, last_page: 1, total: 0 } } } as never;
+            return { data: { data: [] } } as never;
+        });
+        mountPage();
+        await flushPromises();
+
+        expect(wrapper!.get('#action-title').text()).toBe('Restock');
+        expect(wrapper!.text()).toContain('Add a location before recording this restock.');
+        expect(actionForm().find('button[type="submit"]').attributes('disabled')).toBeDefined();
+        expect(actionForm().text()).toContain('Create a location');
     });
 
     it('does not send a patch when the item editor values are unchanged', async () => {

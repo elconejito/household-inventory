@@ -50,6 +50,7 @@ const manualAlert = computed(() => itemAlertQuery.data.value?.data[0] ?? null);
 const alertPending = computed(() => buySoonMutation.isPending.value || resolveAlertMutation.isPending.value);
 
 const locationOptions = computed(() => (locationsQuery.data.value ?? []).map((location) => ({ location, path: locationPath(location) })));
+const canSaveNewRestock = computed(() => locationOptions.value.some(({ location }) => location.id === targetLocationId.value));
 const otherLocations = computed(() => locationOptions.value.filter(({ location }) => location.id !== selectedLevel.value?.location.id));
 const positiveLevels = computed(() => (itemQuery.data.value?.inventory_levels ?? []).filter((level) => level.quantity > 0 && level.id !== selectedLevel.value?.id));
 
@@ -98,22 +99,35 @@ watch(itemId, () => {
 });
 
 let handledRestockRequest = '';
-watch(() => [itemId.value, route.query.restock_location, itemQuery.data.value, locationsQuery.data.value, pending.value] as const, ([currentItemId, requestedLocation, item, locations, stockChangePending]) => {
-    if (!requestedLocation) {
+watch(() => [itemId.value, route.query.restock_location, route.query.restock, itemQuery.data.value, locationsQuery.data.value, locationsQuery.isSuccess.value, pending.value] as const, ([currentItemId, requestedLocation, restockIntent, item, locations, locationsLoaded, stockChangePending]) => {
+    const hasLocationRequest = Object.prototype.hasOwnProperty.call(route.query, 'restock_location');
+    const hasGenericRequest = Object.prototype.hasOwnProperty.call(route.query, 'restock');
+    if (!hasLocationRequest && !hasGenericRequest) {
         handledRestockRequest = '';
         return;
     }
+    if (!item || item.id !== currentItemId || !locationsLoaded || stockChangePending) return;
 
-    const requestedLocationId = Array.isArray(requestedLocation) ? requestedLocation[0] : requestedLocation;
-    if (!requestedLocationId || !item || !locations?.some((location) => location.id === String(requestedLocationId)) || stockChangePending) return;
-    const requestKey = `${currentItemId}:${requestedLocationId}`;
+    if (hasLocationRequest) {
+        if (typeof requestedLocation !== 'string' || !requestedLocation || !locations?.some((location) => location.id === requestedLocation)) return;
+        const requestKey = `${currentItemId}:location:${requestedLocation}`;
+        if (requestKey === handledRestockRequest) return;
+
+        const existingLevel = item.inventory_levels?.find((level) => level.location.id === requestedLocation);
+        startAction('restock', existingLevel ?? null);
+        if (!existingLevel) targetLocationId.value = requestedLocation;
+        if (activeAction.value === 'restock') handledRestockRequest = requestKey;
+        return;
+    }
+
+    if (typeof restockIntent !== 'string' || restockIntent !== '1') {
+        handledRestockRequest = '';
+        return;
+    }
+    const requestKey = `${currentItemId}:new`;
     if (requestKey === handledRestockRequest) return;
-
-    const existingLevel = item.inventory_levels?.find((level) => level.location.id === String(requestedLocationId));
-    startAction('restock', existingLevel ?? null);
-    if (!existingLevel) targetLocationId.value = String(requestedLocationId);
-    if (activeAction.value !== 'restock') return;
-    handledRestockRequest = requestKey;
+    startAction('restock');
+    if (activeAction.value === 'restock') handledRestockRequest = requestKey;
 });
 
 function normalizedCategoryIds(categories: Array<{ id: string }> | undefined): string[] {
@@ -377,6 +391,7 @@ async function toggleBuySoon(): Promise<void> {
                     <div v-if="activeAction === 'threshold'" class="grid gap-2 sm:col-span-2"><label for="stock-threshold" class="text-sm font-medium text-ink">Alert when quantity falls to <span class="text-ink-muted">(leave blank to disable)</span></label><input id="stock-threshold" v-model="threshold" type="number" min="0" step="1" class="min-h-11 rounded-md border border-line px-3 text-ink focus:border-sage focus:outline-none focus:ring-2 focus:ring-sage/20"></div>
                     <div v-else-if="activeAction === 'correction'" class="grid gap-2"><label for="observed-quantity" class="text-sm font-medium text-ink">Observed quantity</label><input id="observed-quantity" v-model="observedQuantity" type="number" min="0" step="1" required class="min-h-11 rounded-md border border-line px-3 text-ink focus:border-sage focus:outline-none focus:ring-2 focus:ring-sage/20"></div>
                     <template v-else-if="activeAction === 'restock' && !selectedLevel">
+                        <p v-if="locationsQuery.isSuccess.value && locationOptions.length === 0" class="text-sm text-ink-muted sm:col-span-2" role="status">Add a location before recording this restock.</p>
                         <div class="grid gap-2"><label for="new-level-location" class="text-sm font-medium text-ink">Location</label><select id="new-level-location" v-model="targetLocationId" required class="min-h-11 rounded-md border border-line bg-white px-3 text-ink"><option value="" disabled>Select a location</option><option v-for="option in locationOptions" :key="option.location.id" :value="option.location.id">{{ option.path }}</option></select></div>
                         <div class="grid gap-2"><label for="new-level-quantity" class="text-sm font-medium text-ink">Quantity <span>({{ unitFor(2) }})</span></label><input id="new-level-quantity" v-model="quantity" type="number" min="1" step="1" required class="min-h-11 rounded-md border border-line px-3 text-ink focus:border-sage focus:outline-none focus:ring-2 focus:ring-sage/20"></div>
                     </template>
@@ -385,7 +400,7 @@ async function toggleBuySoon(): Promise<void> {
                         <div class="grid gap-2"><label for="stock-quantity" class="text-sm font-medium text-ink">Quantity <span>({{ unitFor(2) }})</span></label><input id="stock-quantity" v-model="quantity" type="number" min="1" step="1" required :max="activeAction === 'transfer-in' ? positiveLevels.find((level) => level.location.id === targetLocationId)?.quantity : activeAction === 'transfer-out' || activeAction === 'disposal' ? selectedLevel?.quantity : undefined" class="min-h-11 rounded-md border border-line px-3 text-ink focus:border-sage focus:outline-none focus:ring-2 focus:ring-sage/20"></div>
                     </template>
                     <div v-if="activeAction !== 'threshold'" class="grid gap-2 rounded-md bg-sage-soft px-3 py-3 sm:col-span-2"><p class="text-sm font-medium text-sage-dark">{{ confirmationText() }}</p><label class="flex items-start gap-2 text-sm text-ink"><input v-model="confirmation" type="checkbox" class="mt-1 accent-sage"><span>I’ve checked this direction and quantity.</span></label></div>
-                    <div class="flex flex-wrap gap-3 sm:col-span-2"><button type="submit" :disabled="pending" class="min-h-11 rounded-md bg-sage px-4 text-sm font-semibold text-white hover:bg-sage-dark disabled:opacity-60">{{ pending ? 'Saving…' : 'Save change' }}</button><button v-if="activeAction === 'restock' && !selectedLevel" type="button" class="min-h-11 rounded-md border border-line px-4 text-sm font-medium" @click="showCreateLocation = true">Create a location</button></div>
+                    <div class="flex flex-wrap gap-3 sm:col-span-2"><button type="submit" :disabled="pending || (activeAction === 'restock' && !selectedLevel && !canSaveNewRestock)" class="min-h-11 rounded-md bg-sage px-4 text-sm font-semibold text-white hover:bg-sage-dark disabled:opacity-60">{{ pending ? 'Saving…' : 'Save change' }}</button><button v-if="activeAction === 'restock' && !selectedLevel" type="button" class="min-h-11 rounded-md border border-line px-4 text-sm font-medium" @click="showCreateLocation = true">Create a location</button></div>
                 </form>
             </section>
             <section v-if="showCreateLocation" class="mt-6 rounded-panel border border-line bg-white p-5" aria-labelledby="create-location-title"><h2 id="create-location-title" class="text-lg font-semibold text-ink">Create a location</h2><p v-if="locationErrors.form" class="mt-3 rounded-md border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800" role="alert">{{ locationErrors.form }}</p><p v-for="(message, field) in locationErrors.fields" :key="field" class="mt-3 text-sm text-rose-700" role="alert">{{ message }}</p><form class="mt-4 grid gap-4 sm:grid-cols-2" @submit.prevent="addLocation"><div class="grid gap-2"><label for="location-name" class="text-sm font-medium text-ink">Name</label><input id="location-name" v-model="newLocationName" required maxlength="255" class="min-h-11 rounded-md border border-line px-3"></div><div class="grid gap-2"><label for="location-parent" class="text-sm font-medium text-ink">Inside another location <span class="font-normal text-ink-muted">(optional)</span></label><select id="location-parent" v-model="newLocationParent" class="min-h-11 rounded-md border border-line bg-white px-3"><option value="">No parent</option><option v-for="option in locationOptions" :key="option.location.id" :value="option.location.id">{{ option.path }}</option></select></div><div class="flex gap-3 sm:col-span-2"><button :disabled="createLocationMutation.isPending.value" class="min-h-11 rounded-md bg-sage px-4 text-sm font-semibold text-white">Create location</button><button type="button" class="min-h-11 rounded-md border border-line px-4" @click="showCreateLocation = false">Cancel</button></div></form></section>

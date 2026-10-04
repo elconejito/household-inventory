@@ -10,7 +10,7 @@ const props = defineProps<{
     errors?: FormErrors;
 }>();
 const emit = defineEmits<{
-    submit: [item: NewItem, initialItem: ItemEditSnapshot | null];
+    submit: [item: NewItem, initialItem: ItemEditSnapshot | null, intent?: 'detail' | 'stock'];
     cancel: [];
 }>();
 
@@ -44,14 +44,24 @@ function fieldError(field: string): string | undefined {
     return formErrors.value.fields[field];
 }
 
-function submit(): void {
+function submit(event: Event): void {
+    if (props.saving) return;
     if (props.item && !categoriesQuery.isSuccess.value) return;
-    emit('submit', {
+    const values: NewItem = {
         name: name.value,
         counting_unit: countingUnit.value,
         description: description.value.length > 0 ? description.value : null,
         category_ids: [...new Set(categoryIds.value.map(String))].sort(),
-    }, initialItem.value ? { ...initialItem.value, category_ids: [...initialItem.value.category_ids] } : null);
+    };
+    const snapshot = initialItem.value ? { ...initialItem.value, category_ids: [...initialItem.value.category_ids] } : null;
+
+    if (props.item) {
+        emit('submit', values, snapshot);
+        return;
+    }
+
+    const submitter = (event as SubmitEvent).submitter as HTMLButtonElement | null;
+    emit('submit', values, null, submitter?.value === 'stock' ? 'stock' : 'detail');
 }
 </script>
 
@@ -70,24 +80,24 @@ function submit(): void {
         <form class="mt-6 grid gap-5 sm:grid-cols-2" @submit.prevent="submit">
             <div class="grid content-start gap-2">
                 <label for="item-name" class="text-sm font-medium text-ink">Name <span aria-hidden="true">*</span></label>
-                <input id="item-name" v-model="name" name="name" autocomplete="off" required maxlength="255" :aria-invalid="Boolean(fieldError('name'))" :aria-describedby="fieldError('name') ? 'item-name-error' : undefined" class="min-h-12 rounded-md border border-line bg-white px-3.5 text-base text-ink outline-none transition placeholder:text-ink-muted/70 focus:border-sage focus:ring-2 focus:ring-sage/20">
+                <input id="item-name" v-model="name" name="name" autocomplete="off" required maxlength="255" :disabled="saving" :aria-invalid="Boolean(fieldError('name'))" :aria-describedby="fieldError('name') ? 'item-name-error' : undefined" class="min-h-12 rounded-md border border-line bg-white px-3.5 text-base text-ink outline-none transition placeholder:text-ink-muted/70 focus:border-sage focus:ring-2 focus:ring-sage/20 disabled:cursor-wait disabled:opacity-60">
                 <p v-if="fieldError('name')" id="item-name-error" class="text-sm text-rose-700">{{ fieldError('name') }}</p>
             </div>
 
             <div class="grid content-start gap-2">
                 <label for="item-counting-unit" class="text-sm font-medium text-ink">Counting unit <span aria-hidden="true">*</span></label>
-                <input id="item-counting-unit" v-model="countingUnit" name="counting_unit" required maxlength="255" placeholder="item, roll, box…" :aria-invalid="Boolean(fieldError('counting_unit'))" :aria-describedby="fieldError('counting_unit') ? 'item-counting-unit-error' : undefined" class="min-h-12 rounded-md border border-line bg-white px-3.5 text-base text-ink outline-none transition placeholder:text-ink-muted/70 focus:border-sage focus:ring-2 focus:ring-sage/20">
+                <input id="item-counting-unit" v-model="countingUnit" name="counting_unit" required maxlength="255" placeholder="item, roll, box…" :disabled="saving" :aria-invalid="Boolean(fieldError('counting_unit'))" :aria-describedby="fieldError('counting_unit') ? 'item-counting-unit-error' : undefined" class="min-h-12 rounded-md border border-line bg-white px-3.5 text-base text-ink outline-none transition placeholder:text-ink-muted/70 focus:border-sage focus:ring-2 focus:ring-sage/20 disabled:cursor-wait disabled:opacity-60">
                 <p v-if="fieldError('counting_unit')" id="item-counting-unit-error" class="text-sm text-rose-700">{{ fieldError('counting_unit') }}</p>
                 <p v-if="item" class="text-xs leading-5 text-ink-muted">Changing this label updates quantity and movement-history labels at all locations; it does not convert or change existing stock counts.</p>
             </div>
 
             <div class="grid gap-2 sm:col-span-2">
                 <label for="item-description" class="text-sm font-medium text-ink">Description <span class="font-normal text-ink-muted">(optional)</span></label>
-                <textarea id="item-description" v-model="description" name="description" rows="3" :aria-invalid="Boolean(fieldError('description'))" :aria-describedby="fieldError('description') ? 'item-description-error' : undefined" class="min-h-24 resize-y rounded-md border border-line bg-white px-3.5 py-3 text-base leading-6 text-ink outline-none transition placeholder:text-ink-muted/70 focus:border-sage focus:ring-2 focus:ring-sage/20" />
+                <textarea id="item-description" v-model="description" name="description" rows="3" :disabled="saving" :aria-invalid="Boolean(fieldError('description'))" :aria-describedby="fieldError('description') ? 'item-description-error' : undefined" class="min-h-24 resize-y rounded-md border border-line bg-white px-3.5 py-3 text-base leading-6 text-ink outline-none transition placeholder:text-ink-muted/70 focus:border-sage focus:ring-2 focus:ring-sage/20 disabled:cursor-wait disabled:opacity-60" />
                 <p v-if="fieldError('description')" id="item-description-error" class="text-sm text-rose-700">{{ fieldError('description') }}</p>
             </div>
 
-            <fieldset class="grid gap-2 sm:col-span-2" :aria-invalid="categoryFieldErrors.length ? 'true' : undefined" :aria-describedby="categoryFieldErrors.length ? 'item-categories-error' : undefined">
+            <fieldset class="grid gap-2 sm:col-span-2" :disabled="saving" :aria-invalid="categoryFieldErrors.length ? 'true' : undefined" :aria-describedby="categoryFieldErrors.length ? 'item-categories-error' : undefined">
                 <legend class="text-sm font-medium text-ink">Categories <span class="font-normal text-ink-muted">(optional; choose any that fit)</span></legend>
                 <p v-if="categoriesQuery.isPending.value" class="text-sm text-ink-muted" role="status">Loading categories…</p>
                 <div v-else-if="categoriesQuery.isError.value" class="flex flex-wrap items-center gap-3 text-sm text-rose-700" role="alert">
@@ -104,9 +114,15 @@ function submit(): void {
                 </div>
             </fieldset>
 
+            <fieldset v-if="!item" class="grid gap-2 border-0 p-0 sm:col-span-2" :disabled="saving">
+                <slot name="create-fields" />
+            </fieldset>
+
             <div class="flex flex-wrap items-center gap-3 sm:col-span-2">
-                <button type="submit" :disabled="saving || Boolean(item && (categoriesQuery.isPending.value || categoriesQuery.isError.value))" class="inline-flex min-h-11 items-center justify-center rounded-md bg-sage px-4 text-sm font-semibold text-white transition hover:bg-sage-dark focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sage disabled:cursor-wait disabled:opacity-70">{{ saving ? 'Saving…' : item ? 'Save changes' : 'Save item' }}</button>
-                <button type="button" class="inline-flex min-h-11 items-center justify-center rounded-md px-4 text-sm font-medium text-ink-muted transition hover:bg-surface-soft hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sage" @click="emit('cancel')">Cancel</button>
+                <button v-if="!item" type="submit" value="detail" :disabled="saving" class="inline-flex min-h-11 items-center justify-center rounded-md bg-sage px-4 text-sm font-semibold text-white transition hover:bg-sage-dark focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sage disabled:cursor-wait disabled:opacity-70">{{ saving ? 'Saving…' : 'Save item' }}</button>
+                <button v-if="!item" type="submit" value="stock" :disabled="saving" class="inline-flex min-h-11 items-center justify-center rounded-md border border-sage px-4 text-sm font-semibold text-sage-dark transition hover:bg-sage-soft focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sage disabled:cursor-wait disabled:opacity-70">{{ saving ? 'Saving…' : 'Save and add stock' }}</button>
+                <button v-else type="submit" :disabled="saving || Boolean(categoriesQuery.isPending.value || categoriesQuery.isError.value)" class="inline-flex min-h-11 items-center justify-center rounded-md bg-sage px-4 text-sm font-semibold text-white transition hover:bg-sage-dark focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sage disabled:cursor-wait disabled:opacity-70">{{ saving ? 'Saving…' : 'Save changes' }}</button>
+                <button type="button" :disabled="saving" class="inline-flex min-h-11 items-center justify-center rounded-md px-4 text-sm font-medium text-ink-muted transition hover:bg-surface-soft hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sage disabled:cursor-wait disabled:opacity-60" @click="emit('cancel')">Cancel</button>
             </div>
         </form>
     </section>
