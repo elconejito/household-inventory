@@ -142,6 +142,37 @@ class HouseholdAdministrationTest extends TestCase
             ->assertConflict()->assertJsonPath('errors.0.code', 'active_invitation_exists');
     }
 
+    public function test_invitation_urls_use_the_configured_application_url_instead_of_the_request_host(): void
+    {
+        config(['app.url' => 'https://inventory.example.test/household/']);
+        [$owner, $household] = $this->householdOwner();
+
+        $created = $this->signInAs($owner)
+            ->withHeader('Host', 'attacker.invalid')
+            ->postJson('/api/household-invitations', ['data' => ['email' => 'invite@example.com']]);
+        $created->assertCreated();
+
+        $createdUrl = (string) $created->json('data.invitation_url');
+        $createdFragment = (string) parse_url($createdUrl, PHP_URL_FRAGMENT);
+        $createdToken = substr($createdFragment, strlen('token='));
+        $invitation = HouseholdInvitation::query()->where('household_id', $household->id)->firstOrFail();
+        $expectedUrlPrefix = 'https://inventory.example.test/household/invitations/accept#token=';
+
+        $this->assertSame($expectedUrlPrefix.$createdToken, $createdUrl);
+        $this->assertSame(hash('sha256', $createdToken), $invitation->token_hash);
+
+        $resent = $this->postJson('/api/household-invitations/'.$invitation->id.'/resend');
+        $resent->assertOk();
+
+        $resentUrl = (string) $resent->json('data.invitation_url');
+        $resentFragment = (string) parse_url($resentUrl, PHP_URL_FRAGMENT);
+        $resentToken = substr($resentFragment, strlen('token='));
+
+        $this->assertSame($expectedUrlPrefix.$resentToken, $resentUrl);
+        $this->assertNotSame($createdToken, $resentToken);
+        $this->assertSame(hash('sha256', $resentToken), $invitation->fresh()->token_hash);
+    }
+
     public function test_invitation_creation_distinguishes_current_and_foreign_membership_conflicts_including_archived_rows(): void
     {
         [$owner, $household] = $this->householdOwner();

@@ -217,7 +217,13 @@ class ManageHouseholdInvitations
 
     private function withUrl(HouseholdInvitation $invitation, string $token): HouseholdInvitation
     {
-        $invitation->setAttribute('invitation_url', route('invitations.accept').'#token='.$token);
+        $applicationUrl = rtrim((string) config('app.url'), '/');
+        $acceptancePath = route('invitations.accept', absolute: false);
+
+        $invitation->setAttribute(
+            'invitation_url',
+            $applicationUrl.'/'.ltrim($acceptancePath, '/').'#token='.$token,
+        );
 
         return $invitation;
     }
