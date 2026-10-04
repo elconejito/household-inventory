@@ -35,6 +35,7 @@ class TestEnvironmentSafetyTest extends TestCase
         $originalContainer = Container::getInstance();
         $originalFacadeApplication = Facade::getFacadeApplication();
         $originalEventDispatcher = Model::getEventDispatcher();
+        $originalConnectionResolver = Model::getConnectionResolver();
         $exception = null;
 
         LoadConfiguration::alwaysUse(static fn (Application $application): array => $cachedConfiguration);
@@ -49,6 +50,7 @@ class TestEnvironmentSafetyTest extends TestCase
             Facade::clearResolvedInstances();
             Facade::setFacadeApplication($originalFacadeApplication);
             Model::setEventDispatcher($originalEventDispatcher);
+            Model::setConnectionResolver($originalConnectionResolver);
         }
 
         $this->assertInstanceOf(RuntimeException::class, $exception);
@@ -56,5 +58,6 @@ class TestEnvironmentSafetyTest extends TestCase
         $this->assertSame($originalContainer, Container::getInstance());
         $this->assertSame($originalFacadeApplication, Facade::getFacadeApplication());
         $this->assertSame($originalEventDispatcher, Model::getEventDispatcher());
+        $this->assertSame($originalConnectionResolver, Model::getConnectionResolver());
     }
 }
