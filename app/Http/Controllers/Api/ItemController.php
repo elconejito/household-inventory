@@ -65,6 +65,8 @@ class ItemController extends Controller
                     fn (Builder|Relation $levels) => $levels->whereHas('location'), 'inventoryLevels'),
                 AllowedInclude::callback('inventory_levels.location',
                     fn (Builder|Relation $levels) => $levels->whereHas('location')->with('location'), 'inventoryLevels'),
+                AllowedInclude::callback('active_alerts',
+                    fn (Builder|Relation $alerts) => $alerts->whereNull('resolved_at'), 'inventoryAlerts'),
                 'notes',
                 AllowedInclude::relationship('notes.created_by', 'notes.creator'),
                 'images',
@@ -264,7 +266,7 @@ class ItemController extends Controller
             return [];
         }
 
-        $allowedIncludes = ['categories', 'inventory_levels', 'inventory_levels.location', 'notes', 'notes.created_by', 'images', 'images.uploaded_by'];
+        $allowedIncludes = ['categories', 'inventory_levels', 'inventory_levels.location', 'notes', 'notes.created_by', 'images', 'images.uploaded_by', 'active_alerts'];
         if (! is_string($includeParameter)) {
             throw InvalidIncludeQuery::includesNotAllowed(collect(['include']), collect($allowedIncludes));
         }
@@ -292,6 +294,10 @@ class ItemController extends Controller
 
         if (in_array('categories', $includes, true)) {
             $item->load('categories');
+        }
+
+        if (in_array('active_alerts', $includes, true) && ! $item->relationLoaded('inventoryAlerts')) {
+            $item->load(['inventoryAlerts' => fn (Builder|Relation $alerts) => $alerts->whereNull('resolved_at')]);
         }
 
         if (in_array('inventory_levels', $includes, true) || in_array('inventory_levels.location', $includes, true)) {

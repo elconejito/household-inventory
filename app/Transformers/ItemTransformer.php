@@ -9,7 +9,7 @@ use League\Fractal\TransformerAbstract;
 
 class ItemTransformer extends TransformerAbstract
 {
-    protected array $availableIncludes = ['categories', 'inventory_levels', 'notes', 'images'];
+    protected array $availableIncludes = ['categories', 'inventory_levels', 'notes', 'images', 'active_alerts'];
 
     /**
      * @return array{type: string, id: string, name: string, counting_unit: string, counting_unit_plural: string, description: string|null, total_quantity: int}
@@ -46,5 +46,10 @@ class ItemTransformer extends TransformerAbstract
     public function includeImages(Item $item): ResourceInterface
     {
         return $this->collection($item->images, new ItemImageTransformer);
+    }
+
+    public function includeActiveAlerts(Item $item): ResourceInterface
+    {
+        return $this->collection($item->inventoryAlerts, new InventoryAlertTransformer);
     }
 }

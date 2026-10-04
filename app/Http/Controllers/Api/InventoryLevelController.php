@@ -14,10 +14,12 @@ use App\Serialization\ApiResponse;
 use App\Transformers\InventoryLevelTransformer;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
 use Spatie\QueryBuilder\AllowedFilter;
+use Spatie\QueryBuilder\AllowedInclude;
 use Spatie\QueryBuilder\Exceptions\InvalidIncludeQuery;
 use Spatie\QueryBuilder\QueryBuilder;
 
@@ -37,7 +39,11 @@ class InventoryLevelController extends Controller
                 AllowedFilter::exact('quantity'),
                 AllowedFilter::callback('alert_status', fn (Builder $query, mixed $value): Builder => $this->applyAlertStatusFilter($query, (string) $value)),
             )
-            ->allowedIncludes('item', 'location')
+            ->allowedIncludes(
+                'item',
+                AllowedInclude::callback('item.active_alerts', fn (Builder|Relation $alerts) => $alerts->whereNull('resolved_at'), 'item.inventoryAlerts'),
+                'location',
+            )
             ->orderBy('inventory_levels.id');
         $paginator = $query->paginate($request->integer('per_page', 10))->withQueryString();
 
@@ -50,7 +56,7 @@ class InventoryLevelController extends Controller
         Gate::authorize('create', InventoryLevel::class);
         $level = $levels->create($this->household($request->user()), $request->user(), $request->validated('data'));
         if ($includes !== []) {
-            $level->load($includes);
+            $this->loadIncludes($level, $includes);
         }
 
         return response()->json($apiResponse->item($level, $transformer, $includes), 201);
@@ -65,7 +71,7 @@ class InventoryLevelController extends Controller
         Gate::authorize('view', $level);
         $includes = $this->requestedIncludes($request->query('include'));
         if ($includes !== []) {
-            $level->load($includes);
+            $this->loadIncludes($level, $includes);
         }
 
         return response()->json($apiResponse->item($level, $transformer, $includes));
@@ -81,7 +87,7 @@ class InventoryLevelController extends Controller
         Gate::authorize('update', $level);
         $level = $levels->update($household, $level, $request->user(), $request->validated('data'));
         if ($includes !== []) {
-            $level->load($includes);
+            $this->loadIncludes($level, $includes);
         }
 
         return response()->json($apiResponse->item($level, $transformer, $includes));
@@ -105,7 +111,7 @@ class InventoryLevelController extends Controller
     /** @return array<int, string> */
     private function requestedIncludes(mixed $value): array
     {
-        $allowed = ['item', 'location'];
+        $allowed = ['item', 'item.active_alerts', 'location'];
         if ($value === null || $value === '') {
             return [];
         }
@@ -130,5 +136,21 @@ class InventoryLevelController extends Controller
             'okay' => $query->whereNotNull('alert_threshold')->whereColumn('quantity', '>', 'alert_threshold'),
             'unmonitored' => $query->whereNull('alert_threshold'),
         };
+    }
+
+    /** @param array<int, string> $includes */
+    private function loadIncludes(InventoryLevel $level, array $includes): void
+    {
+        if (in_array('item.active_alerts', $includes, true)) {
+            $with = ['item.inventoryAlerts' => fn (Builder|Relation $alerts) => $alerts->whereNull('resolved_at')];
+            if (in_array('location', $includes, true)) {
+                $with[] = 'location';
+            }
+            $level->load($with);
+
+            return;
+        }
+
+        $level->load($includes);
     }
 }
