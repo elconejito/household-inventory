@@ -110,7 +110,7 @@ class UploadItemImage
         }
 
         $root = $diskConfig['root'] ?? null;
-        if (! is_string($root) || $root === '' || ! str_starts_with($root, DIRECTORY_SEPARATOR)) {
+        if (! is_string($root) || $root === '') {
             throw new RuntimeException('The configured image storage disk has an unsafe root.');
         }
 
@@ -140,23 +140,43 @@ class UploadItemImage
                 throw new RuntimeException('The configured image storage paths cannot be verified.');
             }
 
-            if ($canonicalRoot === $canonicalExposedRoot
-                || str_starts_with($canonicalRoot, rtrim($canonicalExposedRoot, DIRECTORY_SEPARATOR).DIRECTORY_SEPARATOR)) {
+            if ($this->isPathWithin($canonicalRoot, $canonicalExposedRoot)) {
                 throw new RuntimeException('The configured image storage disk is exposed by a public path.');
             }
         }
     }
 
+    private function isPathWithin(string $path, string $parent): bool
+    {
+        $isWindowsPath = $this->isWindowsPath($path);
+        if ($isWindowsPath !== $this->isWindowsPath($parent)) {
+            return false;
+        }
+
+        $path = rtrim($path, '/');
+        $parent = rtrim($parent, '/');
+        $path = $path === '' ? '/' : $path;
+        $parent = $parent === '' ? '/' : $parent;
+        $pathPrefix = $parent === '/' ? '/' : $parent.'/';
+
+        return ($isWindowsPath ? strcasecmp($path, $parent) === 0 : $path === $parent)
+            || ($isWindowsPath
+                ? strncasecmp($path, $pathPrefix, strlen($pathPrefix)) === 0
+                : str_starts_with($path, $pathPrefix));
+    }
+
     private function canonicalPath(string $path): ?string
     {
-        $path = str_replace(['/', '\\'], DIRECTORY_SEPARATOR, $path);
-        if (! str_starts_with($path, DIRECTORY_SEPARATOR)) {
+        $path = str_replace('\\', '/', $path);
+        $anchor = $this->pathAnchor($path);
+        if ($anchor === null) {
             return null;
         }
 
-        $resolvedPath = DIRECTORY_SEPARATOR;
+        $resolvedPath = $anchor;
         $unresolvedSegments = [];
-        foreach (explode(DIRECTORY_SEPARATOR, $path) as $segment) {
+        $pathAfterAnchor = substr($path, strlen($anchor));
+        foreach (explode('/', $pathAfterAnchor) as $segment) {
             if ($segment === '' || $segment === '.') {
                 continue;
             }
@@ -166,20 +186,21 @@ class UploadItemImage
                     return null;
                 }
 
-                $resolvedPath = dirname($resolvedPath);
+                $resolvedPath = $this->parentPath($resolvedPath, $anchor);
 
                 continue;
             }
 
             if ($unresolvedSegments === []) {
-                $candidatePath = rtrim($resolvedPath, DIRECTORY_SEPARATOR).DIRECTORY_SEPARATOR.$segment;
+                $candidatePath = rtrim($resolvedPath, '/').'/'.$segment;
                 if (file_exists($candidatePath) || is_link($candidatePath)) {
                     $realCandidatePath = realpath($candidatePath);
                     if ($realCandidatePath === false) {
                         return null;
                     }
 
-                    $resolvedPath = $realCandidatePath;
+                    $resolvedPath = str_replace('\\', '/', $realCandidatePath);
+                    $anchor = $this->pathAnchor($resolvedPath) ?? $anchor;
 
                     continue;
                 }
@@ -188,10 +209,44 @@ class UploadItemImage
             $unresolvedSegments[] = $segment;
         }
 
-        $canonicalResolvedPath = rtrim($resolvedPath, DIRECTORY_SEPARATOR);
-        $canonicalResolvedPath = $canonicalResolvedPath === '' ? DIRECTORY_SEPARATOR : $canonicalResolvedPath;
+        $canonicalResolvedPath = rtrim($resolvedPath, '/');
+        $canonicalResolvedPath = $canonicalResolvedPath === '' ? '/' : $canonicalResolvedPath;
 
         return $canonicalResolvedPath
-            .($unresolvedSegments === [] ? '' : DIRECTORY_SEPARATOR.implode(DIRECTORY_SEPARATOR, $unresolvedSegments));
+            .($unresolvedSegments === [] ? '' : '/'.implode('/', $unresolvedSegments));
+    }
+
+    private function pathAnchor(string $path): ?string
+    {
+        if (preg_match('/^[A-Za-z]:\//', $path) === 1) {
+            return strtoupper($path[0]).':/';
+        }
+
+        if (preg_match('#^//([^/]+)/([^/]+)(?:/|$)#', $path, $matches) === 1) {
+            return '//'.$matches[1].'/'.$matches[2].'/';
+        }
+
+        if (str_starts_with($path, '/')) {
+            return '/';
+        }
+
+        return null;
+    }
+
+    private function parentPath(string $path, string $anchor): string
+    {
+        if (strcasecmp(rtrim($path, '/'), rtrim($anchor, '/')) === 0) {
+            return $anchor;
+        }
+
+        $segments = explode('/', trim(substr($path, strlen($anchor)), '/'));
+        array_pop($segments);
+
+        return $anchor.implode('/', $segments);
+    }
+
+    private function isWindowsPath(string $path): bool
+    {
+        return preg_match('/^[A-Za-z]:\//', $path) === 1 || str_starts_with($path, '//');
     }
 }

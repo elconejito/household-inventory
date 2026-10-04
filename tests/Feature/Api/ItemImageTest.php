@@ -173,6 +173,53 @@ class ItemImageTest extends TestCase
         $this->assertSame('private', $disk->getVisibility($image->display_path));
     }
 
+    public function test_upload_accepts_private_windows_root_and_rejects_case_insensitive_exposed_root(): void
+    {
+        [$user, $household] = $this->householdMember();
+        $item = Item::factory()->for($household)->create();
+        config([
+            'inventory.images_disk' => 'windows-private-images',
+            'filesystems.disks.windows-private-images' => [
+                'driver' => 'local',
+                'root' => 'D:\\HouseholdData\\images',
+                'visibility' => 'private',
+            ],
+        ]);
+        $privateDisk = Storage::fake('windows-private-images', ['visibility' => 'private']);
+
+        $safeResponse = $this->actingAs($user, 'web')->post('/api/items/'.$item->id.'/images', [
+            'image' => $this->uploadedPng(),
+        ], ['Accept' => 'application/json']);
+
+        $image = ItemImage::query()->firstOrFail();
+        $safeResponse->assertCreated();
+        $this->assertCount(2, $privateDisk->allFiles());
+        $this->assertSame('private', $privateDisk->getVisibility($image->thumbnail_path));
+
+        $exposedRoot = 'C:\\Users\\Harvey\\Public\\household-images';
+        config([
+            'inventory.images_disk' => 'windows-public-link-target',
+            'filesystems.disks.windows-public-link-target' => [
+                'driver' => 'local',
+                'root' => 'c:/users/harvey/public/household-images',
+                'visibility' => 'private',
+            ],
+            'filesystems.links' => [
+                public_path('images') => 'c:/users/harvey/public',
+            ],
+        ]);
+        Storage::fake('windows-public-link-target');
+
+        $exposedResponse = $this->post('/api/items/'.$item->id.'/images', [
+            'image' => $this->uploadedPng(),
+        ], ['Accept' => 'application/json']);
+
+        $exposedResponse->assertServerError();
+        $this->assertStringNotContainsString($exposedRoot, $exposedResponse->getContent());
+        Storage::disk('windows-public-link-target')->assertDirectoryEmpty('/');
+        $this->assertDatabaseCount('item_images', 1);
+    }
+
     public function test_upload_fails_closed_when_symlink_traversal_or_dangling_root_cannot_be_resolved(): void
     {
         $temporaryRoot = sys_get_temp_dir().'/household-image-storage-'.Str::uuid();
