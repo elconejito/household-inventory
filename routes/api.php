@@ -8,6 +8,7 @@ use App\Http\Controllers\Api\HouseholdInvitationController;
 use App\Http\Controllers\Api\InventoryAlertController;
 use App\Http\Controllers\Api\InventoryLevelController;
 use App\Http\Controllers\Api\InventoryMovementController;
+use App\Http\Controllers\Api\InventoryMovementRecorderController;
 use App\Http\Controllers\Api\ItemController;
 use App\Http\Controllers\Api\ItemImageController;
 use App\Http\Controllers\Api\LocationController;
@@ -77,6 +78,7 @@ Route::middleware('auth:sanctum')->group(function (): void {
     Route::patch('/inventory-levels/{inventory_level}', [InventoryLevelController::class, 'update'])->name('inventory-levels.update');
 
     Route::get('/inventory-movements', [InventoryMovementController::class, 'index'])->name('inventory-movements.index');
+    Route::get('/inventory-movement-recorders', [InventoryMovementRecorderController::class, 'index'])->name('inventory-movement-recorders.index');
     Route::post('/inventory-movements', [InventoryMovementController::class, 'store'])->name('inventory-movements.store');
     Route::get('/inventory-movements/{inventory_movement}', [InventoryMovementController::class, 'show'])->name('inventory-movements.show');
 
