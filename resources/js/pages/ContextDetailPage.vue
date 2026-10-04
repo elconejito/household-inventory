@@ -8,11 +8,12 @@ import InventoryTabs from '../components/InventoryTabs.vue';
 import ItemStockSummary from '../components/ItemStockSummary.vue';
 import StockStatusBadge from '../components/StockStatusBadge.vue';
 import LocationStockActions, { type LocationStockAction } from '../components/LocationStockActions.vue';
+import CategoryAssignmentsPanel from '../components/CategoryAssignmentsPanel.vue';
 import { getCategory, getLocation } from '../api/note-contexts';
 import { buildLocationPath, type Location as StockLocation } from '../api/stock';
 import { parseApiErrors, type FormErrors } from '../lib/api-errors';
 import { getStockLevelIndicators, hasActiveBuySoonAlert } from '../lib/stock-indicators';
-import { useCategoryItemsQuery, useLocationLevelsQuery, useUpdateCatalogLocationMutation, useUpdateCategoryMutation } from '../queries/catalog';
+import { useCategoryItemsQuery, useLocationLevelsQuery, useSetCategoryItemAssignmentMutation, useUpdateCatalogLocationMutation, useUpdateCategoryMutation } from '../queries/catalog';
 import { useAllItemsQuery, useLocationsQuery, useRecordMovementMutation } from '../queries/stock';
 
 const pageSizes = [10, 25, 50, 100];
@@ -43,9 +44,12 @@ const locationDescription = ref('');
 const locationParentId = ref('');
 const formErrors = ref<FormErrors>({ fields: {}, form: '' });
 const feedback = ref('');
+const categoryAssignmentError = ref('');
+const categoryAssignmentPendingItemId = ref('');
 const itemToRestock = ref('');
 const categoryEditSnapshot = ref('');
 const updateCategoryMutation = useUpdateCategoryMutation();
+const setCategoryItemAssignmentMutation = useSetCategoryItemAssignmentMutation();
 const updateLocationMutation = useUpdateCatalogLocationMutation();
 const stockMovementMutation = useRecordMovementMutation();
 const activeStockAction = ref<{ levelId: string; action: LocationStockAction } | null>(null);
@@ -85,8 +89,10 @@ const eligibleLocationParents = computed(() => {
 const canSaveCategory = computed(() => categoryName.value.trim().length > 0 && !updateCategoryMutation.isPending.value);
 const canSaveLocation = computed(() => locationName.value.trim().length > 0 && !updateLocationMutation.isPending.value && locationOptions.isSuccess.value);
 const editPending = computed(() => updateCategoryMutation.isPending.value || updateLocationMutation.isPending.value);
+const categoryIsCurrent = computed(() => contextType.value === 'categories' && contextQuery.data.value?.id === contextId.value);
 
 let searchTimeout: ReturnType<typeof setTimeout> | undefined;
+let contextGeneration = 0;
 let locationEditSnapshot: { name: string; description: string | null; parentId: string | null } | null = null;
 watch(categorySearch, (value) => {
     if (searchTimeout) clearTimeout(searchTimeout);
@@ -95,11 +101,16 @@ watch(categorySearch, (value) => {
         debouncedCategorySearch.value = value.trim();
     }, 300);
 });
+watch(() => categoryItemsQuery.data.value?.meta.last_page, (lastPage) => {
+    if (categoryIsCurrent.value && lastPage && categoryPage.value > lastPage) categoryPage.value = lastPage;
+});
 onUnmounted(() => {
+    contextGeneration++;
     if (searchTimeout) clearTimeout(searchTimeout);
 });
 
 watch([contextType, contextId], () => {
+    contextGeneration++;
     categorySearch.value = '';
     debouncedCategorySearch.value = '';
     categoryPage.value = 1;
@@ -116,6 +127,8 @@ watch([contextType, contextId], () => {
     itemToRestock.value = '';
     formErrors.value = { fields: {}, form: '' };
     feedback.value = '';
+    categoryAssignmentError.value = '';
+    categoryAssignmentPendingItemId.value = '';
     activeStockAction.value = null;
     stockActionErrors.value = { fields: {}, form: '' };
     categoryEditSnapshot.value = '';
@@ -243,6 +256,27 @@ function parseError(queryError: unknown, fallback: string): string {
     return parseApiErrors(queryError).form || fallback;
 }
 
+async function setItemCategoryAssignment(itemId: string, assigned: boolean, itemName: string): Promise<void> {
+    if (!categoryIsCurrent.value || !categoryId.value || setCategoryItemAssignmentMutation.isPending.value) return;
+    const savedCategoryId = categoryId.value;
+    const savedContextGeneration = contextGeneration;
+    categoryAssignmentPendingItemId.value = itemId;
+    categoryAssignmentError.value = '';
+    feedback.value = '';
+
+    try {
+        await setCategoryItemAssignmentMutation.mutateAsync({ categoryId: savedCategoryId, itemId, assigned });
+        if (contextGeneration !== savedContextGeneration || !categoryIsCurrent.value || categoryId.value !== savedCategoryId) return;
+        feedback.value = assigned ? `${itemName} was added to this category.` : `${itemName} was removed from this category.`;
+    } catch (cause) {
+        if (contextGeneration !== savedContextGeneration || !categoryIsCurrent.value || categoryId.value !== savedCategoryId) return;
+        const errors = parseApiErrors(cause);
+        categoryAssignmentError.value = errors.form || Object.values(errors.fields).join(' ') || 'The item assignment could not be saved. Try again.';
+    } finally {
+        if (contextGeneration === savedContextGeneration) categoryAssignmentPendingItemId.value = '';
+    }
+}
+
 function itemDetailLocation(itemId: string, exactLocationId = contextId.value): { name: string; params: { item: string }; query: Record<string, string> } {
     return { name: 'inventory-item', params: { item: itemId }, query: { restock_location: exactLocationId } };
 }
@@ -312,6 +346,15 @@ function closeStockAction(force = false): void {
             <p v-if="feedback" class="mt-5 rounded-md border border-sage/20 bg-sage-soft px-4 py-3 text-sm text-sage-dark" role="status">{{ feedback }}</p>
             <div v-if="!activeStockAction && (stockActionErrors.form || Object.keys(stockActionErrors.fields).length)" class="mt-4 text-sm text-rose-700" role="alert"><p v-if="stockActionErrors.form">{{ stockActionErrors.form }}</p><p v-for="(message, field) in stockActionErrors.fields" :key="field">{{ message }}</p></div>
 
+            <CategoryAssignmentsPanel
+                v-if="categoryIsCurrent"
+                class="mt-5"
+                :category-id="categoryId"
+                :pending="setCategoryItemAssignmentMutation.isPending.value"
+                :error="categoryAssignmentError"
+                @assign="setItemCategoryAssignment"
+            />
+
             <section v-if="showCategoryEdit" class="mt-5 rounded-panel border border-line bg-white p-5 shadow-card" aria-labelledby="edit-category-title">
                 <h2 id="edit-category-title" class="text-lg font-semibold text-ink">Edit category</h2>
                 <p v-if="formErrors.form" class="mt-3 text-sm text-rose-700" role="alert">{{ formErrors.form }}</p>
@@ -352,6 +395,7 @@ function closeStockAction(force = false): void {
                             <p v-if="item.description" class="mt-1 line-clamp-2 whitespace-pre-line break-words text-sm text-ink-muted">{{ item.description }}</p>
                             <p class="mt-1 text-sm text-ink-muted">Counted by {{ item.counting_unit }}</p>
                             <div v-if="hasActiveBuySoonAlert(item.active_alerts)" class="mt-2"><StockStatusBadge label="Buy soon" tone="reminder" /></div>
+                            <button v-if="categoryIsCurrent" type="button" :disabled="setCategoryItemAssignmentMutation.isPending.value" class="mt-3 inline-flex min-h-9 items-center rounded-md border border-line px-3 text-sm font-medium text-ink hover:bg-surface-soft disabled:cursor-wait disabled:opacity-50" @click="setItemCategoryAssignment(item.id, false, item.name)">{{ categoryAssignmentPendingItemId === item.id ? 'Removing…' : 'Remove from category' }}</button>
                         </div>
                         <ItemStockSummary :item="item" :locations="locationOptions.data.value ?? []" />
                     </li>

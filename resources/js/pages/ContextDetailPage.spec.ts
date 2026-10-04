@@ -11,7 +11,7 @@ const route = vi.hoisted(() => ({ name: 'category-detail' as string, params: { c
 vi.mock('vue-router', async (importOriginal) => {
     const vue = await import('vue');
     const reactiveRoute = vue.reactive(route);
-    return { ...(await importOriginal<typeof import('vue-router')>()), useRoute: () => reactiveRoute, setMockLocation: (id: string) => { reactiveRoute.params.location = id; } };
+    return { ...(await importOriginal<typeof import('vue-router')>()), useRoute: () => reactiveRoute, setMockLocation: (id: string) => { reactiveRoute.params.location = id; }, setMockCategory: (id: string) => { reactiveRoute.params.category = id; } };
 });
 
 describe('category and location note contexts', () => {
@@ -26,7 +26,10 @@ describe('category and location note contexts', () => {
         client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
         vi.mocked(http.get).mockImplementation(async (url) => {
             if (String(url).endsWith('/notes')) return { data: { data: [], meta: { current_page: 1, last_page: 1, total: 0 } } } as never;
-            if (String(url).startsWith('/categories/')) return { data: { data: { id: '12', name: 'Pantry supplies' } } } as never;
+            if (String(url).startsWith('/categories/')) {
+                const id = String(url).split('/').at(-1) ?? '12';
+                return { data: { data: { id, name: id === '12' ? 'Pantry supplies' : 'Seasonal supplies' } } } as never;
+            }
             if (String(url) === '/locations') return { data: { data: [
                 { id: '20', name: 'House', description: null, parent: null },
                 { id: '21', name: 'Kitchen', description: null, parent: { id: '20', name: 'House', description: null, parent: null } },
@@ -95,6 +98,110 @@ describe('category and location note contexts', () => {
         expect(rows[0].text()).toContain('Buy soon');
         expect(rows[1].text()).toContain('0 rolls total on hand');
         expect(rows[1].text()).not.toMatch(/Low stock|Out of stock|Buy soon/);
+    });
+
+    it('adds and removes one item assignment through the targeted pivot endpoint', async () => {
+        vi.mocked(http.patch).mockResolvedValue({ data: { data: null } } as never);
+        mountPage();
+        await flushPromises();
+
+        await wrapper!.get('#category-item-to-add').setValue('item-1');
+        await wrapper!.findAll('button').find((button) => button.text() === 'Add to category')!.trigger('click');
+        await flushPromises();
+
+        expect(http.patch).toHaveBeenCalledWith('/categories/12/items/item-1', { data: { assigned: true } });
+        const itemRow = wrapper!.findAll('ul[aria-label="Items in this category"] > li').find((row) => row.text().includes('Hose'))!;
+        await itemRow.findAll('button').find((button) => button.text() === 'Remove from category')!.trigger('click');
+        await flushPromises();
+
+        expect(http.patch).toHaveBeenLastCalledWith('/categories/12/items/item-1', { data: { assigned: false } });
+        expect(vi.mocked(http.patch).mock.calls.every(([, payload]) => !JSON.stringify(payload).includes('category_ids'))).toBe(true);
+    });
+
+    it('keeps the selected item after assignment errors so the user can retry', async () => {
+        vi.mocked(http.patch)
+            .mockRejectedValueOnce(new Error('Offline'))
+            .mockResolvedValueOnce({ data: { data: null } } as never);
+        mountPage();
+        await flushPromises();
+        await wrapper!.get('#category-item-to-add').setValue('item-1');
+        await wrapper!.findAll('button').find((button) => button.text() === 'Add to category')!.trigger('click');
+        await flushPromises();
+
+        expect(wrapper!.get('[role="alert"]').text()).toContain('Something went wrong. Please try again.');
+        expect((wrapper!.get('#category-item-to-add').element as HTMLSelectElement).value).toBe('item-1');
+        await wrapper!.findAll('button').find((button) => button.text() === 'Add to category')!.trigger('click');
+        await flushPromises();
+
+        expect(vi.mocked(http.patch)).toHaveBeenCalledTimes(2);
+        expect(wrapper!.text()).toContain('Hose was added to this category.');
+    });
+
+    it('clamps to the new last page after removing the only item there', async () => {
+        let assignmentExists = false;
+        vi.mocked(http.patch).mockImplementation(async (_url, payload) => {
+            assignmentExists = Boolean((payload as { data?: { assigned?: boolean } }).data?.assigned);
+            return { data: { data: null } } as never;
+        });
+        vi.mocked(http.get).mockImplementation(async (url, config) => {
+            const params = config?.params as Record<string, unknown> | undefined;
+            if (String(url) === '/items' && params?.['filter[category_id]']) {
+                const page = Number(params.page);
+                if (page === 2 && assignmentExists) return { data: { data: [{ id: 'item-1', name: 'Hose', counting_unit: 'hose', description: null }], meta: { current_page: 2, last_page: 2, total: 11 } } } as never;
+                return { data: { data: [], meta: { current_page: page, last_page: assignmentExists ? 2 : 1, total: assignmentExists ? 11 : 10 } } } as never;
+            }
+            if (String(url) === '/items') return { data: { data: [{ id: 'item-1', name: 'Hose', counting_unit: 'hose', description: null, categories: [] }], meta: { current_page: 1, last_page: 1, total: 1 } } } as never;
+            if (String(url).endsWith('/notes')) return { data: { data: [], meta: { current_page: 1, last_page: 1, total: 0 } } } as never;
+            if (String(url).startsWith('/categories/')) return { data: { data: { id: '12', name: 'Pantry supplies' } } } as never;
+            return { data: { data: [] } } as never;
+        });
+        mountPage();
+        await flushPromises();
+
+        await wrapper!.get('#category-item-to-add').setValue('item-1');
+        await wrapper!.findAll('button').find((button) => button.text() === 'Add to category')!.trigger('click');
+        await flushPromises();
+        expect(wrapper!.text()).toContain('Page 1 of 2');
+        const nextPage = wrapper!.findAll('button').find((button) => button.text() === 'Next')!;
+        await nextPage.trigger('click');
+        await flushPromises();
+        expect(wrapper!.text()).toContain('Page 2 of 2');
+
+        const categoryPageOneRequests = () => vi.mocked(http.get).mock.calls.filter(([url, config]) => {
+            const params = config?.params as Record<string, unknown> | undefined;
+            return String(url) === '/items' && params?.['filter[category_id]'] === '12' && params.page === 1;
+        }).length;
+        const pageOneRequestsBeforeRemoval = categoryPageOneRequests();
+        await wrapper!.findAll('button').find((button) => button.text() === 'Remove from category')!.trigger('click');
+        await flushPromises();
+
+        expect(wrapper!.text()).not.toContain('Page 2 of 1');
+        expect(categoryPageOneRequests()).toBeGreaterThan(pageOneRequestsBeforeRemoval);
+        expect(wrapper!.find('ul[aria-label="Items in this category"]').exists()).toBe(false);
+        expect(wrapper!.text()).toContain('No items in this category yet');
+    });
+
+    it('does not show completion feedback if a category assignment finishes after navigating away and back', async () => {
+        let finishAssignment: ((response: { data: { data: null } }) => void) | undefined;
+        vi.mocked(http.patch).mockImplementation(() => new Promise((resolve) => { finishAssignment = resolve; }) as never);
+        mountPage();
+        await flushPromises();
+        const itemRow = wrapper!.findAll('ul[aria-label="Items in this category"] > li').find((row) => row.text().includes('Hose'))!;
+
+        await itemRow.findAll('button').find((button) => button.text() === 'Remove from category')!.trigger('click');
+        expect(itemRow.findAll('button').find((button) => button.text() === 'Removing…')!.attributes('disabled')).toBeDefined();
+        await itemRow.findAll('button').find((button) => button.text() === 'Removing…')!.trigger('click');
+        expect(vi.mocked(http.patch)).toHaveBeenCalledTimes(1);
+        const router = await import('vue-router') as unknown as { setMockCategory: (id: string) => void };
+        router.setMockCategory('13');
+        await flushPromises();
+        router.setMockCategory('12');
+        await flushPromises();
+        finishAssignment?.({ data: { data: null } });
+        await flushPromises();
+
+        expect(wrapper!.text()).not.toContain('Hose was removed from this category.');
+        expect(wrapper!.findAll('[role="alert"]').some((alert) => alert.text().includes('could not be saved'))).toBe(false);
     });
 
     it('omits the redundant inventory scope selector at a leaf location', async () => {

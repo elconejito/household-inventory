@@ -87,6 +87,22 @@ export async function getCategoryItems(categoryId: string, params: CatalogListPa
     return response.data;
 }
 
+export async function getCategoryAssignmentItems(): Promise<InventoryItem[]> {
+    const firstPage = await http.get<ItemListResponse>('/items', {
+        params: { include: 'categories', page: 1, per_page: 100, sort: 'name' },
+    });
+    const remainingPages = await Promise.all(Array.from(
+        { length: Math.max(0, firstPage.data.meta.last_page - 1) },
+        (_, index) => http.get<ItemListResponse>('/items', { params: { include: 'categories', page: index + 2, per_page: 100, sort: 'name' } }),
+    ));
+
+    return [...firstPage.data.data, ...remainingPages.flatMap((page) => page.data.data)];
+}
+
+export async function setCategoryItemAssignment(categoryId: string, itemId: string, assigned: boolean): Promise<void> {
+    await http.patch(`/categories/${categoryId}/items/${itemId}`, { data: { assigned } });
+}
+
 export async function getLocationLevels(locationIds: string[], page: number, perPage = 10): Promise<PageCollection<CatalogInventoryLevel>> {
     const response = await http.get<PageCollection<CatalogInventoryLevel>>('/inventory-levels', {
         params: {

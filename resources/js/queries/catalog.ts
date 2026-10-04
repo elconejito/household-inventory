@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query';
 import { computed, type ComputedRef } from 'vue';
-import { createCatalogLocation, createCategory, getCategories, getCatalogLocations, getCategoryItems, getLocationLevels, updateCatalogLocation, updateCategory, type CatalogListParams, type LocationListParams } from '../api/catalog';
+import { createCatalogLocation, createCategory, getCategories, getCatalogLocations, getCategoryAssignmentItems, getCategoryItems, getLocationLevels, setCategoryItemAssignment, updateCatalogLocation, updateCategory, type CatalogListParams, type LocationListParams } from '../api/catalog';
 
 export const catalogQueryKeys = {
     all: ['catalog'] as const,
@@ -9,6 +9,7 @@ export const catalogQueryKeys = {
     locationLists: ['locations', 'catalog-list'] as const,
     locationList: (params: LocationListParams) => ['locations', 'catalog-list', params] as const,
     categoryItems: (id: string, params: CatalogListParams) => ['items', 'category', id, params] as const,
+    categoryAssignmentItems: ['items', 'category-assignment-options'] as const,
     locationLevels: (ids: string[], params: CatalogListParams) => ['inventory-levels', 'locations', ids, params] as const,
 };
 
@@ -33,6 +34,13 @@ export function useCategoryItemsQuery(categoryId: ComputedRef<string>, params: C
         queryKey: computed(() => catalogQueryKeys.categoryItems(categoryId.value, params.value)),
         queryFn: () => getCategoryItems(categoryId.value, params.value),
         enabled: computed(() => Boolean(categoryId.value)),
+    });
+}
+
+export function useCategoryAssignmentItemsQuery() {
+    return useQuery({
+        queryKey: catalogQueryKeys.categoryAssignmentItems,
+        queryFn: getCategoryAssignmentItems,
     });
 }
 
@@ -72,6 +80,10 @@ export function useCreateCategoryMutation() {
 
 export function useUpdateCategoryMutation() {
     return useCatalogMutation(({ id, changes }: { id: string; changes: { name?: string } }) => updateCategory(id, changes));
+}
+
+export function useSetCategoryItemAssignmentMutation() {
+    return useCatalogMutation(({ categoryId, itemId, assigned }: { categoryId: string; itemId: string; assigned: boolean }) => setCategoryItemAssignment(categoryId, itemId, assigned));
 }
 
 export function useCreateCatalogLocationMutation() {

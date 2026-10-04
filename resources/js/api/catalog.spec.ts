@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { http } from '../lib/http';
-import { createCatalogLocation, createCategory, getCategories, getCatalogLocations, getCategoryItems, getLocationLevels, updateCatalogLocation, updateCategory } from './catalog';
+import { createCatalogLocation, createCategory, getCategories, getCatalogLocations, getCategoryAssignmentItems, getCategoryItems, getLocationLevels, setCategoryItemAssignment, updateCatalogLocation, updateCategory } from './catalog';
 
 vi.mock('../lib/http', () => ({ http: { get: vi.fn(), post: vi.fn(), patch: vi.fn() } }));
 
@@ -42,6 +42,28 @@ describe('catalog API', () => {
         expect(http.get).toHaveBeenLastCalledWith('/inventory-levels', {
             params: { 'filter[location_id]': '20,21,22', include: 'item.active_alerts,location', page: 1, per_page: 25 },
         });
+    });
+
+    it('loads every page of active item assignment options with category membership', async () => {
+        vi.mocked(http.get)
+            .mockResolvedValueOnce({ data: { data: [{ id: '1', name: 'Batteries', categories: [{ id: '8', name: 'Supplies' }] }], meta: { last_page: 2 } } } as never)
+            .mockResolvedValueOnce({ data: { data: [{ id: '2', name: 'Soap', categories: [] }], meta: { last_page: 2 } } } as never);
+
+        const items = await getCategoryAssignmentItems();
+
+        expect(items.map((item) => item.id)).toEqual(['1', '2']);
+        expect(http.get).toHaveBeenNthCalledWith(1, '/items', { params: { include: 'categories', page: 1, per_page: 100, sort: 'name' } });
+        expect(http.get).toHaveBeenNthCalledWith(2, '/items', { params: { include: 'categories', page: 2, per_page: 100, sort: 'name' } });
+    });
+
+    it('changes only the requested category-item pivot assignment', async () => {
+        vi.mocked(http.patch).mockResolvedValue({ data: { data: null } } as never);
+
+        await setCategoryItemAssignment('8', '31', true);
+        await setCategoryItemAssignment('8', '31', false);
+
+        expect(http.patch).toHaveBeenNthCalledWith(1, '/categories/8/items/31', { data: { assigned: true } });
+        expect(http.patch).toHaveBeenNthCalledWith(2, '/categories/8/items/31', { data: { assigned: false } });
     });
 
     it('sends category and location create and update payloads', async () => {
