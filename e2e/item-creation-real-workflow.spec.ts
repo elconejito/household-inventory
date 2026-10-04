@@ -183,7 +183,9 @@ test('retries a failed optional photo upload without creating a second item', as
     await expect(page.getByRole('heading', { level: 2, name: itemName, exact: true })).toBeVisible();
     expect(requests.items).toHaveLength(1);
     const itemId = (await createdItem).id;
-    expect(requests.items[0]!.postDataJSON()).not.toHaveProperty('quantity');
+    const itemPayload = requests.items[0]!.postDataJSON() as { data: Record<string, unknown> };
+    expect(itemPayload.data).not.toHaveProperty('quantity');
+    expect(itemPayload.data).not.toHaveProperty('image');
 
     await page.screenshot({ path: testInfo.outputPath('new-item-photo-recovery-desktop.png'), fullPage: true });
     await page.setViewportSize({ width: 320, height: 740 });
@@ -257,9 +259,12 @@ test('continues without a failed optional photo and preserves the add-stock inte
     await page.locator('#new-level-quantity').fill('4');
     await expect(page.getByText('Restock 4 packs at Kitchen / Shelf.', { exact: true })).toBeVisible();
     await page.getByLabel('I’ve checked this direction and quantity.').check();
-    const movementRequest = page.waitForRequest((request) => request.method() === 'POST' && request.url().endsWith('/api/inventory-movements'));
+    const movementResponse = page.waitForResponse((response) => response.request().method() === 'POST' && response.url().endsWith('/api/inventory-movements'));
     await page.getByRole('button', { name: 'Save change', exact: true }).click();
-    expect((await movementRequest).postDataJSON()).toEqual({ data: { movement_type: 'restock', item_id: createdItemId, location_id: location.id, quantity: 4 } });
+    const restockResponse = await movementResponse;
+    expect(restockResponse.status()).toBe(201);
+    expect(restockResponse.request().postDataJSON()).toEqual({ data: { movement_type: 'restock', item_id: createdItemId, location_id: location.id, quantity: 4 } });
+    await expect(page.getByRole('status').filter({ hasText: 'Stock updated.' })).toBeVisible();
     expect(requests.items).toHaveLength(1);
     expect(requests.photos).toHaveLength(1);
     expect(await itemImageList(page, createdItemId)).toHaveLength(0);
