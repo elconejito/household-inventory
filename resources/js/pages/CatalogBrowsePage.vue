@@ -39,7 +39,11 @@ const activeQuery = computed(() => isCategoriesPage.value ? categoryQuery : loca
 const currentParent = computed(() => (locationOptions.data.value ?? []).find((location) => location.id === parentId.value));
 const currentParentPath = computed(() => currentParent.value
     ? buildLocationPath(currentParent.value, locationOptions.data.value ?? [])
-    : 'Top-level locations');
+    : parentId.value === 'root'
+        ? 'Top-level locations'
+        : locationOptions.isError.value
+            ? 'Location hierarchy unavailable'
+            : 'Loading location hierarchy…');
 const locationRows = computed(() => (locationQuery.data.value?.data ?? []).map((location) => ({
     location,
     path: buildLocationPath(location, locationOptions.data.value ?? []),
@@ -162,6 +166,11 @@ async function browseChildren(id: string): Promise<void> {
         </div>
 
         <InventoryTabs />
+
+        <div v-if="!isCategoriesPage && locationOptions.isError.value" class="mt-5 rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900" role="alert">
+            <p>Location hierarchy could not be loaded. Location names may not show their full paths.</p>
+            <button type="button" class="mt-2 font-semibold underline" @click="locationOptions.refetch()">Retry location hierarchy</button>
+        </div>
 
         <p v-if="success" class="mt-5 rounded-md border border-sage/20 bg-sage-soft px-4 py-3 text-sm font-medium text-sage-dark" role="status">{{ success }}</p>
 

@@ -50,4 +50,34 @@ describe('catalog browse page', () => {
         expect(wrapper!.find('#location-name').exists()).toBe(true);
         expect((wrapper!.get('#location-parent').element as HTMLSelectElement).value).toBe('21');
     });
+
+    it('keeps location rows visible and retries when hierarchy options fail', async () => {
+        let hierarchyRequests = 0;
+        vi.mocked(http.get).mockImplementation(async (url, config) => {
+            const params = config?.params as Record<string, unknown> | undefined;
+            if (String(url) === '/locations' && params?.per_page === 100) {
+                hierarchyRequests++;
+                if (hierarchyRequests === 1) throw new Error('Temporary hierarchy failure');
+
+                return { data: { data: [{ id: '21', name: 'House', description: null, parent: null }], meta: { current_page: 1, last_page: 1, total: 1 } } } as never;
+            }
+            if (String(url) === '/locations') {
+                return { data: { data: [{ id: '22', name: 'Pantry', description: null, parent: { id: '21', name: 'House' } }], meta: { current_page: 1, last_page: 1, total: 1 } } } as never;
+            }
+
+            return { data: { data: [], meta: { current_page: 1, last_page: 1, total: 0 } } } as never;
+        });
+        mountPage();
+        await flushPromises();
+
+        expect(wrapper!.text()).toContain('Pantry');
+        expect(wrapper!.get('[role="alert"]').text()).toContain('Location names may not show their full paths.');
+        expect(hierarchyRequests).toBe(1);
+        await wrapper!.findAll('button').find((button) => button.text() === 'Retry location hierarchy')!.trigger('click');
+        await flushPromises();
+
+        expect(hierarchyRequests).toBe(2);
+        expect(wrapper!.find('[role="alert"]').exists()).toBe(false);
+        expect(wrapper!.text()).toContain('House / Pantry');
+    });
 });

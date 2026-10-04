@@ -91,6 +91,8 @@ describe('item images panel', () => {
         await flushPromises();
         await wrapper!.setProps({ itemId: '8' });
         await flushPromises();
+        await wrapper!.setProps({ itemId: '7' });
+        await flushPromises();
 
         finishUpdate!({ data: { data: primary } });
         await flushPromises();
@@ -98,5 +100,26 @@ describe('item images panel', () => {
         expect(invalidate).toHaveBeenCalledWith({ queryKey: ['item-images', '7'] });
         expect(invalidate).not.toHaveBeenCalledWith({ queryKey: ['item-images', '8'] });
         expect(invalidate).toHaveBeenCalledWith({ queryKey: ['items'] });
+    });
+
+    it('does not show an old item upload failure after navigation', async () => {
+        let rejectUpload: ((cause: unknown) => void) | undefined;
+        vi.mocked(http.post).mockImplementation(() => new Promise((_resolve, reject) => { rejectUpload = reject; }) as never);
+        mountPanel();
+        await flushPromises();
+        const photo = new File(['pixels'], 'pantry.png', { type: 'image/png' });
+        const input = wrapper!.get('input[type="file"]');
+        Object.defineProperty(input.element, 'files', { configurable: true, value: [photo] });
+        await input.trigger('change');
+        await wrapper!.findAll('form').at(-1)!.trigger('submit');
+        await flushPromises();
+        await wrapper!.setProps({ itemId: '8' });
+        await flushPromises();
+
+        rejectUpload!(new Error('Item seven upload failed'));
+        await flushPromises();
+
+        expect(wrapper!.find('[role="alert"]').exists()).toBe(false);
+        expect(wrapper!.find('#image-upload-8').exists()).toBe(true);
     });
 });

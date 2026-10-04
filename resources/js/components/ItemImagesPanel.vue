@@ -19,8 +19,17 @@ const pending = computed(() => mutations.upload.isPending.value || mutations.upd
 const images = computed(() => imagesQuery.data.value ?? []);
 const primary = computed(() => images.value.find((image) => image.is_primary) ?? images.value[0] ?? null);
 const secondary = computed(() => images.value.filter((image) => image.id !== primary.value?.id));
+let itemGeneration = 0;
 
-watch(() => props.itemId, () => { file.value = null; caption.value = ''; error.value = ''; editingId.value = null; preview.value = null; });
+watch(() => props.itemId, () => {
+    itemGeneration++;
+    file.value = null;
+    caption.value = '';
+    editCaption.value = '';
+    error.value = '';
+    editingId.value = null;
+    preview.value = null;
+});
 watch(preview, (value) => {
     if (value && previewDialog.value && !previewDialog.value.open) previewDialog.value.showModal();
     if (!value && previewDialog.value?.open) previewDialog.value.close();
@@ -42,14 +51,17 @@ function chooseFile(event: Event): void {
 
 async function upload(): Promise<void> {
     if (!file.value || pending.value) return;
+    const operationGeneration = itemGeneration;
     error.value = '';
     try {
         await mutations.upload.mutateAsync({ file: file.value, caption: caption.value });
+        if (operationGeneration !== itemGeneration) return;
         file.value = null;
         caption.value = '';
         const input = document.getElementById(`image-upload-${props.itemId}`) as HTMLInputElement | null;
         if (input) input.value = '';
     } catch (cause) {
+        if (operationGeneration !== itemGeneration) return;
         error.value = errorMessage(cause, 'The photo could not be uploaded. Try JPEG, PNG, or WebP up to 20 MB.');
     }
 }
@@ -65,9 +77,11 @@ async function saveCaption(imageId: string, original: string | null): Promise<vo
     const value = editCaption.value.trim();
     editingId.value = null;
     if (pending.value || value === (original ?? '')) return;
+    const operationGeneration = itemGeneration;
     try {
         await mutations.update.mutateAsync({ imageId, changes: { caption: value } });
     } catch (cause) {
+        if (operationGeneration !== itemGeneration) return;
         editingId.value = imageId;
         error.value = errorMessage(cause, 'The caption could not be updated.');
     }
@@ -75,20 +89,24 @@ async function saveCaption(imageId: string, original: string | null): Promise<vo
 
 async function makePrimary(imageId: string): Promise<void> {
     if (pending.value) return;
+    const operationGeneration = itemGeneration;
     error.value = '';
     try {
         await mutations.update.mutateAsync({ imageId, changes: { is_primary: true } });
     } catch (cause) {
+        if (operationGeneration !== itemGeneration) return;
         error.value = errorMessage(cause, 'The primary photo could not be changed.');
     }
 }
 
 async function removeImage(imageId: string): Promise<void> {
     if (pending.value || !window.confirm('Delete this photo?')) return;
+    const operationGeneration = itemGeneration;
     error.value = '';
     try {
         await mutations.remove.mutateAsync(imageId);
     } catch (cause) {
+        if (operationGeneration !== itemGeneration) return;
         error.value = errorMessage(cause, 'The photo could not be deleted.');
     }
 }

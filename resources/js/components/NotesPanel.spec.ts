@@ -123,4 +123,43 @@ describe('notes panel', () => {
         expect(invalidate).toHaveBeenCalledWith({ queryKey: ['notes', 'items', '7'] });
         expect(invalidate).not.toHaveBeenCalledWith({ queryKey: ['notes', 'items', '8'] });
     });
+
+    it('does not show a late note-create failure in the next context', async () => {
+        let rejectSave: ((cause: unknown) => void) | undefined;
+        vi.mocked(http.post).mockImplementation(() => new Promise((_resolve, reject) => { rejectSave = reject; }) as never);
+        mountPanel();
+        await flushPromises();
+        await wrapper!.get('#new-note-items-7').setValue('A note for item seven');
+        await wrapper!.findAll('form')[0].trigger('submit');
+        await flushPromises();
+        await wrapper!.setProps({ contextId: '8' });
+        await flushPromises();
+        await wrapper!.setProps({ contextId: '7' });
+        await flushPromises();
+
+        rejectSave!(new Error('Item seven request failed'));
+        await flushPromises();
+
+        expect(wrapper!.find('[role="alert"]').exists()).toBe(false);
+        expect(wrapper!.find('#new-note-items-7').exists()).toBe(true);
+    });
+
+    it('does not reopen an old note editor after its update fails in a new context', async () => {
+        let rejectUpdate: ((cause: unknown) => void) | undefined;
+        vi.mocked(http.patch).mockImplementation(() => new Promise((_resolve, reject) => { rejectUpdate = reject; }) as never);
+        mountPanel();
+        await flushPromises();
+        await wrapper!.findAll('button').find((button) => button.text() === 'Edit note')!.trigger('click');
+        await wrapper!.get('#edit-note-51').setValue('Changed on item seven');
+        await wrapper!.findAll('form')[1].trigger('submit');
+        await flushPromises();
+        await wrapper!.setProps({ contextId: '8' });
+        await flushPromises();
+
+        rejectUpdate!(new Error('Item seven request failed'));
+        await flushPromises();
+
+        expect(wrapper!.find('#edit-note-51').exists()).toBe(false);
+        expect(wrapper!.find('[role="alert"]').exists()).toBe(false);
+    });
 });

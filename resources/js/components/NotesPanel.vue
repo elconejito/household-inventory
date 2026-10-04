@@ -17,12 +17,20 @@ const notesQuery = useNotesQuery(props.type, contextId, currentPage);
 const mutations = useNoteMutations(props.type, contextId);
 const pending = computed(() => mutations.create.isPending.value || mutations.update.isPending.value || mutations.remove.isPending.value);
 const notes = computed(() => notesQuery.data.value?.data ?? []);
+let contextGeneration = 0;
 
 watch(() => notesQuery.data.value?.meta.last_page, (lastPage) => {
     if (lastPage && page.value > lastPage) page.value = lastPage;
 });
 
-watch(() => props.contextId, () => { page.value = 1; body.value = ''; editingId.value = null; error.value = ''; });
+watch(() => [props.type, props.contextId], () => {
+    contextGeneration++;
+    page.value = 1;
+    body.value = '';
+    editingId.value = null;
+    editBody.value = '';
+    error.value = '';
+});
 
 function timestamp(value: string): string {
     return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value));
@@ -43,12 +51,15 @@ function startEdit(noteId: string, value: string): void {
 async function addNote(): Promise<void> {
     const value = body.value;
     if (!value.trim() || pending.value) return;
+    const operationGeneration = contextGeneration;
     error.value = '';
     try {
         await mutations.create.mutateAsync(value);
+        if (operationGeneration !== contextGeneration) return;
         body.value = '';
         page.value = 1;
     } catch (cause) {
+        if (operationGeneration !== contextGeneration) return;
         error.value = errorMessage(cause, 'The note could not be saved. Try again.');
     }
 }
@@ -56,12 +67,14 @@ async function addNote(): Promise<void> {
 async function saveEdit(noteId: string, original: string): Promise<void> {
     const value = editBody.value;
     if (!value.trim() || pending.value) return;
+    const operationGeneration = contextGeneration;
     editingId.value = null;
     if (value === original) return;
     error.value = '';
     try {
         await mutations.update.mutateAsync({ noteId, body: value });
     } catch (cause) {
+        if (operationGeneration !== contextGeneration) return;
         editingId.value = noteId;
         error.value = errorMessage(cause, 'The note could not be updated. Try again.');
     }
@@ -69,11 +82,14 @@ async function saveEdit(noteId: string, original: string): Promise<void> {
 
 async function removeNote(noteId: string): Promise<void> {
     if (pending.value || !window.confirm('Delete this note?')) return;
+    const operationGeneration = contextGeneration;
     error.value = '';
     try {
         await mutations.remove.mutateAsync(noteId);
+        if (operationGeneration !== contextGeneration) return;
         if (notes.value.length === 1 && page.value > 1) page.value--;
     } catch (cause) {
+        if (operationGeneration !== contextGeneration) return;
         error.value = errorMessage(cause, 'The note could not be deleted. Try again.');
     }
 }
