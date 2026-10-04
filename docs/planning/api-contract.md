@@ -151,6 +151,23 @@ Pagination metadata includes only:
 
 Laravel's numbered pagination-link collection is not included in API responses.
 
+## Item stock and attention filters
+
+The item index supports independent stock-presence and attention filters alongside search, category, and location:
+
+```http
+GET /api/items?filter[stock_status]=in_stock&filter[attention_status]=needs_attention
+```
+
+- `filter[stock_status]` accepts `in_stock` or `empty`. An item is in stock when any active location has a positive balance. Empty means no positive balance, including items with no inventory levels.
+- `filter[attention_status]` accepts `needs_attention`, `empty`, `low`, `buy_soon`, or `none`.
+- Attention `empty` means at least one monitored location has zero stock; `low` means a positive balance at or below that location's configured threshold.
+- `buy_soon` means an unresolved item-wide manual alert. `needs_attention` matches any empty/low monitored location or unresolved manual alert; `none` matches neither.
+- Unmonitored zero balances alone do not require attention. Archived locations and resolved manual alerts do not affect these filters.
+- Both filters describe the whole item across all active household locations. A simultaneous `location_id` filter finds items tracked at that exact location; it does not narrow stock checks, attention checks, totals, or included inventory levels to that location.
+- Filters combine with the other item criteria. Omission leaves that criterion unrestricted; invalid values, arrays, and comma-separated alternatives return the shared `422` validation error envelope.
+- Filtering changes which items are returned, not their representation. Relationships still require explicit includes.
+
 ## Current response-layer decisions
 
 - API resources use the unversioned `/api/...` namespace.

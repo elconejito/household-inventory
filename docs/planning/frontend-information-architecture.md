@@ -60,7 +60,9 @@ Each item row presents:
 - Low, empty, or manual `buy_soon` indicators when applicable
 - Categories as secondary context
 
-The desktop layout aligns these values into columns. The mobile layout stacks the same information within a compact row while preserving the same ordering and emphasis. The default sort is item name ascending. Search plus location and category filters sit above the list.
+The desktop layout aligns these values into columns. The mobile layout stacks the same information within a compact row while preserving the same ordering and emphasis. The default sort is item name ascending. Search plus location, category, stock-on-hand, and attention filters sit above the list.
+
+Stock and attention are separate filters: an item with no stock is not automatically an alert when none of its locations is monitored. Stock options distinguish any positive balance from no stock; attention options cover any attention needed, an empty monitored location, a low monitored location, Buy soon, or no attention needed. Both filters check the item across all active locations, even when the location picker limits the list to items tracked at one particular location. Helper text makes that distinction explicit. Filter changes return to page one; Clear filters resets both new selectors as well as the existing controls.
 
 The initial release does not include a grid view or thumbnail-visibility preference. Both are reasonable future display options and must not require an API or domain-model change.
 
