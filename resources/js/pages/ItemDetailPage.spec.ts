@@ -275,10 +275,37 @@ describe('item stock detail', () => {
         expect(wrapper!.find('#new-level-location').exists()).toBe(true);
         expect((wrapper!.get('#new-level-location').element as HTMLSelectElement).value).toBe('');
         await wrapper!.findAll('button').find((button) => button.text() === 'Cancel')!.trigger('click');
+        const itemRequestCount = () => vi.mocked(http.get).mock.calls.filter(([url]) => String(url) === '/items/7').length;
+        const requestsBeforeRefetch = itemRequestCount();
         await queryClient.invalidateQueries({ queryKey: ['items', 'detail', '7'] });
         await flushPromises();
 
+        expect(itemRequestCount()).toBeGreaterThan(requestsBeforeRefetch);
         expect(wrapper!.findAll('#action-title')).toHaveLength(0);
+    });
+
+    it('does not apply a generic restock deep link to stale data from the previous item route', async () => {
+        let returnCurrentItem = false;
+        vi.mocked(http.get).mockImplementation(async (url) => {
+            if (String(url).includes('/images')) return { data: { data: [] } } as never;
+            if (String(url).endsWith('/notes')) return { data: { data: [], meta: { current_page: 1, last_page: 1, total: 0 } } } as never;
+            if (String(url) === '/inventory-movements') return { data: { data: [], meta: { current_page: 1, last_page: 1, total: 0 } } } as never;
+            if (String(url).startsWith('/items/')) return { data: { data: returnCurrentItem ? { ...item, id: '8' } : item } } as never;
+            if (String(url) === '/inventory-alerts') return { data: { data: [], meta: { current_page: 1, last_page: 1, total: 0 } } } as never;
+            return { data: { data: [{ id: '2', name: 'Pantry', description: null, parent: null }, { id: '3', name: 'Closet', description: null, parent: null }, { id: '4', name: 'Garage', description: null, parent: null }], meta: { current_page: 1, last_page: 1, total: 3 } } } as never;
+        });
+        mountPage();
+        await flushPromises();
+
+        (await import('vue-router') as unknown as { setMockItem: (id: string) => void }).setMockItem('8');
+        (await import('vue-router') as unknown as { setMockQuery: (query: Record<string, string | string[]>) => void }).setMockQuery({ restock: '1' });
+        await flushPromises();
+        expect(wrapper!.findAll('#action-title')).toHaveLength(0);
+
+        returnCurrentItem = true;
+        await queryClient.invalidateQueries({ queryKey: ['items', 'detail', '8'] });
+        await flushPromises();
+        expect(wrapper!.get('#action-title').text()).toBe('Restock');
     });
 
     it('keeps malformed restock query values inert', async () => {
