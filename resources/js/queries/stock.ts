@@ -37,9 +37,10 @@ export function useStockItemQuery(id: string | ComputedRef<string>) {
     return useQuery({ queryKey: computed(() => stockQueryKeys.detail(resolvedId.value)), queryFn: () => getItem(resolvedId.value), enabled: computed(() => Boolean(resolvedId.value)) });
 }
 
-export function useLocationsQuery() {
+export function useLocationsQuery(enabled: boolean | ComputedRef<boolean> = true) {
     return useQuery({
         queryKey: stockQueryKeys.locations,
+        enabled,
         queryFn: async () => {
             const firstPage = await getLocations(1);
             const rest = await Promise.all(Array.from({ length: Math.max(0, firstPage.meta.last_page - 1) }, (_, index) => getLocations(index + 2)));
@@ -48,12 +49,13 @@ export function useLocationsQuery() {
     });
 }
 
-export function useAllItemsQuery() {
+export function useAllItemsQuery(enabled: boolean | ComputedRef<boolean> = true) {
     return useQuery({
         queryKey: ['items', 'activity-filter-options'] as const,
+        enabled,
         queryFn: async () => {
-            const firstPage = await getItems({ search: '', page: 1, perPage: 100 });
-            const rest = await Promise.all(Array.from({ length: Math.max(0, firstPage.meta.last_page - 1) }, (_, index) => getItems({ search: '', page: index + 2, perPage: 100 })));
+            const firstPage = await getItems({ search: '', page: 1, perPage: 100 }, '');
+            const rest = await Promise.all(Array.from({ length: Math.max(0, firstPage.meta.last_page - 1) }, (_, index) => getItems({ search: '', page: index + 2, perPage: 100 }, '')));
             return [...firstPage.data, ...rest.flatMap((page) => page.data)];
         },
     });
