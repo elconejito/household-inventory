@@ -5,11 +5,12 @@ import { useRoute } from 'vue-router';
 import NotesPanel from '../components/NotesPanel.vue';
 import ArchiveResourceButton from '../components/ArchiveResourceButton.vue';
 import InventoryTabs from '../components/InventoryTabs.vue';
+import LocationStockActions, { type LocationStockAction } from '../components/LocationStockActions.vue';
 import { getCategory, getLocation } from '../api/note-contexts';
 import { buildLocationPath, type Location as StockLocation } from '../api/stock';
 import { parseApiErrors, type FormErrors } from '../lib/api-errors';
 import { useCategoryItemsQuery, useLocationLevelsQuery, useUpdateCatalogLocationMutation, useUpdateCategoryMutation } from '../queries/catalog';
-import { useAllItemsQuery, useLocationsQuery } from '../queries/stock';
+import { useAllItemsQuery, useLocationsQuery, useRecordMovementMutation } from '../queries/stock';
 
 const pageSizes = [10, 25, 50, 100];
 const route = useRoute();
@@ -43,6 +44,9 @@ const itemToRestock = ref('');
 const categoryEditSnapshot = ref('');
 const updateCategoryMutation = useUpdateCategoryMutation();
 const updateLocationMutation = useUpdateCatalogLocationMutation();
+const stockMovementMutation = useRecordMovementMutation();
+const activeStockAction = ref<{ levelId: string; action: LocationStockAction } | null>(null);
+const stockActionErrors = ref<FormErrors>({ fields: {}, form: '' });
 
 const categoryParams = computed(() => ({ search: debouncedCategorySearch.value, page: categoryPage.value, perPage: categoryPageSize.value }));
 const categoryItemsQuery = useCategoryItemsQuery(categoryId, categoryParams);
@@ -108,6 +112,8 @@ watch([contextType, contextId], () => {
     itemToRestock.value = '';
     formErrors.value = { fields: {}, form: '' };
     feedback.value = '';
+    activeStockAction.value = null;
+    stockActionErrors.value = { fields: {}, form: '' };
     categoryEditSnapshot.value = '';
     locationEditSnapshot = null;
 }, { immediate: true });
@@ -200,7 +206,10 @@ async function saveLocation(): Promise<void> {
 function changePage(kind: 'category' | 'inventory', nextPage: number): void {
     const query = kind === 'category' ? categoryItemsQuery : locationLevelsQuery;
     const page = kind === 'category' ? categoryPage : inventoryPage;
-    if (nextPage >= 1 && nextPage <= (query.data.value?.meta.last_page ?? 1)) page.value = nextPage;
+    if (nextPage >= 1 && nextPage <= (query.data.value?.meta.last_page ?? 1)) {
+        page.value = nextPage;
+        if (kind === 'inventory') closeStockAction(true);
+    }
 }
 
 function changePageSize(kind: 'category' | 'inventory', value: string): void {
@@ -212,12 +221,14 @@ function changePageSize(kind: 'category' | 'inventory', value: string): void {
     } else {
         inventoryPageSize.value = nextSize;
         inventoryPage.value = 1;
+        closeStockAction(true);
     }
 }
 
 function setInventoryScope(value: string): void {
     inventoryScope.value = value === 'direct' ? 'direct' : 'all';
     inventoryPage.value = 1;
+    closeStockAction(true);
 }
 
 function locationForPath(levelLocation: StockLocation): string {
@@ -230,6 +241,45 @@ function parseError(queryError: unknown, fallback: string): string {
 
 function itemDetailLocation(itemId: string, exactLocationId = contextId.value): { name: string; params: { item: string }; query: Record<string, string> } {
     return { name: 'inventory-item', params: { item: itemId }, query: { restock_location: exactLocationId } };
+}
+
+function beginStockAction(levelId: string, action: LocationStockAction): void {
+    if (stockMovementMutation.isPending.value) return;
+    activeStockAction.value = { levelId, action };
+    stockActionErrors.value = { fields: {}, form: '' };
+    feedback.value = '';
+}
+
+async function saveStockAction(levelId: string, data: Record<string, string | number>): Promise<void> {
+    if (stockMovementMutation.isPending.value) return;
+    const isQuickUse = data.movement_type === 'consumption' && data.quantity === 1;
+    if (isQuickUse) {
+        activeStockAction.value = null;
+        stockActionErrors.value = { fields: {}, form: '' };
+    } else if (activeStockAction.value?.levelId !== levelId) {
+        return;
+    }
+    const savedContextKey = `${contextType.value}:${contextId.value}`;
+    const actionWasOpen = !isQuickUse && activeStockAction.value?.levelId === levelId;
+    stockActionErrors.value = { fields: {}, form: '' };
+    feedback.value = '';
+
+    try {
+        await stockMovementMutation.mutateAsync(data);
+        if (`${contextType.value}:${contextId.value}` !== savedContextKey || (actionWasOpen && activeStockAction.value?.levelId !== levelId) || (!actionWasOpen && activeStockAction.value)) return;
+        if (actionWasOpen) activeStockAction.value = null;
+        feedback.value = 'Stock updated.';
+    } catch (cause) {
+        if (`${contextType.value}:${contextId.value}` === savedContextKey && (actionWasOpen ? activeStockAction.value?.levelId === levelId : !activeStockAction.value)) {
+            stockActionErrors.value = parseApiErrors(cause);
+        }
+    }
+}
+
+function closeStockAction(force = false): void {
+    if (stockMovementMutation.isPending.value && !force) return;
+    activeStockAction.value = null;
+    stockActionErrors.value = { fields: {}, form: '' };
 }
 </script>
 
@@ -256,6 +306,7 @@ function itemDetailLocation(itemId: string, exactLocationId = contextId.value): 
             <div class="mt-4"><ArchiveResourceButton :type="contextType" :id="contextId" :label="title" /></div>
 
             <p v-if="feedback" class="mt-5 rounded-md border border-sage/20 bg-sage-soft px-4 py-3 text-sm text-sage-dark" role="status">{{ feedback }}</p>
+            <div v-if="!activeStockAction && (stockActionErrors.form || Object.keys(stockActionErrors.fields).length)" class="mt-4 text-sm text-rose-700" role="alert"><p v-if="stockActionErrors.form">{{ stockActionErrors.form }}</p><p v-for="(message, field) in stockActionErrors.fields" :key="field">{{ message }}</p></div>
 
             <section v-if="showCategoryEdit" class="mt-5 rounded-panel border border-line bg-white p-5 shadow-card" aria-labelledby="edit-category-title">
                 <h2 id="edit-category-title" class="text-lg font-semibold text-ink">Edit category</h2>
@@ -319,7 +370,7 @@ function itemDetailLocation(itemId: string, exactLocationId = contextId.value): 
                     <div v-else-if="locationLevelsQuery.isError.value" class="p-5" role="alert"><p class="text-sm text-rose-700">{{ parseError(locationLevelsQuery.error.value, 'Location stock could not be loaded.') }}</p><button type="button" class="mt-2 text-sm text-sage-dark underline" @click="locationLevelsQuery.refetch()">Try again</button></div>
                     <div v-else-if="locationLevelsQuery.data.value?.data.length === 0" class="grid min-h-32 place-items-center p-5 text-center"><p class="text-sm text-ink-muted">No stock records in this scope yet.</p></div>
                     <ul v-else class="divide-y divide-line">
-                        <li v-for="level in locationLevelsQuery.data.value?.data ?? []" :key="level.id" class="grid gap-3 px-5 py-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:px-6"><div class="min-w-0"><RouterLink :to="{ name: 'inventory-item', params: { item: level.item.id } }" class="font-semibold text-ink hover:text-sage-dark hover:underline">{{ level.item.name }}</RouterLink><p class="mt-1 text-sm text-ink-muted">{{ locationForPath(level.location) }} · {{ level.quantity }} {{ level.quantity === 1 ? level.item.counting_unit : (level.item.counting_unit_plural || level.item.counting_unit) }}</p></div><div class="flex flex-wrap items-center gap-3"><span v-if="level.alert_threshold !== null" class="text-sm text-ink-muted">Alert at {{ level.alert_threshold }}</span><RouterLink :to="itemDetailLocation(level.item.id, level.location.id)" class="inline-flex min-h-10 items-center rounded-md border border-line px-3 text-sm font-semibold text-sage-dark hover:bg-sage-soft">Restock here</RouterLink></div></li>
+                        <li v-for="level in locationLevelsQuery.data.value?.data ?? []" :key="level.id" class="grid gap-3 px-5 py-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:px-6"><div class="min-w-0"><RouterLink :to="{ name: 'inventory-item', params: { item: level.item.id } }" class="font-semibold text-ink hover:text-sage-dark hover:underline">{{ level.item.name }}</RouterLink><p class="mt-1 text-sm text-ink-muted">{{ locationForPath(level.location) }} · {{ level.quantity }} {{ level.quantity === 1 ? level.item.counting_unit : (level.item.counting_unit_plural || level.item.counting_unit) }}</p></div><div class="grid gap-2 sm:justify-items-end"><span v-if="level.alert_threshold !== null" class="text-sm text-ink-muted">Alert at {{ level.alert_threshold }}</span><LocationStockActions :key="`${contextType}:${contextId}:${level.id}`" :level="level" :locations="locationOptions.data.value ?? []" :active-action="activeStockAction" :busy="stockMovementMutation.isPending.value" :errors="activeStockAction?.levelId === level.id ? stockActionErrors : { fields: {}, form: '' }" :locations-loading="locationOptions.isPending.value" :locations-error="locationOptions.isError.value" @activate="beginStockAction" @submit="saveStockAction" @close="closeStockAction" @retry-locations="locationOptions.refetch()"/></div></li>
                     </ul>
                     <div v-if="locationLevelsQuery.data.value && locationLevelsQuery.data.value.meta.last_page > 1" class="flex items-center justify-between gap-4 border-t border-line px-5 py-4 sm:px-6"><p class="text-sm text-ink-muted">Page {{ locationLevelsQuery.data.value.meta.current_page }} of {{ locationLevelsQuery.data.value.meta.last_page }}</p><div class="flex gap-2"><button type="button" :disabled="inventoryPage <= 1 || locationLevelsQuery.isFetching.value" class="min-h-10 rounded-md border border-line px-3 text-sm disabled:opacity-50" @click="changePage('inventory', inventoryPage - 1)">Previous</button><button type="button" :disabled="inventoryPage >= locationLevelsQuery.data.value.meta.last_page || locationLevelsQuery.isFetching.value" class="min-h-10 rounded-md border border-line px-3 text-sm disabled:opacity-50" @click="changePage('inventory', inventoryPage + 1)">Next</button></div></div>
                 </section>
