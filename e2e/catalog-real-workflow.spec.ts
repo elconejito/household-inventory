@@ -27,7 +27,7 @@ async function addLocation(page: Page, name: string, parent?: string): Promise<v
     await page.getByLabel(/^Location name/).fill(name);
     if (parent) await page.getByLabel(/^Parent location/).selectOption({ label: parent });
     await page.getByRole('button', { name: 'Save location', exact: true }).click();
-    await expect(page.getByRole('status')).toContainText(name);
+    await expect(page.getByRole('status').filter({ hasText: `${name} was created.` })).toBeVisible();
 }
 
 async function restockHere(page: Page, locationId: string, itemName: string, quantity: number): Promise<void> {
@@ -39,7 +39,7 @@ async function restockHere(page: Page, locationId: string, itemName: string, qua
     await page.getByLabel(/Quantity/).fill(String(quantity));
     await page.getByLabel('I’ve checked this direction and quantity.').check();
     await page.getByRole('button', { name: 'Save change', exact: true }).click();
-    await expect(page.getByRole('status')).toContainText('Stock updated.');
+    await expect(page.getByRole('status').filter({ hasText: 'Stock updated.' })).toBeVisible();
 }
 
 test('creates and edits a catalog, assigns equal categories, and distinguishes parent stock from descendants', async ({ page }, testInfo) => {
