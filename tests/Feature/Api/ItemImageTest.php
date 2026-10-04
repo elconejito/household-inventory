@@ -54,6 +54,124 @@ class ItemImageTest extends TestCase
         $this->assertSame('image/webp', image_type_to_mime_type(exif_imagetype(Storage::disk('inventory-images')->path($image->thumbnail_path))));
     }
 
+    public function test_upload_fails_closed_for_public_disk_and_visibility_without_writing_files(): void
+    {
+        Storage::fake('public');
+        [$user, $household] = $this->householdMember();
+        $item = Item::factory()->for($household)->create();
+        $this->actingAs($user, 'web');
+
+        config(['inventory.images_disk' => 'public']);
+        $publicDiskResponse = $this->post('/api/items/'.$item->id.'/images', [
+            'image' => $this->uploadedPng(),
+        ], ['Accept' => 'application/json']);
+
+        $publicDiskResponse->assertServerError();
+        $this->assertStringNotContainsString(public_path(), $publicDiskResponse->getContent());
+        Storage::disk('public')->assertDirectoryEmpty('/');
+
+        config([
+            'inventory.images_disk' => 'public-visibility',
+            'filesystems.disks.public-visibility' => [
+                'driver' => 'local',
+                'root' => storage_path('app/private/test-public-visibility'),
+                'visibility' => 'public',
+            ],
+        ]);
+        Storage::fake('public-visibility');
+        $publicVisibilityResponse = $this->post('/api/items/'.$item->id.'/images', [
+            'image' => $this->uploadedPng(),
+        ], ['Accept' => 'application/json']);
+
+        $publicVisibilityResponse->assertServerError();
+        $this->assertStringNotContainsString('test-public-visibility', $publicVisibilityResponse->getContent());
+        Storage::disk('public-visibility')->assertDirectoryEmpty('/');
+        $this->assertDatabaseCount('item_images', 0);
+    }
+
+    public function test_upload_fails_closed_for_local_roots_exposed_by_public_paths_or_links(): void
+    {
+        [$user, $household] = $this->householdMember();
+        $item = Item::factory()->for($household)->create();
+        $this->actingAs($user, 'web');
+
+        $exposedRoots = [
+            public_path('inventory-images-test'),
+            public_path('nested/../inventory-images-traversal-test'),
+            storage_path('app/public/inventory-images-test'),
+        ];
+
+        foreach ($exposedRoots as $index => $root) {
+            $disk = 'public-root-'.$index;
+            config([
+                'inventory.images_disk' => $disk,
+                'filesystems.disks.'.$disk => [
+                    'driver' => 'local',
+                    'root' => $root,
+                    'visibility' => 'private',
+                ],
+            ]);
+            Storage::fake($disk);
+
+            $response = $this->post('/api/items/'.$item->id.'/images', [
+                'image' => $this->uploadedPng(),
+            ], ['Accept' => 'application/json']);
+
+            $response->assertServerError();
+            $this->assertStringNotContainsString($root, $response->getContent());
+            Storage::disk($disk)->assertDirectoryEmpty('/');
+        }
+
+        $linkedRoot = storage_path('app/private/images-through-public-link');
+        config([
+            'inventory.images_disk' => 'public-link-target',
+            'filesystems.disks.public-link-target' => [
+                'driver' => 'local',
+                'root' => $linkedRoot,
+                'visibility' => 'private',
+            ],
+            'filesystems.links' => [
+                public_path('images') => storage_path('app/private'),
+            ],
+        ]);
+        Storage::fake('public-link-target');
+
+        $linkedResponse = $this->post('/api/items/'.$item->id.'/images', [
+            'image' => $this->uploadedPng(),
+        ], ['Accept' => 'application/json']);
+
+        $linkedResponse->assertServerError();
+        $this->assertStringNotContainsString($linkedRoot, $linkedResponse->getContent());
+        Storage::disk('public-link-target')->assertDirectoryEmpty('/');
+        $this->assertDatabaseCount('item_images', 0);
+    }
+
+    public function test_upload_forces_private_visibility_on_a_custom_private_disk(): void
+    {
+        [$user, $household] = $this->householdMember();
+        $item = Item::factory()->for($household)->create();
+        $privateRoot = public_path().'ity/custom-private-images';
+        config([
+            'inventory.images_disk' => 'custom-private-images',
+            'filesystems.disks.custom-private-images' => [
+                'driver' => 'local',
+                'root' => $privateRoot,
+                'visibility' => 'private',
+            ],
+        ]);
+        $disk = Storage::fake('custom-private-images', ['visibility' => 'private']);
+
+        $response = $this->actingAs($user, 'web')->post('/api/items/'.$item->id.'/images', [
+            'image' => $this->uploadedPng(),
+        ], ['Accept' => 'application/json']);
+
+        $image = ItemImage::query()->firstOrFail();
+        $response->assertCreated();
+        $this->assertCount(2, $disk->allFiles());
+        $this->assertSame('private', $disk->getVisibility($image->thumbnail_path));
+        $this->assertSame('private', $disk->getVisibility($image->display_path));
+    }
+
     public function test_upload_rejects_spoofed_metadata_and_unsupported_images(): void
     {
         Storage::fake('inventory-images');
