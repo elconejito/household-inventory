@@ -6,6 +6,7 @@ export type ItemCategory = {
 };
 
 export type ItemThumbnail = { id: string; is_primary: boolean; thumbnail_url: string; caption: string | null };
+export type ItemActiveAlert = { type: 'inventory-alerts'; id: string; alert_type: 'buy_soon' | string; created_at: string; resolved_at: string | null };
 
 export type ItemLocation = {
     id: string;
@@ -23,6 +24,7 @@ export type InventoryItem = {
     total_quantity?: number;
     categories?: ItemCategory[];
     images?: ItemThumbnail[];
+    active_alerts?: ItemActiveAlert[];
     inventory_levels?: Array<{
         id: string;
         quantity: number;
@@ -113,7 +115,7 @@ export async function getItems(params: ItemListParams, include = 'categories,ima
 
 export async function getItem(id: string): Promise<ItemResponse['data']> {
     const response = await http.get<ItemResponse>(`/items/${id}`, {
-        params: { include: 'categories,inventory_levels.location' },
+        params: { include: 'categories,inventory_levels.location,active_alerts' },
     });
 
     return response.data.data;

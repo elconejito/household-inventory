@@ -117,7 +117,7 @@ describe('inventory page', () => {
             'filter[location_id]': '9',
             sort: '-name',
             per_page: 25,
-            include: 'categories,images,inventory_levels.location',
+            include: 'categories,images,inventory_levels.location,active_alerts',
         }) });
     });
 
@@ -163,5 +163,32 @@ describe('inventory page', () => {
         const thumbnailSpacer = rows[1].find('[aria-hidden="true"].size-14');
         expect(thumbnailSpacer.exists()).toBe(true);
         expect(thumbnailSpacer.classes()).toEqual(expect.arrayContaining(['hidden', 'sm:block']));
+    });
+
+    it('shows monitored stock attention and Buy soon without promoting unmonitored empty locations', async () => {
+        const itemWithIndicators = {
+            id: '31', name: 'Batteries', counting_unit: 'pack', description: null, categories: [], images: [], total_quantity: 2,
+            active_alerts: [{ type: 'inventory-alerts', id: 'alert-1', alert_type: 'buy_soon', created_at: '2026-10-04T12:00:00Z', resolved_at: null }],
+            inventory_levels: [
+                { id: 'level-1', quantity: 0, alert_threshold: null, stock_status: 'empty', alert_status: 'unmonitored', location: { id: '1', name: 'Bathroom', description: null } },
+                { id: 'level-2', quantity: 1, alert_threshold: 2, stock_status: 'in_stock', alert_status: 'low', location: { id: '2', name: 'Pantry', description: null } },
+                { id: 'level-3', quantity: 0, alert_threshold: 0, stock_status: 'empty', alert_status: 'empty', location: { id: '3', name: 'Closet', description: null } },
+            ],
+        };
+        vi.mocked(http.get).mockImplementation(async (url) => {
+            if (url === '/items') return { data: { data: [itemWithIndicators], links: {}, meta: { current_page: 1, last_page: 1, total: 1 } } } as never;
+            if (url === '/categories') return { data: { data: [], meta: { last_page: 1 } } } as never;
+            if (url === '/locations') return { data: { data: [], meta: { current_page: 1, last_page: 1, total: 0 } } } as never;
+            throw new Error(`Unexpected GET ${String(url)}`);
+        });
+
+        wrapper = mount(InventoryPage, { global: { plugins: [[VueQueryPlugin, { queryClient }]] } });
+        await flushPromises();
+
+        const row = wrapper.get('li article');
+        expect(row.text()).toContain('Low stock · Pantry');
+        expect(row.text()).toContain('Out of stock · Closet');
+        expect(row.text()).toContain('Buy soon');
+        expect(row.text()).not.toContain('Bathroom');
     });
 });

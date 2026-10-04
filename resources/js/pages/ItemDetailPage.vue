@@ -12,6 +12,8 @@ import InventoryTabs from '../components/InventoryTabs.vue';
 import RecentItemMovements from '../components/RecentItemMovements.vue';
 import type { ItemEditSnapshot, ItemUpdate, NewItem } from '../api/items';
 import { useUpdateItemMutation } from '../queries/items';
+import StockStatusBadge from '../components/StockStatusBadge.vue';
+import { getStockLevelIndicators } from '../lib/stock-indicators';
 
 type Action = 'restock' | 'transfer-out' | 'transfer-in' | 'correction' | 'disposal' | 'threshold';
 const route = useRoute();
@@ -310,6 +312,7 @@ async function toggleBuySoon(): Promise<void> {
                     <p class="eyebrow">Item stock</p>
                     <h1 id="page-title" class="page-title mt-2 break-words">{{ itemQuery.data.value.name }}</h1>
                     <p v-if="itemQuery.data.value.description" class="mt-2 whitespace-pre-line text-sm text-ink-muted">{{ itemQuery.data.value.description }}</p>
+                    <nav v-if="itemQuery.data.value.categories?.length" class="mt-3 flex max-w-full flex-wrap gap-2" aria-label="Item categories"><RouterLink v-for="category in itemQuery.data.value.categories" :key="category.id" :to="{ name: 'category-detail', params: { category: category.id } }" class="max-w-full truncate rounded-md bg-sage-soft px-2.5 py-1 text-xs font-medium text-sage-dark hover:underline">{{ category.name }}</RouterLink></nav>
                     <button type="button" class="mt-3 min-h-10 rounded-md border border-line px-3 text-sm font-medium text-ink hover:bg-surface-soft focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sage" :aria-expanded="showEditForm" aria-controls="edit-item-panel" @click="showEditForm = !showEditForm; editSuccess = ''; editErrors = { fields: {}, form: '' }">{{ showEditForm ? 'Cancel edit' : 'Edit item' }}</button>
                 </div>
                 <div class="rounded-panel border border-line bg-white px-5 py-3 text-right shadow-card">
@@ -352,7 +355,7 @@ async function toggleBuySoon(): Promise<void> {
                 </div>
                 <ul v-else class="divide-y divide-line">
                     <li v-for="level in itemQuery.data.value.inventory_levels" :key="level.id" class="grid gap-3 px-5 py-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:px-6">
-                        <div><h3 class="font-semibold text-ink"><RouterLink :to="{ name: 'location-detail', params: { location: level.location.id } }" class="hover:underline">{{ locationPath(level.location) }}</RouterLink></h3><p class="mt-1 text-sm text-ink-muted">{{ level.quantity }} {{ unitFor(level.quantity) }}<span v-if="level.alert_threshold !== null"> · alert at {{ level.alert_threshold }}</span></p></div>
+                        <div><h3 class="font-semibold text-ink"><RouterLink :to="{ name: 'location-detail', params: { location: level.location.id } }" class="hover:underline">{{ locationPath(level.location) }}</RouterLink></h3><p class="mt-1 text-sm text-ink-muted">{{ level.quantity }} {{ unitFor(level.quantity) }}<span v-if="level.alert_threshold !== null"> · alert at {{ level.alert_threshold }}</span></p><div class="mt-2 flex flex-wrap gap-1.5" aria-label="Stock level status"><StockStatusBadge v-for="indicator in getStockLevelIndicators(level)" :key="indicator.label" :label="indicator.label" :tone="indicator.tone" /></div></div>
                         <div class="flex flex-wrap gap-2">
                             <button v-if="level.quantity > 0" type="button" :disabled="pending" class="min-h-9 rounded-md border border-line px-3 text-sm font-medium hover:bg-surface-soft disabled:cursor-wait disabled:opacity-60" @click="quickConsume(level)">{{ movementMutation.isPending.value ? 'Saving…' : 'Use 1' }}</button>
                             <button type="button" :disabled="pending" class="min-h-9 rounded-md border border-line px-3 text-sm font-medium hover:bg-surface-soft disabled:cursor-wait disabled:opacity-60" @click="startAction('restock', level)">Restock</button>

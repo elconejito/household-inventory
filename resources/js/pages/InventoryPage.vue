@@ -7,7 +7,9 @@ import { useLocationsQuery } from '../queries/stock';
 import type { NewItem } from '../api/items';
 import ItemEditor from '../components/ItemEditor.vue';
 import InventoryTabs from '../components/InventoryTabs.vue';
+import StockStatusBadge from '../components/StockStatusBadge.vue';
 import { buildLocationPath } from '../api/stock';
+import { getMonitoredAttentionLevels, hasActiveBuySoonAlert } from '../lib/stock-indicators';
 
 const route = useRoute();
 const search = ref('');
@@ -263,13 +265,14 @@ function errorMessage(): string {
                             <span v-else-if="pageHasPrimaryImage" class="hidden size-14 sm:block" aria-hidden="true"></span>
                             <div class="min-w-0">
                                 <h3 class="break-words text-base font-semibold text-ink"><RouterLink :to="{ name: 'inventory-item', params: { item: item.id } }" class="rounded-sm hover:text-sage-dark hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sage">{{ item.name }}</RouterLink></h3>
+                                <div v-if="hasActiveBuySoonAlert(item.active_alerts)" class="mt-2"><StockStatusBadge label="Buy soon" tone="reminder" /></div>
                                 <p v-if="item.description" class="mt-1 line-clamp-2 whitespace-pre-line text-sm leading-5 text-ink-muted">{{ item.description }}</p>
                             </div>
                             <p class="text-sm text-ink-muted sm:pt-0.5">
                                 <span class="sr-only">Counting unit: </span>
                                 Counted by <span class="font-medium text-ink">{{ item.counting_unit }}</span>
                             </p>
-                            <div class="text-sm font-semibold text-ink sm:pt-0.5"><p>{{ item.total_quantity ?? 0 }} {{ unitFor(item, item.total_quantity ?? 0) }} <span class="font-normal text-ink-muted">total on hand</span></p><p v-if="locationId" class="mt-1 text-xs font-normal text-ink-muted">At {{ selectedLocationName }}: {{ quantityAtLocation(item) }} {{ unitFor(item, quantityAtLocation(item)) }}</p><ul v-if="item.inventory_levels?.some((level) => level.quantity > 0)" class="mt-2 grid gap-1 text-xs font-normal text-ink-muted"><li v-for="level in item.inventory_levels.filter((candidate) => candidate.quantity > 0)" :key="level.id">{{ buildLocationPath(level.location, locationsQuery.data.value ?? []) }} — {{ level.quantity }} {{ unitFor(item, level.quantity) }}</li></ul></div>
+                            <div class="text-sm font-semibold text-ink sm:pt-0.5"><p>{{ item.total_quantity ?? 0 }} {{ unitFor(item, item.total_quantity ?? 0) }} <span class="font-normal text-ink-muted">total on hand</span></p><p v-if="locationId" class="mt-1 text-xs font-normal text-ink-muted">At {{ selectedLocationName }}: {{ quantityAtLocation(item) }} {{ unitFor(item, quantityAtLocation(item)) }}</p><div v-if="getMonitoredAttentionLevels(item.inventory_levels ?? []).length" class="mt-2 flex flex-wrap gap-1.5"><StockStatusBadge v-for="{ level, indicator } in getMonitoredAttentionLevels(item.inventory_levels ?? [])" :key="level.id" :label="`${indicator.label} · ${buildLocationPath(level.location, locationsQuery.data.value ?? [])}`" :tone="indicator.tone" /></div><ul v-if="item.inventory_levels?.some((level) => level.quantity > 0)" class="mt-2 grid gap-1 text-xs font-normal text-ink-muted"><li v-for="level in item.inventory_levels.filter((candidate) => candidate.quantity > 0)" :key="level.id">{{ buildLocationPath(level.location, locationsQuery.data.value ?? []) }} — {{ level.quantity }} {{ unitFor(item, level.quantity) }}</li></ul></div>
                             <div class="flex min-w-0 flex-wrap gap-2 sm:pt-0.5">
                                 <RouterLink v-for="category in item.categories ?? []" :key="category.id" :to="{ name: 'category-detail', params: { category: category.id } }" class="max-w-full truncate rounded-md bg-sage-soft px-2.5 py-1 text-xs font-medium text-sage-dark hover:underline">{{ category.name }}</RouterLink>
                                 <span v-if="!item.categories?.length" class="text-sm text-ink-muted">{{ item.description ? 'No categories yet' : 'No description or categories yet' }}</span>

@@ -15,9 +15,9 @@ vi.mock('vue-router', async (importOriginal) => {
 });
 
 const item = {
-    id: '7', name: 'Batteries', counting_unit: 'pack', counting_unit_plural: 'packs', description: null, total_quantity: 5, categories: [{ id: '2', name: 'Pantry supplies' }],
+    id: '7', name: 'Batteries', counting_unit: 'pack', counting_unit_plural: 'packs', description: null, total_quantity: 5, categories: [{ id: '2', name: 'Pantry supplies' }, { id: '3', name: 'Emergency supplies' }],
     inventory_levels: [
-        { type: 'inventory-levels', id: '9', quantity: 0, alert_threshold: 1, stock_status: 'out', alert_status: 'below_threshold', location: { id: '2', name: 'Pantry', description: null, parent: null } },
+        { type: 'inventory-levels', id: '9', quantity: 0, alert_threshold: 1, stock_status: 'empty', alert_status: 'empty', location: { id: '2', name: 'Pantry', description: null, parent: null } },
         { type: 'inventory-levels', id: '10', quantity: 5, alert_threshold: null, stock_status: 'in_stock', alert_status: 'unmonitored', location: { id: '3', name: 'Closet', description: null, parent: null } },
     ],
 };
@@ -64,6 +64,17 @@ describe('item stock detail', () => {
         await pantry.findAll('button').find((button) => button.text() === 'Move in')!.trigger('click');
         expect(wrapper!.find('#transfer-location').exists()).toBe(true);
         expect(wrapper!.get('#transfer-location').text()).toContain('Closet (5 available)');
+    });
+
+    it('shows each location monitoring status and every category link at equal priority', async () => {
+        mountPage();
+        await flushPromises();
+
+        expect(wrapper!.get('[aria-label="Item categories"]').text()).toContain('Pantry supplies');
+        expect(wrapper!.get('[aria-label="Item categories"]').text()).toContain('Emergency supplies');
+        expect(wrapper!.text()).toContain('Empty');
+        expect(wrapper!.text()).toContain('Monitored');
+        expect(wrapper!.text()).toContain('Unmonitored');
     });
 
     it('submits a confirmed correction with observed quantity and displays API validation errors', async () => {
@@ -284,6 +295,7 @@ describe('item stock detail', () => {
         await wrapper!.findAll('button').find((button) => button.text() === 'Edit item')!.trigger('click');
         await flushPromises();
         await wrapper!.get('input[type="checkbox"][value="2"]').setValue(false);
+        await wrapper!.get('input[type="checkbox"][value="3"]').setValue(false);
         await wrapper!.get('#edit-item-panel form').trigger('submit');
         await flushPromises();
 

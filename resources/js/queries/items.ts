@@ -11,7 +11,7 @@ export const itemQueryKeys = {
 export function useItemsQuery(params: ComputedRef<ItemListParams>) {
     return useQuery({
         queryKey: computed(() => itemQueryKeys.list(params.value)),
-        queryFn: () => getItems(params.value, 'categories,images,inventory_levels.location'),
+        queryFn: () => getItems(params.value, 'categories,images,inventory_levels.location,active_alerts'),
     });
 }
 

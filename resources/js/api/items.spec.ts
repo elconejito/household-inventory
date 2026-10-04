@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { http } from '../lib/http';
-import { getItemCategoryOptions, getItems, updateItem } from './items';
+import { getItem, getItemCategoryOptions, getItems, updateItem } from './items';
 
 vi.mock('../lib/http', () => ({
     http: {
@@ -48,6 +48,14 @@ describe('item API client', () => {
                 include: 'categories,images',
             },
         });
+    });
+
+    it('requests stock levels and active reminders for the item detail page', async () => {
+        vi.mocked(http.get).mockResolvedValue({ data: { data: { id: '7', active_alerts: [] } } } as never);
+
+        await getItem('7');
+
+        expect(http.get).toHaveBeenCalledWith('/items/7', { params: { include: 'categories,inventory_levels.location,active_alerts' } });
     });
 
     it('loads every page of active category options', async () => {
