@@ -79,7 +79,7 @@ test('recovers the catalog location hierarchy query without losing visible child
     await mockCatalogLocations(page, async (route, requestCount) => {
         hierarchyRequests = requestCount;
         if (requestCount <= 4) {
-            await route.fulfill({ status: 503, contentType: 'application/json', json: { message: 'Temporary location hierarchy failure.' } });
+            await route.fulfill({ status: 503, json: { errors: [{ status: '503', code: 'service_unavailable', title: 'Service Unavailable', detail: 'Temporary location hierarchy failure.' }] } });
             return;
         }
 
@@ -96,16 +96,22 @@ test('recovers the catalog location hierarchy query without losing visible child
     const pantryLink = page.getByRole('link', { name: 'Pantry', exact: true });
     await expect(pantryLink).toBeVisible();
     const hierarchyAlert = page.getByRole('alert').filter({ hasText: 'Location hierarchy could not be loaded. Location names may not show their full paths.' });
-    await expect(hierarchyAlert).toBeVisible();
+    await expect(hierarchyAlert).toBeVisible({ timeout: 15_000 });
 
     await page.setViewportSize({ width: 320, height: 740 });
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(320);
     await page.screenshot({ path: testInfo.outputPath('location-hierarchy-retry-mobile.png'), fullPage: true });
 
     const retry = page.getByRole('button', { name: 'Retry location hierarchy', exact: true });
+    const recoveredResponse = page.waitForResponse((response) => {
+        const url = new URL(response.url());
+        return url.pathname === '/api/locations' && url.searchParams.get('per_page') === '100' && response.status() === 200;
+    });
     await retry.focus();
     await page.keyboard.press('Enter');
+    await recoveredResponse;
     await expect(hierarchyAlert).toHaveCount(0);
+    await expect(page.getByRole('heading', { level: 2, name: 'Kitchen', exact: true })).toBeVisible();
     await expect(pantryLink).toBeVisible();
     expect(hierarchyRequests).toBe(5);
 });
