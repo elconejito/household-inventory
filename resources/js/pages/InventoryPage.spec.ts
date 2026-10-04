@@ -11,7 +11,8 @@ vi.mock('../lib/http', () => ({
         patch: vi.fn(),
     },
 }));
-vi.mock('vue-router', () => ({ useRoute: () => ({ query: {} }) }));
+const { routerPush } = vi.hoisted(() => ({ routerPush: vi.fn() }));
+vi.mock('vue-router', () => ({ useRoute: () => ({ query: {} }), useRouter: () => ({ push: routerPush }) }));
 
 describe('inventory page', () => {
     let queryClient: QueryClient;
@@ -91,7 +92,7 @@ describe('inventory page', () => {
         expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ['items'] });
         await vi.waitFor(() => expect(vi.mocked(http.get).mock.calls.filter(([url]) => url === '/items')).toHaveLength(2));
         await flushPromises();
-        expect(wrapper.text()).toContain('Dish soap was added to your inventory.');
+        expect(routerPush).toHaveBeenCalledWith({ name: 'inventory-item', params: { item: '31' } });
         expect(wrapper.get('li').text()).toContain('Dish soap');
         expect(wrapper.get('li img').attributes('src')).toBe('/api/item-images/image-31/thumbnail');
     });

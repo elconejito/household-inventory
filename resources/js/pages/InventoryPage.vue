@@ -1,11 +1,10 @@
 <script setup lang="ts">
-import { computed, nextTick, onUnmounted, ref, watch } from 'vue';
+import { computed, onUnmounted, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
-import { parseApiErrors, type FormErrors } from '../lib/api-errors';
-import { useCreateItemMutation, useItemCategoryOptionsQuery, useItemsQuery } from '../queries/items';
+import { parseApiErrors } from '../lib/api-errors';
+import { useItemCategoryOptionsQuery, useItemsQuery } from '../queries/items';
 import { useLocationsQuery } from '../queries/stock';
-import type { NewItem } from '../api/items';
-import ItemEditor from '../components/ItemEditor.vue';
+import ItemCreationPanel from '../components/ItemCreationPanel.vue';
 import InventoryTabs from '../components/InventoryTabs.vue';
 import ItemStockSummary from '../components/ItemStockSummary.vue';
 import StockStatusBadge from '../components/StockStatusBadge.vue';
@@ -21,9 +20,7 @@ const categoryId = ref('');
 const locationId = ref('');
 const sort = ref<'name' | '-name'>('name');
 const showCreateForm = ref(false);
-const addItemButton = ref<HTMLButtonElement | null>(null);
-const successMessage = ref('');
-const formErrors = ref<FormErrors>({ fields: {}, form: '' });
+const creationBusy = ref(false);
 let searchTimeout: ReturnType<typeof setTimeout> | undefined;
 
 const listParams = computed(() => ({
@@ -36,7 +33,6 @@ const listParams = computed(() => ({
 }));
 const itemsQuery = useItemsQuery(listParams);
 const pageHasPrimaryImage = computed(() => itemsQuery.data.value?.data.some((item) => item.images?.some((image) => image.is_primary)) ?? false);
-const createMutation = useCreateItemMutation();
 const categoryOptionsQuery = useItemCategoryOptionsQuery();
 const locationsQuery = useLocationsQuery();
 const hasActiveFilters = computed(() => Boolean(debouncedSearch.value || categoryId.value || locationId.value));
@@ -73,26 +69,8 @@ onUnmounted(() => {
 });
 
 function toggleCreateForm(): void {
+    if (creationBusy.value) return;
     showCreateForm.value = !showCreateForm.value;
-    successMessage.value = '';
-    formErrors.value = { fields: {}, form: '' };
-}
-
-async function submitCreateForm(itemData: NewItem): Promise<void> {
-    if (createMutation.isPending.value) return;
-    successMessage.value = '';
-    formErrors.value = { fields: {}, form: '' };
-
-    try {
-        const item = await createMutation.mutateAsync(itemData);
-
-        showCreateForm.value = false;
-        successMessage.value = `${item.name} was added to your inventory.`;
-        await nextTick();
-        addItemButton.value?.focus();
-    } catch (error) {
-        formErrors.value = parseApiErrors(error);
-    }
 }
 
 function clearFilters(): void {
@@ -135,10 +113,10 @@ function errorMessage(): string {
                 </p>
             </div>
             <button
-                ref="addItemButton"
                 type="button"
                 :aria-expanded="showCreateForm"
                 aria-controls="create-item-panel"
+                :disabled="creationBusy"
                 class="inline-flex min-h-11 items-center justify-center gap-2 rounded-md bg-sage px-4 text-sm font-semibold text-white transition hover:bg-sage-dark focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sage"
                 @click="toggleCreateForm"
             >
@@ -149,11 +127,7 @@ function errorMessage(): string {
 
         <InventoryTabs />
 
-        <p v-if="successMessage" class="mt-5 rounded-md border border-sage/20 bg-sage-soft px-4 py-3 text-sm font-medium text-sage-dark" role="status" aria-live="polite">
-            {{ successMessage }}
-        </p>
-
-        <ItemEditor v-if="showCreateForm" id="create-item-panel" class="mt-6" :item="null" :saving="createMutation.isPending.value" :errors="formErrors" @submit="submitCreateForm" @cancel="toggleCreateForm" />
+        <ItemCreationPanel v-if="showCreateForm" @busy="creationBusy = $event" @cancel="showCreateForm = false" />
 
         <section class="mt-7 rounded-panel border border-line bg-white shadow-card" aria-labelledby="items-heading" :aria-busy="itemsQuery.isFetching.value">
             <div class="flex flex-wrap items-center justify-between gap-4 border-b border-line px-5 py-4 sm:px-6">
