@@ -71,6 +71,7 @@ test('identifies an item with private photos and preserves editable multiline no
     await photos.getByLabel(/Caption/).fill('Front label');
     await photos.getByRole('button', { name: 'Upload photo', exact: true }).click();
     await expect(photos).toContainText('Front label');
+    await expect(photos.getByLabel('Add a photo', { exact: true })).toBeEnabled();
     await photos.getByLabel('Add a photo', { exact: true }).setInputFiles({ name: 'instructions.png', mimeType: 'image/png', buffer: await photoFixture(page, 'INSTRUCTIONS') });
     await photos.getByLabel(/Caption/).fill('Rear instructions');
     await photos.getByRole('button', { name: 'Upload photo', exact: true }).click();
