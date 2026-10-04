@@ -41,6 +41,8 @@ class IndexItemRequest extends FormRequest
                     ->where('household_id', $this->householdId())
                     ->whereNull('deleted_at')),
             ],
+            'filter.stock_status' => ['sometimes', 'string', Rule::in(['in_stock', 'empty'])],
+            'filter.attention_status' => ['sometimes', 'string', Rule::in(['needs_attention', 'empty', 'low', 'buy_soon', 'none'])],
             'filter.trashed' => ['sometimes', 'string', Rule::in(['with', 'only', 'without'])],
             'per_page' => ['sometimes', 'integer', Rule::in([10, 25, 50, 100])],
             'page' => ['sometimes', 'integer', 'min:1'],

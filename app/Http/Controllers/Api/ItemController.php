@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Actions\ArchiveItem;
+use App\Enums\InventoryAlertType;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\IndexItemRequest;
 use App\Http\Requests\StoreItemRequest;
@@ -55,6 +56,8 @@ class ItemController extends Controller
                         ->whereHas('location', fn (Builder $locations): Builder => $locations
                             ->where('household_id', $household->getKey())),
                 )),
+                AllowedFilter::callback('stock_status', fn (Builder $query, string $value): Builder => $this->filterStockStatus($query, $value, $household->getKey())),
+                AllowedFilter::callback('attention_status', fn (Builder $query, string $value): Builder => $this->filterAttentionStatus($query, $value, $household->getKey())),
                 AllowedFilter::trashed(),
             )
             ->allowedSorts('name')
@@ -255,6 +258,51 @@ class ItemController extends Controller
                 'data.category_ids' => ['One or more selected categories are invalid or archived.'],
             ]);
         }
+    }
+
+    private function filterStockStatus(Builder $query, string $status, int $householdId): Builder
+    {
+        $hasPositiveLevel = static fn (Builder $levels): Builder => $levels
+            ->where('quantity', '>', 0)
+            ->whereHas('location', fn (Builder $locations): Builder => $locations->where('household_id', $householdId));
+
+        return match ($status) {
+            'in_stock' => $query->whereHas('inventoryLevels', $hasPositiveLevel),
+            'empty' => $query->whereDoesntHave('inventoryLevels', $hasPositiveLevel),
+        };
+    }
+
+    private function filterAttentionStatus(Builder $query, string $status, int $householdId): Builder
+    {
+        $emptyLevel = static fn (Builder $levels): Builder => $levels
+            ->whereNotNull('alert_threshold')
+            ->where('quantity', 0)
+            ->whereHas('location', fn (Builder $locations): Builder => $locations->where('household_id', $householdId));
+        $lowLevel = static fn (Builder $levels): Builder => $levels
+            ->whereNotNull('alert_threshold')
+            ->where('quantity', '>', 0)
+            ->whereColumn('quantity', '<=', 'alert_threshold')
+            ->whereHas('location', fn (Builder $locations): Builder => $locations->where('household_id', $householdId));
+        $buySoonAlert = static fn (Builder $alerts): Builder => $alerts
+            ->where('household_id', $householdId)
+            ->where('alert_type', InventoryAlertType::BuySoon)
+            ->whereNull('resolved_at');
+
+        return match ($status) {
+            'empty' => $query->whereHas('inventoryLevels', $emptyLevel),
+            'low' => $query->whereHas('inventoryLevels', $lowLevel),
+            'buy_soon' => $query->whereHas('inventoryAlerts', $buySoonAlert),
+            'needs_attention' => $query->where(function (Builder $attention) use ($emptyLevel, $lowLevel, $buySoonAlert): void {
+                $attention
+                    ->whereHas('inventoryLevels', $emptyLevel)
+                    ->orWhereHas('inventoryLevels', $lowLevel)
+                    ->orWhereHas('inventoryAlerts', $buySoonAlert);
+            }),
+            'none' => $query
+                ->whereDoesntHave('inventoryLevels', $emptyLevel)
+                ->whereDoesntHave('inventoryLevels', $lowLevel)
+                ->whereDoesntHave('inventoryAlerts', $buySoonAlert),
+        };
     }
 
     /**

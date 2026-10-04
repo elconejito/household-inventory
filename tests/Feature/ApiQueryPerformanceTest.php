@@ -26,6 +26,7 @@ class ApiQueryPerformanceTest extends TestCase
     {
         return [
             'item graph' => ['/api/items?include=categories,inventory_levels.location,notes.created_by,images.uploaded_by,active_alerts'],
+            'item graph with stock and attention filters' => ['/api/items?filter[stock_status]=in_stock&filter[attention_status]=needs_attention&include=categories,inventory_levels.location,notes.created_by,images.uploaded_by,active_alerts'],
             'category graph' => ['/api/categories?include=items,notes.created_by'],
             'location hierarchy' => ['/api/locations?include=parent,children,notes.created_by'],
             'dashboard conditions' => ['/api/inventory-levels?include=item,location&filter[alert_status]=low'],
