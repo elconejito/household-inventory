@@ -384,6 +384,7 @@ Mutation responses use these conventions:
 | Permanently delete a resource | `204` | No body |
 | Create an inventory movement or other persisted domain action | `201` | Created transformed action resource under `data` |
 | Resolve a manual alert | `200` | Resolved transformed alert under `data` |
+| Change one category/item assignment | `200` | `{ "data": null }` |
 
 Relationships remain opt-in through `include` on mutation responses. A mutation does not implicitly expand relationships merely because it changed one.
 
@@ -411,6 +412,30 @@ Rules:
 - Nested resource creation is not supported inside a parent create or update payload.
 - Inventory movements, notes, item images, and other complex child resources use their own endpoints.
 - Response relationships retain their resource names, such as `categories`; writable ID fields are request-only and are not emitted by transformers.
+
+### Targeted category assignments
+
+Category detail controls change one assignment without replacing the item's complete category set:
+
+```http
+PATCH /api/categories/3/items/42
+```
+
+```json
+{
+  "data": {
+    "assigned": true
+  }
+}
+```
+
+- `assigned: true` attaches the pair; `assigned: false` detaches it. Repeating either operation is safe.
+- Both route resources must be active and belong to the authenticated household. Foreign, missing, or archived resources return `404`.
+- Owners and members may change assignments. Authorization and active membership are checked inside the locked transaction.
+- Only this pair changes. Other active or archived category assignments, the item itself, stock, and movement history remain unchanged.
+- The payload accepts only `assigned`; `id`, `type`, and other fields are not writable.
+- Success returns `200` with `{ "data": null }`. The SPA refreshes item and category queries rather than expecting implicit relationship includes.
+- Item create/edit forms continue to use the complete `category_ids` synchronization described above.
 
 ## Partial updates
 
