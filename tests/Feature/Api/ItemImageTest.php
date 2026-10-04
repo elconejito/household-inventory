@@ -196,16 +196,67 @@ class ItemImageTest extends TestCase
         $this->assertCount(2, $privateDisk->allFiles());
         $this->assertSame('private', $privateDisk->getVisibility($image->thumbnail_path));
 
-        $exposedRoot = 'C:\\Users\\Harvey\\Public\\household-images';
+        config([
+            'inventory.images_disk' => 'windows-drive-root-images',
+            'filesystems.disks.windows-drive-root-images' => [
+                'driver' => 'local',
+                'root' => 'C:\\',
+                'visibility' => 'private',
+            ],
+        ]);
+        $driveRootDisk = Storage::fake('windows-drive-root-images', ['visibility' => 'private']);
+
+        $driveRootResponse = $this->post('/api/items/'.$item->id.'/images', [
+            'image' => $this->uploadedPng(),
+        ], ['Accept' => 'application/json']);
+
+        $driveRootResponse->assertCreated();
+        $this->assertCount(2, $driveRootDisk->allFiles());
+
+        config([
+            'inventory.images_disk' => 'windows-unc-images',
+            'filesystems.disks.windows-unc-images' => [
+                'driver' => 'local',
+                'root' => '\\\\server\\share\\private-images',
+                'visibility' => 'private',
+            ],
+        ]);
+        $uncDisk = Storage::fake('windows-unc-images', ['visibility' => 'private']);
+
+        $uncResponse = $this->post('/api/items/'.$item->id.'/images', [
+            'image' => $this->uploadedPng(),
+        ], ['Accept' => 'application/json']);
+
+        $uncResponse->assertCreated();
+        $this->assertCount(2, $uncDisk->allFiles());
+
+        config([
+            'inventory.images_disk' => 'windows-drive-relative-images',
+            'filesystems.disks.windows-drive-relative-images' => [
+                'driver' => 'local',
+                'root' => 'C:folder',
+                'visibility' => 'private',
+            ],
+        ]);
+        Storage::fake('windows-drive-relative-images');
+
+        $driveRelativeResponse = $this->post('/api/items/'.$item->id.'/images', [
+            'image' => $this->uploadedPng(),
+        ], ['Accept' => 'application/json']);
+
+        $driveRelativeResponse->assertServerError();
+        Storage::disk('windows-drive-relative-images')->assertDirectoryEmpty('/');
+
+        $configuredExposedRoot = 'c:/users/harvey/public/household-images';
         config([
             'inventory.images_disk' => 'windows-public-link-target',
             'filesystems.disks.windows-public-link-target' => [
                 'driver' => 'local',
-                'root' => 'c:/users/harvey/public/household-images',
+                'root' => $configuredExposedRoot,
                 'visibility' => 'private',
             ],
             'filesystems.links' => [
-                public_path('images') => 'c:/users/harvey/public',
+                public_path('images') => 'C:/Users/Harvey/Public',
             ],
         ]);
         Storage::fake('windows-public-link-target');
@@ -215,9 +266,9 @@ class ItemImageTest extends TestCase
         ], ['Accept' => 'application/json']);
 
         $exposedResponse->assertServerError();
-        $this->assertStringNotContainsString($exposedRoot, $exposedResponse->getContent());
+        $this->assertStringNotContainsString($configuredExposedRoot, $exposedResponse->getContent());
         Storage::disk('windows-public-link-target')->assertDirectoryEmpty('/');
-        $this->assertDatabaseCount('item_images', 1);
+        $this->assertDatabaseCount('item_images', 3);
     }
 
     public function test_upload_fails_closed_when_symlink_traversal_or_dangling_root_cannot_be_resolved(): void

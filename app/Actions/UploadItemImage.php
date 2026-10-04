@@ -186,7 +186,7 @@ class UploadItemImage
                     return null;
                 }
 
-                $resolvedPath = $this->parentPath($resolvedPath, $anchor);
+                $resolvedPath = $this->parentPath($resolvedPath);
 
                 continue;
             }
@@ -200,7 +200,6 @@ class UploadItemImage
                     }
 
                     $resolvedPath = str_replace('\\', '/', $realCandidatePath);
-                    $anchor = $this->pathAnchor($resolvedPath) ?? $anchor;
 
                     continue;
                 }
@@ -211,6 +210,9 @@ class UploadItemImage
 
         $canonicalResolvedPath = rtrim($resolvedPath, '/');
         $canonicalResolvedPath = $canonicalResolvedPath === '' ? '/' : $canonicalResolvedPath;
+        if (preg_match('/^[A-Za-z]:$/', $canonicalResolvedPath) === 1) {
+            $canonicalResolvedPath .= '/';
+        }
 
         return $canonicalResolvedPath
             .($unresolvedSegments === [] ? '' : '/'.implode('/', $unresolvedSegments));
@@ -233,8 +235,13 @@ class UploadItemImage
         return null;
     }
 
-    private function parentPath(string $path, string $anchor): string
+    private function parentPath(string $path): string
     {
+        $anchor = $this->pathAnchor($path);
+        if ($anchor === null) {
+            return $path;
+        }
+
         if (strcasecmp(rtrim($path, '/'), rtrim($anchor, '/')) === 0) {
             return $anchor;
         }
