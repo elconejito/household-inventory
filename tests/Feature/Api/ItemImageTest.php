@@ -301,7 +301,7 @@ class ItemImageTest extends TestCase
         $this->assertDirectoryDoesNotExist($uncreatedRoot);
     }
 
-    public function test_upload_fails_closed_for_case_only_posix_exposure_on_case_insensitive_platforms(): void
+    public function test_upload_treats_case_only_posix_root_overlap_conservatively_on_macos(): void
     {
         [$user, $household] = $this->householdMember();
         $item = Item::factory()->for($household)->create();

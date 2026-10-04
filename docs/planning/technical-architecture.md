@@ -29,6 +29,8 @@ Transparency is preserved when present. The upload source is discarded after bot
 
 The `inventory-images` disk is private. The API exposes stable authenticated thumbnail and display routes and never exposes storage paths. With local storage Laravel streams the authorized file with private caching headers. Uploads reject public disks and local roots exposed through the document root or configured storage links; both derivatives are explicitly written with private visibility. After a future migration to S3, the same application routes may redirect to short-lived signed URLs without changing the resource contract or Vue components. The S3 adapter is not currently installed; changing the disk environment variable alone is not a supported migration.
 
+On macOS, storage-root checks deliberately reject case-only overlaps even on case-sensitive volumes. Custom private and exposed roots must differ by more than capitalization; the default private disk is unaffected. Windows drive and UNC syntax is covered with fake storage on macOS, but native Windows filesystem behavior has not been verified.
+
 Framework and package versions are locked in `composer.lock` and `package-lock.json`. Release builds install from those lockfiles rather than updating dependencies.
 
 ## Frontend baseline
