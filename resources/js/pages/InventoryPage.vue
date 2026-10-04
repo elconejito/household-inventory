@@ -258,8 +258,9 @@ function errorMessage(): string {
 
                 <ul v-else class="divide-y divide-line" aria-label="Inventory items">
                     <li v-for="item in itemsQuery.data.value.data" :key="item.id" class="px-5 py-4 sm:px-6 sm:py-5">
-                        <article class="grid gap-3 sm:items-start sm:gap-4" :class="item.images?.some((image) => image.is_primary) ? 'sm:grid-cols-[3.5rem_minmax(0,1.3fr)_9rem_8rem_minmax(0,1fr)]' : 'sm:grid-cols-[minmax(0,1.3fr)_9rem_8rem_minmax(0,1fr)]'">
+                        <article class="grid gap-3 sm:items-start sm:gap-4" :class="pageHasPrimaryImage ? 'sm:grid-cols-[3.5rem_minmax(0,1.3fr)_9rem_8rem_minmax(0,1fr)]' : 'sm:grid-cols-[minmax(0,1.3fr)_9rem_8rem_minmax(0,1fr)]'">
                             <img v-if="item.images?.find((image) => image.is_primary)" :src="item.images.find((image) => image.is_primary)?.thumbnail_url" :alt="item.images.find((image) => image.is_primary)?.caption || ''" class="size-14 rounded-md bg-surface-soft object-cover" loading="lazy">
+                            <span v-else-if="pageHasPrimaryImage" class="hidden size-14 sm:block" aria-hidden="true"></span>
                             <div class="min-w-0">
                                 <h3 class="break-words text-base font-semibold text-ink"><RouterLink :to="{ name: 'inventory-item', params: { item: item.id } }" class="rounded-sm hover:text-sage-dark hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sage">{{ item.name }}</RouterLink></h3>
                                 <p v-if="item.description" class="mt-1 line-clamp-2 whitespace-pre-line text-sm leading-5 text-ink-muted">{{ item.description }}</p>

@@ -139,4 +139,29 @@ describe('inventory page', () => {
         expect(row.classes()).toContain('sm:grid-cols-[minmax(0,1.3fr)_9rem_8rem_minmax(0,1fr)]');
         expect(wrapper.findAll('div[aria-hidden="true"]').some((element) => element.classes().includes('grid-cols-[minmax(0,1.3fr)_9rem_8rem_minmax(0,1fr)]'))).toBe(true);
     });
+
+    it('keeps rows aligned when only some items on a page have primary images', async () => {
+        const items = [
+            { id: '21', name: 'Item with photo', counting_unit: 'box', description: null, categories: [], images: [{ id: 'image-21', is_primary: true, thumbnail_url: '/photo.jpg', caption: null }], inventory_levels: [], total_quantity: 0 },
+            { id: '22', name: 'Item without photo', counting_unit: 'box', description: null, categories: [], images: [], inventory_levels: [], total_quantity: 0 },
+        ];
+        vi.mocked(http.get).mockImplementation(async (url) => {
+            if (url === '/items') return { data: { data: items, links: {}, meta: { current_page: 1, last_page: 1, total: 2 } } } as never;
+            if (url === '/categories') return { data: { data: [], meta: { last_page: 1 } } } as never;
+            if (url === '/locations') return { data: { data: [], meta: { current_page: 1, last_page: 1, total: 0 } } } as never;
+            throw new Error(`Unexpected GET ${String(url)}`);
+        });
+
+        wrapper = mount(InventoryPage, { global: { plugins: [[VueQueryPlugin, { queryClient }]] } });
+        await flushPromises();
+
+        const rows = wrapper.findAll('li article');
+        expect(rows).toHaveLength(2);
+        expect(rows[0].classes()).toEqual(rows[1].classes());
+        expect(rows[0].find('img').exists()).toBe(true);
+        expect(rows[1].find('img').exists()).toBe(false);
+        const thumbnailSpacer = rows[1].find('[aria-hidden="true"].size-14');
+        expect(thumbnailSpacer.exists()).toBe(true);
+        expect(thumbnailSpacer.classes()).toEqual(expect.arrayContaining(['hidden', 'sm:block']));
+    });
 });
