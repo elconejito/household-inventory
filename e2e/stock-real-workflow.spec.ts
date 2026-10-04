@@ -90,6 +90,25 @@ test('registers a household and manages real inventory stock and activity', asyn
     await expect(page.getByText('Total on hand').locator('..')).toContainText('7 bottles');
     await page.screenshot({ path: testInfo.outputPath('item-stock.png'), fullPage: true });
 
+    const itemUrl = page.url();
+    await page.getByRole('button', { name: 'Mark Buy soon', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Resolve Buy soon', exact: true })).toBeVisible();
+    await page.goto('/inventory');
+    const inventoryRow = page.locator('article').filter({ has: page.getByRole('link', { name: itemName, exact: true }) });
+    await expect(inventoryRow).toContainText('Buy soon');
+    await expect(inventoryRow).toContainText('Out of stock');
+    await page.screenshot({ path: testInfo.outputPath('inventory-stock-indicators.png'), fullPage: true });
+    await page.setViewportSize({ width: 320, height: 740 });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(320);
+    await page.screenshot({ path: testInfo.outputPath('inventory-stock-indicators-mobile.png'), fullPage: true });
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await page.goto(itemUrl);
+    await page.getByRole('button', { name: 'Resolve Buy soon', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Mark Buy soon', exact: true })).toBeVisible();
+    await page.goto('/inventory');
+    await expect(inventoryRow).not.toContainText('Buy soon');
+    await expect(inventoryRow).toContainText('Out of stock');
+
     await page.getByRole('navigation', { name: 'Main navigation' }).getByRole('link', { name: 'Activity' }).click();
     await page.getByLabel('Item', { exact: true }).selectOption({ label: itemName });
     await page.getByLabel('Change type', { exact: true }).selectOption('transfer');

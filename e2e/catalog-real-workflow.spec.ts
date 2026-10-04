@@ -87,19 +87,59 @@ test('creates and edits a catalog, assigns equal categories, and distinguishes p
     await expect(stock).toContainText('Basement / Shelf / Bin');
     await expect(stock).toContainText('6 hoses');
     await expect(stock).toContainText('4 hoses');
-    await expect(stock.getByRole('listitem').filter({ hasText: 'Basement / Shelf / Bin' }).getByRole('link', { name: 'Restock here', exact: true }))
-        .toHaveAttribute('href', `/inventory/${itemId}?restock_location=${binId}`);
+    await expect(stock.getByRole('listitem').filter({ hasText: 'Basement / Shelf / Bin' }).getByRole('button', { name: 'Restock', exact: true })).toBeVisible();
     await page.getByLabel('Inventory scope', { exact: true }).selectOption('direct');
     await expect(stock).not.toContainText('Basement / Shelf / Bin');
     await expect(stock).toContainText('6 hoses');
     await page.screenshot({ path: testInfo.outputPath('location-direct-stock-desktop.png'), fullPage: true });
 
+    await page.getByLabel('Inventory scope', { exact: true }).selectOption('all');
+    const binStock = stock.getByRole('listitem').filter({ hasText: 'Basement / Shelf / Bin' });
+    const consumptionRequest = page.waitForRequest((request) => request.method() === 'POST' && request.url().endsWith('/api/inventory-movements'));
+    await binStock.getByRole('button', { name: 'Use 1', exact: true }).click();
+    expect((await consumptionRequest).postDataJSON()).toEqual({ data: { movement_type: 'consumption', item_id: itemId, location_id: binId, quantity: 1 } });
+    await expect(binStock).toContainText('3 hoses');
+
+    await binStock.getByRole('button', { name: 'Move out', exact: true }).click();
+    await binStock.getByLabel('Move to', { exact: true }).selectOption({ label: 'Basement' });
+    await binStock.getByLabel(/Quantity/).fill('2');
+    await expect(binStock).toContainText('Move 2 hoses from Basement / Shelf / Bin to Basement.');
+    await binStock.getByLabel('Confirm this stock change.').check();
+    const pushRequest = page.waitForRequest((request) => request.method() === 'POST' && request.url().endsWith('/api/inventory-movements'));
+    await binStock.getByRole('button', { name: 'Save change', exact: true }).click();
+    expect((await pushRequest).postDataJSON()).toEqual({ data: { movement_type: 'transfer', item_id: itemId, source_location_id: binId, destination_location_id: basementId, quantity: 2 } });
+    await expect(binStock).toContainText('1 hose');
+
+    await binStock.getByRole('button', { name: 'Move in', exact: true }).click();
+    await binStock.getByLabel('Move from', { exact: true }).selectOption(basementId);
+    await expect(binStock.getByLabel(/Quantity/)).toHaveAttribute('max', '8');
+    await expect(binStock).toContainText('Move 1 hose from Basement to Basement / Shelf / Bin.');
+    await binStock.getByLabel('Confirm this stock change.').check();
+    const pullRequest = page.waitForRequest((request) => request.method() === 'POST' && request.url().endsWith('/api/inventory-movements'));
+    await binStock.getByRole('button', { name: 'Save change', exact: true }).click();
+    expect((await pullRequest).postDataJSON()).toEqual({ data: { movement_type: 'transfer', item_id: itemId, source_location_id: basementId, destination_location_id: binId, quantity: 1 } });
+    await expect(binStock).toContainText('2 hoses');
+
+    await binStock.getByRole('button', { name: 'Restock', exact: true }).click();
+    await binStock.getByLabel(/Quantity/).fill('2');
+    await binStock.getByLabel('Confirm this stock change.').check();
+    await binStock.getByRole('button', { name: 'Save change', exact: true }).click();
+    await expect(binStock).toContainText('4 hoses');
+    await page.screenshot({ path: testInfo.outputPath('location-row-actions.png'), fullPage: true });
+
     await page.goto('/inventory');
     await page.getByLabel('Category', { exact: true }).selectOption({ label: 'Garden supplies' });
     await page.getByLabel('Location', { exact: true }).selectOption({ label: 'Basement' });
     await expect(page.getByRole('link', { name: itemName, exact: true })).toBeVisible();
-    await expect(page.getByText('10 hoses total on hand', { exact: true })).toBeVisible();
+    await expect(page.getByText('11 hoses total on hand', { exact: true })).toBeVisible();
     await page.screenshot({ path: testInfo.outputPath('inventory-filtered-desktop.png'), fullPage: true });
+
+    await page.goto('/inventory/categories');
+    await page.getByRole('link', { name: 'Garden supplies', exact: true }).click();
+    const categoryItems = page.getByRole('region', { name: 'Items in this category', exact: true });
+    await expect(categoryItems).toContainText('11 hoses total on hand');
+    await expect(categoryItems).toContainText('Basement / Shelf / Bin — 4 hoses');
+    await page.screenshot({ path: testInfo.outputPath('category-stock-desktop.png'), fullPage: true });
 
     await page.goto(itemUrl);
     await page.getByRole('button', { name: 'Edit item', exact: true }).click();
@@ -135,4 +175,10 @@ test('creates and edits a catalog, assigns equal categories, and distinguishes p
     await expect(page.getByLabel('Item to restock', { exact: true }).getByRole('option', { name: itemName, exact: true })).toHaveCount(1);
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(320);
     await page.screenshot({ path: testInfo.outputPath('location-stock-mobile.png'), fullPage: true });
+    const mobileBinStock = stock.getByRole('listitem').filter({ hasText: 'Storage room / Shelf / Bin' });
+    await mobileBinStock.getByRole('button', { name: 'Move out', exact: true }).click();
+    await mobileBinStock.getByLabel('Move to', { exact: true }).selectOption(basementId);
+    await expect(mobileBinStock).toContainText('Move 1 hose from Storage room / Shelf / Bin to Storage room.');
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(320);
+    await page.screenshot({ path: testInfo.outputPath('location-transfer-mobile.png'), fullPage: true });
 });
