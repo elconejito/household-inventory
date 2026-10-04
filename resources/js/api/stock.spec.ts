@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { http } from '../lib/http';
-import { buildLocationPath, createBuySoon, getActiveAlerts, getMovementRecorders, getMovements, getTriggeredLevels, resolveAlert } from './stock';
+import { buildLocationPath, createBuySoon, createInventoryLevel, getActiveAlerts, getMovementRecorders, getMovements, getTriggeredLevels, resolveAlert } from './stock';
 
 vi.mock('../lib/http', () => ({ http: { get: vi.fn(), post: vi.fn() } }));
 
@@ -76,5 +76,17 @@ describe('dashboard alert API', () => {
 
         expect(http.post).toHaveBeenNthCalledWith(1, '/inventory-alerts', { data: { item_id: '42', alert_type: 'buy_soon' } });
         expect(http.post).toHaveBeenNthCalledWith(2, '/inventory-alerts/8/resolve');
+    });
+});
+
+describe('inventory level API', () => {
+    it('creates a zero-stock location with an explicit null or zero alert threshold', async () => {
+        vi.mocked(http.post).mockResolvedValue({ data: { data: { id: 'level-1', quantity: 0 } } } as never);
+
+        await createInventoryLevel({ item_id: '42', location_id: '5', alert_threshold: null });
+        await createInventoryLevel({ item_id: '42', location_id: '6', alert_threshold: 0 });
+
+        expect(http.post).toHaveBeenNthCalledWith(1, '/inventory-levels', { data: { item_id: '42', location_id: '5', alert_threshold: null } });
+        expect(http.post).toHaveBeenNthCalledWith(2, '/inventory-levels', { data: { item_id: '42', location_id: '6', alert_threshold: 0 } });
     });
 });

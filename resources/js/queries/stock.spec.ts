@@ -3,9 +3,9 @@ import { flushPromises, mount } from '@vue/test-utils';
 import { computed, defineComponent, ref } from 'vue';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { http } from '../lib/http';
-import { useAllItemsQuery, useLocationsQuery, useMovementRecordersQuery } from './stock';
+import { useAllItemsQuery, useCreateInventoryLevelMutation, useLocationsQuery, useMovementRecordersQuery } from './stock';
 
-vi.mock('../lib/http', () => ({ http: { get: vi.fn() } }));
+vi.mock('../lib/http', () => ({ http: { get: vi.fn(), post: vi.fn() } }));
 
 describe('catalog picker queries', () => {
     let client: QueryClient;
@@ -83,5 +83,29 @@ describe('catalog picker queries', () => {
         expect(http.get).toHaveBeenCalledTimes(2);
         expect(http.get).toHaveBeenCalledWith('/inventory-movement-recorders', { params: { per_page: 100, page: 1 } });
         expect(http.get).toHaveBeenCalledWith('/inventory-movement-recorders', { params: { per_page: 100, page: 2 } });
+    });
+
+    it('refreshes item, level, location, activity, and alert data after zero-stock setup', async () => {
+        let createLevelMutation: ReturnType<typeof useCreateInventoryLevelMutation> | undefined;
+        const component = defineComponent({
+            setup() {
+                createLevelMutation = useCreateInventoryLevelMutation();
+                return () => null;
+            },
+        });
+        vi.mocked(http.post).mockResolvedValue({ data: { data: { id: 'level-1', quantity: 0 } } } as never);
+        wrapper = mount(component, { global: { plugins: [[VueQueryPlugin, { queryClient: client }]] } });
+        const invalidateQueries = vi.spyOn(client, 'invalidateQueries');
+
+        await createLevelMutation!.mutateAsync({ item_id: '42', location_id: '5', alert_threshold: 0 });
+        await flushPromises();
+
+        expect(http.post).toHaveBeenCalledWith('/inventory-levels', { data: { item_id: '42', location_id: '5', alert_threshold: 0 } });
+        expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ['items'] });
+        expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ['inventory-levels'] });
+        expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ['locations'] });
+        expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ['inventory-movements'] });
+        expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ['activity'] });
+        expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ['inventory-alerts'] });
     });
 });

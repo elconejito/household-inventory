@@ -134,6 +134,12 @@ export async function createLocation(data: { name: string; parent_id: string | n
     return response.data.data;
 }
 
+export async function createInventoryLevel(data: { item_id: string; location_id: string; alert_threshold?: number | null }): Promise<InventoryLevel> {
+    const response = await http.post<Resource<InventoryLevel>>('/inventory-levels', { data });
+
+    return response.data.data;
+}
+
 export async function updateThreshold(id: string, alertThreshold: number | null): Promise<void> {
     await http.patch(`/inventory-levels/${id}`, { data: { alert_threshold: alertThreshold } });
 }

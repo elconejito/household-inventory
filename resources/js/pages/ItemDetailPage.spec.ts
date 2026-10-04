@@ -55,6 +55,16 @@ describe('item stock detail', () => {
         return wrapper!.findAll('form').find((form) => form.find('input[type="checkbox"]').exists() || form.find('#stock-threshold').exists())!;
     }
 
+    async function openLocationSetup(): Promise<void> {
+        await wrapper!.findAll('button').find((button) => button.text() === 'Set up a stock location')!.trigger('click');
+        await flushPromises();
+    }
+
+    async function submitLocationSetup(): Promise<void> {
+        await wrapper!.get('#setup-location-form').trigger('submit');
+        await flushPromises();
+    }
+
     it('omits one-tap consumption at zero stock and offers transfer in from positive locations', async () => {
         mountPage();
         await flushPromises();
@@ -75,6 +85,283 @@ describe('item stock detail', () => {
         expect(wrapper!.text()).toContain('Empty');
         expect(wrapper!.text()).toContain('Monitored');
         expect(wrapper!.text()).toContain('Unmonitored');
+    });
+
+    it('sets up a parent location with zero stock and a null threshold without creating a movement', async () => {
+        const locations = [
+            { id: '4', name: 'House', description: null, parent: null },
+            { id: '5', name: 'Basement', description: null, parent: { id: '4', name: 'House', description: null } },
+            { id: '6', name: 'Shelf', description: null, parent: { id: '5', name: 'Basement', description: null } },
+            { id: '2', name: 'Pantry', description: null, parent: null },
+            { id: '3', name: 'Closet', description: null, parent: null },
+        ];
+        vi.mocked(http.get).mockImplementation(async (url) => {
+            if (String(url) === '/locations') return { data: { data: locations, meta: { current_page: 1, last_page: 1, total: locations.length } } } as never;
+            if (String(url).includes('/images')) return { data: { data: [] } } as never;
+            if (String(url).endsWith('/notes')) return { data: { data: [], meta: { current_page: 1, last_page: 1, total: 0 } } } as never;
+            if (String(url) === '/inventory-movements') return { data: { data: [], meta: { current_page: 1, last_page: 1, total: 0 } } } as never;
+            if (String(url).startsWith('/items/')) return { data: { data: item } } as never;
+            if (String(url) === '/inventory-alerts') return { data: { data: [], meta: { current_page: 1, last_page: 1, total: 0 } } } as never;
+            throw new Error(`Unexpected GET ${String(url)}`);
+        });
+        vi.mocked(http.post).mockResolvedValue({ data: { data: { id: 'level-12', quantity: 0 } } } as never);
+        mountPage();
+        await flushPromises();
+        await openLocationSetup();
+        expect(wrapper!.get('#setup-location').text()).toContain('House / Basement');
+        expect(wrapper!.get('#setup-location').text()).toContain('House / Basement / Shelf');
+        await wrapper!.get('#setup-location').setValue('5');
+
+        await submitLocationSetup();
+
+        expect(http.post).toHaveBeenCalledTimes(1);
+        expect(http.post).toHaveBeenCalledWith('/inventory-levels', { data: { item_id: '7', location_id: '5', alert_threshold: null } });
+        expect(http.post).not.toHaveBeenCalledWith('/inventory-movements', expect.anything());
+        expect(wrapper!.text()).toContain('Stock location set up with 0 packs. No stock was added; restock later');
+    });
+
+    it('accepts threshold zero for a nested child location', async () => {
+        const locations = [
+            { id: '4', name: 'House', description: null, parent: null },
+            { id: '5', name: 'Basement', description: null, parent: { id: '4', name: 'House', description: null } },
+            { id: '6', name: 'Shelf', description: null, parent: { id: '5', name: 'Basement', description: null } },
+            { id: '2', name: 'Pantry', description: null, parent: null },
+            { id: '3', name: 'Closet', description: null, parent: null },
+        ];
+        vi.mocked(http.get).mockImplementation(async (url) => {
+            if (String(url) === '/locations') return { data: { data: locations, meta: { current_page: 1, last_page: 1, total: locations.length } } } as never;
+            if (String(url).includes('/images')) return { data: { data: [] } } as never;
+            if (String(url).endsWith('/notes')) return { data: { data: [], meta: { current_page: 1, last_page: 1, total: 0 } } } as never;
+            if (String(url) === '/inventory-movements') return { data: { data: [], meta: { current_page: 1, last_page: 1, total: 0 } } } as never;
+            if (String(url).startsWith('/items/')) return { data: { data: item } } as never;
+            if (String(url) === '/inventory-alerts') return { data: { data: [], meta: { current_page: 1, last_page: 1, total: 0 } } } as never;
+            throw new Error(`Unexpected GET ${String(url)}`);
+        });
+        vi.mocked(http.post).mockResolvedValue({ data: { data: { id: 'level-13', quantity: 0 } } } as never);
+        mountPage();
+        await flushPromises();
+        await openLocationSetup();
+        await wrapper!.get('#setup-location').setValue('6');
+        await wrapper!.get('#setup-threshold').setValue('0');
+
+        await submitLocationSetup();
+
+        expect(http.post).toHaveBeenCalledWith('/inventory-levels', { data: { item_id: '7', location_id: '6', alert_threshold: 0 } });
+        expect(http.post).not.toHaveBeenCalledWith('/inventory-movements', expect.anything());
+    });
+
+    it('excludes locations already associated with the item', async () => {
+        vi.mocked(http.get).mockImplementation(async (url) => {
+            if (String(url) === '/locations') return { data: { data: [item.inventory_levels[0].location, item.inventory_levels[1].location], meta: { current_page: 1, last_page: 1, total: 2 } } } as never;
+            if (String(url).includes('/images')) return { data: { data: [] } } as never;
+            if (String(url).endsWith('/notes')) return { data: { data: [], meta: { current_page: 1, last_page: 1, total: 0 } } } as never;
+            if (String(url) === '/inventory-movements') return { data: { data: [], meta: { current_page: 1, last_page: 1, total: 0 } } } as never;
+            if (String(url).startsWith('/items/')) return { data: { data: item } } as never;
+            if (String(url) === '/inventory-alerts') return { data: { data: [], meta: { current_page: 1, last_page: 1, total: 0 } } } as never;
+            throw new Error(`Unexpected GET ${String(url)}`);
+        });
+        mountPage();
+        await flushPromises();
+        await openLocationSetup();
+
+        expect(wrapper!.text()).toContain('Every active location already has a stock level for this item.');
+        expect(wrapper!.find('#setup-location').exists()).toBe(false);
+        expect(wrapper!.find('#setup-location-form button[type="submit"]').exists()).toBe(false);
+    });
+
+    it('offers the existing create-location flow when there are no active locations', async () => {
+        vi.mocked(http.get).mockImplementation(async (url) => {
+            if (String(url) === '/locations') return { data: { data: [], meta: { current_page: 1, last_page: 1, total: 0 } } } as never;
+            if (String(url).includes('/images')) return { data: { data: [] } } as never;
+            if (String(url).endsWith('/notes')) return { data: { data: [], meta: { current_page: 1, last_page: 1, total: 0 } } } as never;
+            if (String(url) === '/inventory-movements') return { data: { data: [], meta: { current_page: 1, last_page: 1, total: 0 } } } as never;
+            if (String(url).startsWith('/items/')) return { data: { data: item } } as never;
+            if (String(url) === '/inventory-alerts') return { data: { data: [], meta: { current_page: 1, last_page: 1, total: 0 } } } as never;
+            throw new Error(`Unexpected GET ${String(url)}`);
+        });
+        mountPage();
+        await flushPromises();
+        await openLocationSetup();
+
+        expect(wrapper!.text()).toContain('There are no active locations yet.');
+        await wrapper!.findAll('button').find((button) => button.text() === 'Create a location')!.trigger('click');
+        expect(wrapper!.get('#create-location-title').text()).toBe('Create a location');
+    });
+
+    it('shows location loading and then exposes eligible location choices', async () => {
+        const locations = [
+            { id: '5', name: 'Basement', description: null, parent: null },
+        ];
+        let finishLocations!: (response: unknown) => void;
+        vi.mocked(http.get).mockImplementation((url) => {
+            if (String(url) === '/locations') return new Promise((resolve) => { finishLocations = resolve; }) as never;
+            if (String(url).includes('/images')) return Promise.resolve({ data: { data: [] } }) as never;
+            if (String(url).endsWith('/notes')) return Promise.resolve({ data: { data: [], meta: { current_page: 1, last_page: 1, total: 0 } } }) as never;
+            if (String(url) === '/inventory-movements') return Promise.resolve({ data: { data: [], meta: { current_page: 1, last_page: 1, total: 0 } } }) as never;
+            if (String(url).startsWith('/items/')) return Promise.resolve({ data: { data: item } }) as never;
+            if (String(url) === '/inventory-alerts') return Promise.resolve({ data: { data: [], meta: { current_page: 1, last_page: 1, total: 0 } } }) as never;
+            throw new Error(`Unexpected GET ${String(url)}`);
+        });
+        mountPage();
+        await flushPromises();
+        await openLocationSetup();
+        expect(wrapper!.text()).toContain('Loading locations…');
+        finishLocations({ data: { data: locations, meta: { current_page: 1, last_page: 1, total: 1 } } });
+        await flushPromises();
+
+        expect(wrapper!.get('#setup-location').text()).toContain('Basement');
+    });
+
+    it('shows a location-list error and retries loading choices without losing the setup panel', async () => {
+        let locationRequests = 0;
+        vi.mocked(http.get).mockImplementation(async (url) => {
+            if (String(url) === '/locations') {
+                locationRequests++;
+                if (locationRequests === 1) throw new Error('locations unavailable');
+                return { data: { data: [{ id: '4', name: 'Garage', description: null, parent: null }], meta: { current_page: 1, last_page: 1, total: 1 } } } as never;
+            }
+            if (String(url).includes('/images')) return { data: { data: [] } } as never;
+            if (String(url).endsWith('/notes')) return { data: { data: [], meta: { current_page: 1, last_page: 1, total: 0 } } } as never;
+            if (String(url) === '/inventory-movements') return { data: { data: [], meta: { current_page: 1, last_page: 1, total: 0 } } } as never;
+            if (String(url).startsWith('/items/')) return { data: { data: item } } as never;
+            if (String(url) === '/inventory-alerts') return { data: { data: [], meta: { current_page: 1, last_page: 1, total: 0 } } } as never;
+            throw new Error(`Unexpected GET ${String(url)}`);
+        });
+        mountPage();
+        await flushPromises();
+        await openLocationSetup();
+        const setupPanel = wrapper!.get('[aria-labelledby="setup-location-title"]');
+        expect(setupPanel.text()).toContain('Locations could not be loaded.');
+        await setupPanel.findAll('button').find((button) => button.text() === 'Try again')!.trigger('click');
+        await flushPromises();
+
+        expect(locationRequests).toBe(2);
+        expect(wrapper!.get('#setup-location').text()).toContain('Garage');
+    });
+
+    it('shows a helpful duplicate conflict, refreshes item levels, and retains the threshold draft', async () => {
+        const conflict = new AxiosError('Duplicate stock level');
+        Object.defineProperty(conflict, 'response', { value: { status: 409, data: { errors: [{ detail: 'duplicate' }] } } });
+        vi.mocked(http.post).mockRejectedValueOnce(conflict);
+        let itemRequests = 0;
+        const itemWithGarage = {
+            ...item,
+            inventory_levels: [...item.inventory_levels, { id: '12', quantity: 0, alert_threshold: null, stock_status: 'empty', alert_status: 'unmonitored', location: { id: '4', name: 'Garage', description: null, parent: null } }],
+        };
+        vi.mocked(http.get).mockImplementation(async (url) => {
+            if (String(url) === '/locations') return { data: { data: [{ id: '2', name: 'Pantry', description: null, parent: null }, { id: '3', name: 'Closet', description: null, parent: null }, { id: '4', name: 'Garage', description: null, parent: null }, { id: '8', name: 'Spare room', description: null, parent: null }], meta: { current_page: 1, last_page: 1, total: 4 } } } as never;
+            if (String(url).includes('/images')) return { data: { data: [] } } as never;
+            if (String(url).endsWith('/notes')) return { data: { data: [], meta: { current_page: 1, last_page: 1, total: 0 } } } as never;
+            if (String(url) === '/inventory-movements') return { data: { data: [], meta: { current_page: 1, last_page: 1, total: 0 } } } as never;
+            if (String(url).startsWith('/items/')) {
+                itemRequests++;
+                return { data: { data: itemRequests > 1 ? itemWithGarage : item } } as never;
+            }
+            if (String(url) === '/inventory-alerts') return { data: { data: [], meta: { current_page: 1, last_page: 1, total: 0 } } } as never;
+            throw new Error(`Unexpected GET ${String(url)}`);
+        });
+        mountPage();
+        await flushPromises();
+        await openLocationSetup();
+        await wrapper!.get('#setup-location').setValue('4');
+        await wrapper!.get('#setup-threshold').setValue('2');
+        const itemReadCount = () => vi.mocked(http.get).mock.calls.filter(([url]) => String(url) === '/items/7').length;
+        const readsBeforeSubmit = itemReadCount();
+
+        await submitLocationSetup();
+
+        expect(wrapper!.get('[aria-label="setup-location-error"]').text()).toContain('already has a stock level');
+        expect((wrapper!.get('#setup-location').element as HTMLSelectElement).value).toBe('');
+        expect((wrapper!.get('#setup-threshold').element as HTMLInputElement).value).toBe('2');
+        expect(itemReadCount()).toBeGreaterThan(readsBeforeSubmit);
+        expect(wrapper!.get('#setup-location').text()).not.toContain('Garage');
+        expect(wrapper!.find('#setup-location-form').exists()).toBe(true);
+    });
+
+    it('guards pending setup against duplicates and ignores a response after item route changes away and back', async () => {
+        let finishCreate!: (response: { data: { data: { id: string; quantity: number } } }) => void;
+        vi.mocked(http.post).mockImplementation((url) => {
+            if (String(url) === '/inventory-levels') return new Promise((resolve) => { finishCreate = resolve; }) as never;
+            return Promise.resolve({ data: { data: {} } }) as never;
+        });
+        mountPage();
+        await flushPromises();
+        await openLocationSetup();
+        await wrapper!.get('#setup-location').setValue('4');
+        await wrapper!.get('#setup-location-form').trigger('submit');
+        await flushPromises();
+
+        expect(wrapper!.find('#setup-location-form button[type="submit"]').attributes('disabled')).toBeDefined();
+        await wrapper!.get('#setup-location-form').trigger('submit');
+        (await import('vue-router') as unknown as { setMockItem: (id: string) => void }).setMockItem('8');
+        await flushPromises();
+        (await import('vue-router') as unknown as { setMockItem: (id: string) => void }).setMockItem('7');
+        await flushPromises();
+
+        finishCreate({ data: { data: { id: 'level-14', quantity: 0 } } });
+        await flushPromises();
+
+        expect(vi.mocked(http.post).mock.calls.filter(([url]) => String(url) === '/inventory-levels')).toHaveLength(1);
+        expect(wrapper!.find('#setup-location-form').exists()).toBe(false);
+        expect(wrapper!.text()).not.toContain('Stock location set up with 0 packs.');
+    });
+
+    it('does not show setup completion after the page unmounts during the request', async () => {
+        let finishCreate!: (response: { data: { data: { id: string; quantity: number } } }) => void;
+        vi.mocked(http.post).mockImplementation((url) => {
+            if (String(url) === '/inventory-levels') return new Promise((resolve) => { finishCreate = resolve; }) as never;
+            return Promise.resolve({ data: { data: {} } }) as never;
+        });
+        mountPage();
+        await flushPromises();
+        await openLocationSetup();
+        await wrapper!.get('#setup-location').setValue('4');
+        await wrapper!.get('#setup-location-form').trigger('submit');
+        await flushPromises();
+        wrapper!.unmount();
+        finishCreate({ data: { data: { id: 'level-15', quantity: 0 } } });
+        await flushPromises();
+
+        expect(vi.mocked(http.post).mock.calls.filter(([url]) => String(url) === '/inventory-levels')).toHaveLength(1);
+    });
+
+    it('does not let a late location-creation result clear a new item location draft', async () => {
+        vi.mocked(http.get).mockImplementation(async (url) => {
+            if (String(url) === '/locations') return { data: { data: [], meta: { current_page: 1, last_page: 1, total: 0 } } } as never;
+            if (String(url).includes('/images')) return { data: { data: [] } } as never;
+            if (String(url).endsWith('/notes')) return { data: { data: [], meta: { current_page: 1, last_page: 1, total: 0 } } } as never;
+            if (String(url) === '/inventory-movements') return { data: { data: [], meta: { current_page: 1, last_page: 1, total: 0 } } } as never;
+            if (String(url).startsWith('/items/')) return { data: { data: item } } as never;
+            if (String(url) === '/inventory-alerts') return { data: { data: [], meta: { current_page: 1, last_page: 1, total: 0 } } } as never;
+            throw new Error(`Unexpected GET ${String(url)}`);
+        });
+        let finishLocation!: (response: { data: { data: { id: string; name: string; description: null; parent: null } } }) => void;
+        vi.mocked(http.post).mockImplementation((url) => {
+            if (String(url) === '/locations') return new Promise((resolve) => { finishLocation = resolve; }) as never;
+            return Promise.resolve({ data: { data: {} } }) as never;
+        });
+        mountPage();
+        await flushPromises();
+        await openLocationSetup();
+        await wrapper!.findAll('button').find((button) => button.text() === 'Create a location')!.trigger('click');
+        await wrapper!.get('#location-name').setValue('Old storage');
+        const locationForm = () => wrapper!.findAll('form').find((form) => form.find('#location-name').exists())!;
+        await locationForm().trigger('submit');
+        await flushPromises();
+
+        (await import('vue-router') as unknown as { setMockItem: (id: string) => void }).setMockItem('8');
+        await flushPromises();
+        (await import('vue-router') as unknown as { setMockItem: (id: string) => void }).setMockItem('7');
+        await flushPromises();
+        await openLocationSetup();
+        await wrapper!.findAll('button').find((button) => button.text() === 'Create a location')!.trigger('click');
+        await wrapper!.get('#location-name').setValue('New storage');
+
+        finishLocation({ data: { data: { id: '55', name: 'Old storage', description: null, parent: null } } });
+        await flushPromises();
+
+        expect(wrapper!.get('#create-location-title').text()).toBe('Create a location');
+        expect((wrapper!.get('#location-name').element as HTMLInputElement).value).toBe('New storage');
     });
 
     it('submits a confirmed correction with observed quantity and displays API validation errors', async () => {

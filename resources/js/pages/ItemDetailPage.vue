@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue';
+import axios from 'axios';
+import { computed, onUnmounted, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { parseApiErrors, type FormErrors } from '../lib/api-errors';
 import { buildLocationPath, type InventoryLevel } from '../api/stock';
-import { useActiveAlertsQuery, useBuySoonMutation, useCreateLocationMutation, useLocationsQuery, useRecordMovementMutation, useResolveAlertMutation, useStockItemQuery, useUpdateThresholdMutation } from '../queries/stock';
+import { useActiveAlertsQuery, useBuySoonMutation, useCreateInventoryLevelMutation, useCreateLocationMutation, useLocationsQuery, useRecordMovementMutation, useResolveAlertMutation, useStockItemQuery, useUpdateThresholdMutation } from '../queries/stock';
 import NotesPanel from '../components/NotesPanel.vue';
 import ItemImagesPanel from '../components/ItemImagesPanel.vue';
 import ArchiveResourceButton from '../components/ArchiveResourceButton.vue';
@@ -26,6 +27,7 @@ const resolveAlertMutation = useResolveAlertMutation();
 const locationsQuery = useLocationsQuery();
 const movementMutation = useRecordMovementMutation();
 const thresholdMutation = useUpdateThresholdMutation();
+const createInventoryLevelMutation = useCreateInventoryLevelMutation();
 const createLocationMutation = useCreateLocationMutation();
 const updateItemMutation = useUpdateItemMutation();
 const showEditForm = ref(false);
@@ -45,13 +47,24 @@ const newLocationParent = ref('');
 const showCreateLocation = ref(false);
 const locationErrors = ref<FormErrors>({ fields: {}, form: '' });
 const actionError = ref('');
-const pending = computed(() => movementMutation.isPending.value || thresholdMutation.isPending.value);
+const showSetupPanel = ref(false);
+const setupLocationId = ref('');
+const setupThreshold = ref('');
+const setupErrors = ref<FormErrors>({ fields: {}, form: '' });
+const setupSuccess = ref('');
+let isMounted = true;
+let setupContextGeneration = 0;
+const pending = computed(() => movementMutation.isPending.value || thresholdMutation.isPending.value || createInventoryLevelMutation.isPending.value);
 const manualAlert = computed(() => itemAlertQuery.data.value?.data[0] ?? null);
 const alertPending = computed(() => buySoonMutation.isPending.value || resolveAlertMutation.isPending.value);
 
 const locationOptions = computed(() => (locationsQuery.data.value ?? []).map((location) => ({ location, path: locationPath(location) })));
 const canSaveNewRestock = computed(() => locationOptions.value.some(({ location }) => location.id === targetLocationId.value));
 const otherLocations = computed(() => locationOptions.value.filter(({ location }) => location.id !== selectedLevel.value?.location.id));
+const existingLocationIds = computed(() => new Set((itemQuery.data.value?.inventory_levels ?? []).map((level) => level.location.id)));
+const eligibleSetupLocations = computed(() => locationOptions.value.filter(({ location }) => !existingLocationIds.value.has(location.id)));
+const validSetupThreshold = computed(() => setupThreshold.value === '' || (Number.isInteger(Number(setupThreshold.value)) && Number(setupThreshold.value) >= 0));
+const canSaveSetup = computed(() => eligibleSetupLocations.value.some(({ location }) => location.id === setupLocationId.value) && validSetupThreshold.value && !locationsQuery.isFetching.value && !locationsQuery.isError.value);
 const positiveLevels = computed(() => (itemQuery.data.value?.inventory_levels ?? []).filter((level) => level.quantity > 0 && level.id !== selectedLevel.value?.id));
 
 function locationPath(location: InventoryLevel['location']): string {
@@ -74,6 +87,8 @@ function startAction(action: Action, level: InventoryLevel | null = null): void 
     }
 
     activeAction.value = action;
+    showSetupPanel.value = false;
+    setupSuccess.value = '';
     selectedLevel.value = level;
     quantity.value = '1';
     observedQuantity.value = String(level?.quantity ?? 0);
@@ -85,7 +100,72 @@ function startAction(action: Action, level: InventoryLevel | null = null): void 
     success.value = '';
 }
 
+function startLocationSetup(): void {
+    if (pending.value) return;
+    activeAction.value = null;
+    selectedLevel.value = null;
+    showSetupPanel.value = true;
+    showCreateLocation.value = false;
+    setupLocationId.value = '';
+    setupThreshold.value = '';
+    setupErrors.value = { fields: {}, form: '' };
+    setupSuccess.value = '';
+    success.value = '';
+    actionError.value = '';
+}
+
+function closeLocationSetup(): void {
+    if (pending.value) return;
+    showSetupPanel.value = false;
+    setupErrors.value = { fields: {}, form: '' };
+}
+
+async function submitLocationSetup(): Promise<void> {
+    if (pending.value || !showSetupPanel.value) return;
+    const operationItemId = itemId.value;
+    const operationContext = setupContextGeneration;
+    const currentItem = itemQuery.data.value;
+    if (!currentItem || currentItem.id !== operationItemId) return;
+    setupErrors.value = { fields: {}, form: '' };
+    setupSuccess.value = '';
+
+    const selectedLocation = eligibleSetupLocations.value.find(({ location }) => location.id === setupLocationId.value);
+    if (!selectedLocation) {
+        setupErrors.value.form = 'Choose an active location that does not already have a stock level for this item.';
+        return;
+    }
+
+    if (!validSetupThreshold.value) {
+        setupErrors.value.fields.alert_threshold = 'Enter a whole number of zero or more, or leave the threshold blank.';
+        return;
+    }
+
+    const alertThreshold = setupThreshold.value === '' ? null : Number(setupThreshold.value);
+    try {
+        await createInventoryLevelMutation.mutateAsync({ item_id: operationItemId, location_id: selectedLocation.location.id, alert_threshold: alertThreshold });
+        if (!isMounted || setupContextGeneration !== operationContext || itemId.value !== operationItemId) return;
+        showSetupPanel.value = false;
+        setupSuccess.value = `Stock location set up with 0 ${unitFor(0)}. No stock was added; restock later when you have this item.`;
+    } catch (error) {
+        if (!isMounted || setupContextGeneration !== operationContext || itemId.value !== operationItemId) return;
+        const parsedErrors = parseApiErrors(error);
+        if (axios.isAxiosError(error) && error.response?.status === 409) {
+            setupErrors.value = {
+                fields: parsedErrors.fields,
+                form: 'This item already has a stock level at that location. We refreshed its current stock; choose a different location if you still need one.',
+            };
+            await itemQuery.refetch();
+            if (isMounted && setupContextGeneration === operationContext && itemId.value === operationItemId) {
+                setupLocationId.value = '';
+            }
+            return;
+        }
+        setupErrors.value = parsedErrors;
+    }
+}
+
 watch(itemId, () => {
+    setupContextGeneration++;
     activeAction.value = null;
     selectedLevel.value = null;
     targetLocationId.value = '';
@@ -96,6 +176,16 @@ watch(itemId, () => {
     showEditForm.value = false;
     editErrors.value = { fields: {}, form: '' };
     editSuccess.value = '';
+    showSetupPanel.value = false;
+    setupLocationId.value = '';
+    setupThreshold.value = '';
+    setupErrors.value = { fields: {}, form: '' };
+    setupSuccess.value = '';
+});
+
+onUnmounted(() => {
+    isMounted = false;
+    setupContextGeneration++;
 });
 
 let handledRestockRequest = '';
@@ -250,14 +340,18 @@ async function addLocation(): Promise<void> {
         return;
     }
 
+    const operationItemId = itemId.value;
+    const operationContext = setupContextGeneration;
     locationErrors.value = { fields: {}, form: '' };
     try {
         await createLocationMutation.mutateAsync({ name: newLocationName.value, parent_id: newLocationParent.value || null, description: null });
+        if (!isMounted || setupContextGeneration !== operationContext || itemId.value !== operationItemId) return;
         newLocationName.value = '';
         newLocationParent.value = '';
         showCreateLocation.value = false;
         await locationsQuery.refetch();
     } catch (error) {
+        if (!isMounted || setupContextGeneration !== operationContext || itemId.value !== operationItemId) return;
         locationErrors.value = parseApiErrors(error);
     }
 }
@@ -343,6 +437,7 @@ async function toggleBuySoon(): Promise<void> {
             <ItemImagesPanel class="mt-6" :item-id="itemId" />
 
             <p v-if="success" class="mt-5 rounded-md border border-sage/20 bg-sage-soft px-4 py-3 text-sm font-medium text-sage-dark" role="status">{{ success }}</p>
+            <p v-if="setupSuccess" class="mt-5 rounded-md border border-sage/20 bg-sage-soft px-4 py-3 text-sm font-medium text-sage-dark" role="status">{{ setupSuccess }}</p>
             <p v-if="actionError" class="mt-5 rounded-md border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800" role="alert">{{ actionError }}</p>
 
             <section class="mt-6 rounded-panel border border-line bg-white p-5 shadow-card" aria-labelledby="buy-soon-title">
@@ -359,7 +454,10 @@ async function toggleBuySoon(): Promise<void> {
             <section class="mt-7 rounded-panel border border-line bg-white shadow-card" aria-labelledby="locations-heading">
                 <div class="flex flex-wrap items-center justify-between gap-3 border-b border-line px-5 py-4 sm:px-6">
                     <div><h2 id="locations-heading" class="text-base font-semibold text-ink">Stock by location</h2><p class="mt-1 text-sm text-ink-muted">Use quick actions for everyday changes; corrections and disposals ask for confirmation.</p></div>
-                    <button type="button" :disabled="pending" class="min-h-10 rounded-md border border-line px-3 text-sm font-medium text-ink hover:bg-surface-soft disabled:cursor-wait disabled:opacity-60" @click="startAction('restock')">Restock at another location</button>
+                    <div class="flex flex-wrap gap-2">
+                        <button type="button" :disabled="pending" class="min-h-10 rounded-md border border-line px-3 text-sm font-medium text-ink hover:bg-surface-soft disabled:cursor-wait disabled:opacity-60" @click="startLocationSetup">Set up a stock location</button>
+                        <button type="button" :disabled="pending" class="min-h-10 rounded-md border border-line px-3 text-sm font-medium text-ink hover:bg-surface-soft disabled:cursor-wait disabled:opacity-60" @click="startAction('restock')">Restock at another location</button>
+                    </div>
                 </div>
                 <div v-if="locationsQuery.isError.value" class="p-5 text-sm text-rose-700" role="alert">Locations could not be loaded. <button class="underline" @click="locationsQuery.refetch()">Try again</button></div>
                 <div v-else-if="locationsQuery.isPending.value" class="p-5 text-sm text-ink-muted" role="status">Loading locations…</div>
@@ -381,6 +479,41 @@ async function toggleBuySoon(): Promise<void> {
                         </div>
                     </li>
                 </ul>
+            </section>
+
+            <section v-if="showSetupPanel" class="mt-6 rounded-panel border border-line bg-white p-5 shadow-card sm:p-6" :aria-busy="pending || locationsQuery.isFetching.value" aria-labelledby="setup-location-title">
+                <div class="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                        <p class="eyebrow">Zero-stock setup</p>
+                        <h2 id="setup-location-title" class="mt-1 text-xl font-semibold text-ink">Set up stock location</h2>
+                        <p class="mt-2 max-w-2xl text-sm leading-6 text-ink-muted">This starts tracking this item at the selected location with 0 {{ unitFor(0) }} and adds no stock. You can record a restock later. Leave the alert threshold blank to keep it unmonitored; choosing 0 explicitly enables an empty-stock alert.</p>
+                    </div>
+                    <button type="button" :disabled="pending" class="min-h-10 rounded-md px-3 text-sm font-medium text-ink-muted underline disabled:cursor-wait disabled:opacity-60" @click="closeLocationSetup">Cancel</button>
+                </div>
+                <p v-if="setupErrors.form" aria-label="setup-location-error" class="mt-4 rounded-md border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800" role="alert">{{ setupErrors.form }}</p>
+                <p v-for="(message, field) in setupErrors.fields" :key="field" class="mt-3 text-sm text-rose-700" role="alert">{{ message }}</p>
+                <p v-if="locationsQuery.isFetching.value" class="mt-4 text-sm text-ink-muted" role="status">Loading locations…</p>
+                <div v-else-if="locationsQuery.isError.value" class="mt-4 text-sm text-rose-700" role="alert">Locations could not be loaded. <button type="button" class="font-medium underline" @click="locationsQuery.refetch()">Try again</button></div>
+                <form v-else id="setup-location-form" class="mt-5 grid gap-4 sm:grid-cols-2" @submit.prevent="submitLocationSetup">
+                    <div v-if="eligibleSetupLocations.length" class="grid min-w-0 gap-2">
+                        <label for="setup-location" class="text-sm font-medium text-ink">Location</label>
+                        <select id="setup-location" v-model="setupLocationId" required :disabled="pending" class="min-h-11 w-full min-w-0 rounded-md border border-line bg-white px-3 text-ink disabled:opacity-60"><option value="" disabled>Select a location</option><option v-for="option in eligibleSetupLocations" :key="option.location.id" :value="option.location.id">{{ option.path }}</option></select>
+                    </div>
+                    <div v-if="eligibleSetupLocations.length" class="grid min-w-0 gap-2">
+                        <label for="setup-threshold" class="text-sm font-medium text-ink">Alert when quantity reaches <span class="font-normal text-ink-muted">(optional)</span></label>
+                        <input id="setup-threshold" v-model="setupThreshold" type="number" min="0" step="1" :disabled="pending" :aria-invalid="Boolean(setupErrors.fields.alert_threshold) || (setupThreshold !== '' && !validSetupThreshold)" :aria-describedby="setupThreshold !== '' && !validSetupThreshold ? 'setup-threshold-error' : undefined" class="min-h-11 w-full min-w-0 rounded-md border border-line px-3 text-ink focus:border-sage focus:outline-none focus:ring-2 focus:ring-sage/20 disabled:opacity-60">
+                        <p class="text-xs leading-5 text-ink-muted">Blank leaves alerts off; 0 is a valid threshold and marks this location empty.</p>
+                        <p v-if="setupThreshold !== '' && !validSetupThreshold" id="setup-threshold-error" class="text-sm text-rose-700" role="alert">Enter a whole number of zero or more.</p>
+                    </div>
+                    <div v-if="!eligibleSetupLocations.length" class="grid gap-3 sm:col-span-2" role="status">
+                        <p v-if="locationOptions.length === 0" class="text-sm text-ink-muted">There are no active locations yet. Create one to set up a stock location.</p>
+                        <p v-else class="text-sm text-ink-muted">Every active location already has a stock level for this item.</p>
+                        <button type="button" :disabled="pending" class="min-h-10 w-fit rounded-md border border-line px-3 text-sm font-medium text-ink disabled:opacity-60" @click="showCreateLocation = true">Create a location</button>
+                    </div>
+                    <div v-if="eligibleSetupLocations.length" class="flex flex-wrap gap-3 sm:col-span-2">
+                        <button type="submit" :disabled="pending || !canSaveSetup" class="min-h-11 rounded-md bg-sage px-4 text-sm font-semibold text-white hover:bg-sage-dark disabled:cursor-wait disabled:opacity-60">{{ createInventoryLevelMutation.isPending.value ? 'Setting up…' : 'Set up location' }}</button>
+                    </div>
+                </form>
             </section>
 
             <section v-if="activeAction" class="mt-6 rounded-panel border border-line bg-white p-5 shadow-card sm:p-6" aria-labelledby="action-title">
