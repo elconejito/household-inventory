@@ -10,7 +10,7 @@ const props = defineProps<{
     errors?: FormErrors;
 }>();
 const emit = defineEmits<{
-    submit: [item: NewItem, initialItem: ItemEditSnapshot | null, intent?: 'detail' | 'stock'];
+    submit: [item: NewItem, initialItem: ItemEditSnapshot | null, intent?: 'detail' | 'stock' | 'another'];
     cancel: [];
 }>();
 
@@ -61,7 +61,7 @@ function submit(event: Event): void {
     }
 
     const submitter = (event as SubmitEvent).submitter as HTMLButtonElement | null;
-    emit('submit', values, null, submitter?.value === 'stock' ? 'stock' : 'detail');
+    emit('submit', values, null, submitter?.value === 'another' ? 'another' : submitter?.value === 'stock' ? 'stock' : 'detail');
 }
 </script>
 
@@ -121,6 +121,7 @@ function submit(event: Event): void {
             <div class="flex flex-wrap items-center gap-3 sm:col-span-2">
                 <button v-if="!item" type="submit" value="detail" :disabled="saving" class="inline-flex min-h-11 items-center justify-center rounded-md bg-sage px-4 text-sm font-semibold text-white transition hover:bg-sage-dark focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sage disabled:cursor-wait disabled:opacity-70">{{ saving ? 'Saving…' : 'Save item' }}</button>
                 <button v-if="!item" type="submit" value="stock" :disabled="saving" class="inline-flex min-h-11 items-center justify-center rounded-md border border-sage px-4 text-sm font-semibold text-sage-dark transition hover:bg-sage-soft focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sage disabled:cursor-wait disabled:opacity-70">{{ saving ? 'Saving…' : 'Save and add stock' }}</button>
+                <button v-if="!item" type="submit" value="another" :disabled="saving" class="inline-flex min-h-11 items-center justify-center rounded-md border border-sage px-4 text-sm font-semibold text-sage-dark transition hover:bg-sage-soft focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sage disabled:cursor-wait disabled:opacity-70">{{ saving ? 'Saving…' : 'Save and add another' }}</button>
                 <button v-else type="submit" :disabled="saving || Boolean(categoriesQuery.isPending.value || categoriesQuery.isError.value)" class="inline-flex min-h-11 items-center justify-center rounded-md bg-sage px-4 text-sm font-semibold text-white transition hover:bg-sage-dark focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sage disabled:cursor-wait disabled:opacity-70">{{ saving ? 'Saving…' : 'Save changes' }}</button>
                 <button type="button" :disabled="saving" class="inline-flex min-h-11 items-center justify-center rounded-md px-4 text-sm font-medium text-ink-muted transition hover:bg-surface-soft hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sage disabled:cursor-wait disabled:opacity-60" @click="emit('cancel')">Cancel</button>
             </div>

@@ -64,7 +64,7 @@ describe('item creation panel', () => {
         await input.trigger('change');
     }
 
-    async function submitWithIntent(value: 'detail' | 'stock') {
+    async function submitWithIntent(value: 'detail' | 'stock' | 'another') {
         const button = wrapper!.get(`button[value="${value}"]`);
         await wrapper!.get('form').trigger('submit', { submitter: button.element });
     }
@@ -90,6 +90,56 @@ describe('item creation panel', () => {
         expect(upload?.[1]).toBeInstanceOf(FormData);
         expect((upload?.[1] as FormData).get('image')).toBeInstanceOf(File);
         expect(router.currentRoute.value.fullPath).toBe('/items/31?restock=1');
+    });
+
+    it.each([false, true])('resets the form after saving another item with photo=%s', async (withPhoto) => {
+        await mountPanel();
+        await wrapper!.get('#item-description').setValue('Kitchen supply');
+        if (withPhoto) await choosePhoto(new File(['image'], 'soap.webp', { type: 'image/webp' }));
+
+        await submitWithIntent('another');
+        await flushPromises();
+
+        expect(router.currentRoute.value.fullPath).toBe('/');
+        expect(wrapper!.text()).toContain('Dish soap saved. Add another item below.');
+        expect(wrapper!.get('#item-name').element).toHaveProperty('value', '');
+        expect(wrapper!.get('#item-counting-unit').element).toHaveProperty('value', 'item');
+        expect(wrapper!.get('#item-description').element).toHaveProperty('value', '');
+        expect(wrapper!.text()).not.toContain('soap.webp');
+        expect(wrapper!.emitted('busy')?.at(-1)).toEqual([false]);
+
+        await wrapper!.get('#item-name').setValue('Paper towels');
+        await submitWithIntent('another');
+        await flushPromises();
+
+        expect(vi.mocked(http.post).mock.calls.filter(([url]) => url === '/items')).toHaveLength(2);
+        expect(vi.mocked(http.post).mock.calls.filter(([url]) => url === '/items/31/images')).toHaveLength(withPhoto ? 1 : 0);
+        expect(wrapper!.text()).toContain('Paper towels saved. Add another item below.');
+    });
+
+    it('keeps photo recovery available before starting another item', async () => {
+        await mountPanel();
+        await choosePhoto(new File(['image'], 'soap.png', { type: 'image/png' }));
+        vi.mocked(http.post).mockRejectedValueOnce(new Error('save failed'));
+
+        await submitWithIntent('another');
+        await flushPromises();
+        expect(wrapper!.get('#item-name').element).toHaveProperty('value', 'Dish soap');
+
+        vi.mocked(http.post).mockImplementation(async (url) => {
+            if (url === '/items') return { data: { data: savedItem } } as never;
+            throw new Error('upload failed');
+        });
+        await submitWithIntent('another');
+        await flushPromises();
+        expect(wrapper!.text()).toContain('photo could not be uploaded');
+        expect(wrapper!.find('form').exists()).toBe(false);
+
+        await clickButton('Continue without photo');
+        await flushPromises();
+        expect(wrapper!.get('#item-name').element).toHaveProperty('value', '');
+        expect(router.currentRoute.value.fullPath).toBe('/');
+        expect(vi.mocked(http.post).mock.calls.filter(([url]) => url === '/items')).toHaveLength(2);
     });
 
     it('keeps a failed photo recovery card and retry never posts the item again', async () => {

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onUnmounted, ref, watch } from 'vue';
+import { computed, nextTick, onUnmounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useQueryClient } from '@tanstack/vue-query';
 import ItemEditor from './ItemEditor.vue';
@@ -9,7 +9,7 @@ import { parseApiErrors, type FormErrors } from '../lib/api-errors';
 import { useItemImageMutations } from '../queries/item-images';
 import { useCreateItemMutation } from '../queries/items';
 
-type CreateIntent = 'detail' | 'stock';
+type CreateIntent = 'detail' | 'stock' | 'another';
 const maximumPhotoSize = 20 * 1024 * 1024;
 const allowedPhotoTypes = new Set(['image/jpeg', 'image/png', 'image/webp']);
 
@@ -18,6 +18,9 @@ const route = useRoute();
 const router = useRouter();
 const queryClient = useQueryClient();
 const createMutation = useCreateItemMutation();
+const panel = ref<HTMLDivElement | null>(null);
+const editorGeneration = ref(0);
+const savedMessage = ref('');
 const createdItemId = ref('');
 const createdItemName = ref('');
 const intent = ref<CreateIntent>('detail');
@@ -83,6 +86,23 @@ function itemDestination(): { name: string; params: { item: string }; query?: Re
 
 async function openCreatedItem(generation: number): Promise<void> {
     if (!createdItemId.value || !isCurrent(generation)) return;
+    if (intent.value === 'another') {
+        savedMessage.value = `${createdItemName.value} saved. Add another item below.`;
+        createdItemId.value = '';
+        createdItemName.value = '';
+        photo.value = null;
+        photoSelectionError.value = '';
+        photoUploadError.value = '';
+        photoUploadFailed.value = false;
+        photoUploaded.value = false;
+        navigationError.value = '';
+        creationErrors.value = { fields: {}, form: '' };
+        editorGeneration.value++;
+        setProcessing(false);
+        await nextTick();
+        panel.value?.querySelector<HTMLInputElement>('#item-name')?.focus();
+        return;
+    }
     setProcessing(true);
     navigationError.value = '';
     try {
@@ -161,6 +181,7 @@ async function submitCreate(itemData: NewItem, _snapshot: ItemEditSnapshot | nul
         return;
     }
 
+    savedMessage.value = '';
     const generation = ++operationGeneration;
     intent.value = requestedIntent;
     createdItemName.value = itemData.name;
@@ -245,8 +266,9 @@ onUnmounted(() => {
 </script>
 
 <template>
-    <div>
-        <ItemEditor v-if="!createdItemId" id="create-item-panel" class="mt-6" :item="null" :saving="processing" :errors="creationErrors" @submit="submitCreate" @cancel="cancel">
+    <div ref="panel">
+        <p v-if="savedMessage" class="mt-4 text-sm text-sage-dark" role="status">{{ savedMessage }}</p>
+        <ItemEditor :key="editorGeneration" v-if="!createdItemId" id="create-item-panel" class="mt-6" :item="null" :saving="processing" :errors="creationErrors" @submit="submitCreate" @cancel="cancel">
             <template #create-fields>
                 <div class="grid gap-2 sm:col-span-2">
                     <label for="create-item-photo" class="text-sm font-medium text-ink">Primary photo (optional)</label>
