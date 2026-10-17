@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onUnmounted, ref, watch } from 'vue';
+import { computed, nextTick, onUnmounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { buildLocationPath, type Location as StockLocation } from '../api/stock';
 import { parseApiErrors, type FormErrors } from '../lib/api-errors';
@@ -17,6 +17,7 @@ const page = ref(1);
 const pageSize = ref(10);
 const showCreateForm = ref(false);
 const categoryName = ref('');
+const categoryNameInput = ref<HTMLInputElement | null>(null);
 const locationName = ref('');
 const locationDescription = ref('');
 const createParentId = ref('');
@@ -103,8 +104,10 @@ function toggleCreateForm(): void {
     success.value = '';
 }
 
-async function createCategory(): Promise<void> {
+async function createCategory(event: Event): Promise<void> {
     if (createCategoryMutation.isPending.value) return;
+    const submitter = (event as SubmitEvent).submitter as HTMLButtonElement | null;
+    const addAnother = submitter?.value === 'another';
     const context = `${String(route.name)}:${String(route.query.parent ?? '')}`;
     errors.value = { fields: {}, form: '' };
     success.value = '';
@@ -112,8 +115,12 @@ async function createCategory(): Promise<void> {
         const category = await createCategoryMutation.mutateAsync(categoryName.value.trim());
         if (context !== `${String(route.name)}:${String(route.query.parent ?? '')}`) return;
         categoryName.value = '';
-        showCreateForm.value = false;
+        showCreateForm.value = addAnother;
         success.value = `${category.name} was created.`;
+        if (addAnother) {
+            await nextTick();
+            categoryNameInput.value?.focus();
+        }
     } catch (cause) {
         if (context === `${String(route.name)}:${String(route.query.parent ?? '')}`) errors.value = parseApiErrors(cause);
     }
@@ -181,11 +188,12 @@ async function browseChildren(id: string): Promise<void> {
             <form v-if="isCategoriesPage" class="mt-5 grid max-w-xl gap-4" @submit.prevent="createCategory">
                 <div class="grid gap-2">
                     <label for="category-name" class="text-sm font-medium text-ink">Category name <span aria-hidden="true">*</span></label>
-                    <input id="category-name" v-model="categoryName" required maxlength="255" :aria-invalid="Boolean(errors.fields.name)" aria-describedby="category-name-error" class="min-h-12 rounded-md border border-line bg-white px-3.5 text-base text-ink outline-none focus:border-sage focus:ring-2 focus:ring-sage/20">
+                    <input id="category-name" ref="categoryNameInput" v-model="categoryName" required maxlength="255" :aria-invalid="Boolean(errors.fields.name)" aria-describedby="category-name-error" class="min-h-12 rounded-md border border-line bg-white px-3.5 text-base text-ink outline-none focus:border-sage focus:ring-2 focus:ring-sage/20">
                     <p v-if="errors.fields.name" id="category-name-error" class="text-sm text-rose-700">{{ errors.fields.name }}</p>
                 </div>
-                <div class="flex gap-3">
+                <div class="flex flex-wrap gap-3">
                     <button type="submit" :disabled="isPending || !categoryName.trim()" class="min-h-11 rounded-md bg-sage px-4 text-sm font-semibold text-white disabled:opacity-60">{{ createCategoryMutation.isPending.value ? 'Saving…' : 'Save category' }}</button>
+                    <button type="submit" value="another" :disabled="isPending || !categoryName.trim()" class="inline-flex min-h-11 items-center justify-center rounded-md border border-sage px-4 text-sm font-semibold text-sage-dark transition hover:bg-sage-soft focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sage disabled:opacity-60">{{ createCategoryMutation.isPending.value ? 'Saving…' : 'Save and add another' }}</button>
                     <button type="button" class="min-h-11 rounded-md border border-line px-4 text-sm font-medium" @click="toggleCreateForm">Cancel</button>
                 </div>
             </form>

@@ -43,6 +43,47 @@ describe('catalog browse page', () => {
         expect(http.post).toHaveBeenCalledWith('/locations', { data: { name: 'Main pantry', description: null, parent_id: null } });
     });
 
+    it('saves successive categories and closes the form with the standard save action', async () => {
+        route.name = 'catalog-categories';
+        route.query = { create: '1' };
+        vi.mocked(http.post)
+            .mockResolvedValueOnce({ data: { data: { id: '55', name: 'Laundry' } } } as never)
+            .mockResolvedValueOnce({ data: { data: { id: '56', name: 'Dishwashing' } } } as never);
+        mountPage();
+        await flushPromises();
+        await wrapper!.get('#category-name').setValue('Laundry');
+        const anotherButton = wrapper!.get('button[value="another"]').element as HTMLButtonElement;
+        await wrapper!.get('form').trigger('submit', { submitter: anotherButton });
+        await flushPromises();
+
+        expect(http.post).toHaveBeenCalledWith('/categories', { data: { name: 'Laundry' } });
+        expect((wrapper!.get('#category-name').element as HTMLInputElement).value).toBe('');
+        expect(wrapper!.text()).toContain('Laundry was created.');
+        expect(wrapper!.get('button[value="another"]').attributes('disabled')).toBeDefined();
+
+        await wrapper!.get('#category-name').setValue('Dishwashing');
+        await wrapper!.get('form').trigger('submit');
+        await flushPromises();
+
+        expect(http.post).toHaveBeenCalledWith('/categories', { data: { name: 'Dishwashing' } });
+        expect(wrapper!.find('#category-name').exists()).toBe(false);
+        expect(wrapper!.text()).toContain('Dishwashing was created.');
+    });
+
+    it('preserves the category name when save and add another fails', async () => {
+        route.name = 'catalog-categories';
+        route.query = { create: '1' };
+        vi.mocked(http.post).mockRejectedValueOnce({ isAxiosError: true, response: { status: 422, data: { errors: [{ detail: 'This category already exists.', source: { pointer: '/data/name' } }] } } });
+        mountPage();
+        await flushPromises();
+        await wrapper!.get('#category-name').setValue('Laundry');
+        await wrapper!.get('form').trigger('submit', { submitter: wrapper!.get('button[value="another"]').element });
+        await flushPromises();
+
+        expect((wrapper!.get('#category-name').element as HTMLInputElement).value).toBe('Laundry');
+        expect(wrapper!.text()).toContain('This category already exists.');
+    });
+
     it('opens the child-location form from a location detail route', async () => {
         route.query = { parent: '21', create: '1' };
         mountPage();
