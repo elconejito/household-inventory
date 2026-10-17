@@ -6,6 +6,8 @@ use App\Models\Household;
 use App\Models\Membership;
 use App\Models\User;
 use Illuminate\Foundation\Testing\LazilyRefreshDatabase;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Cookie;
 use Tests\TestCase;
 
 class AuthTest extends TestCase
@@ -110,6 +112,94 @@ class AuthTest extends TestCase
             ]);
 
         $this->assertAuthenticatedAs($user, 'web');
+    }
+
+    public function test_remembered_login_restores_an_expired_session_and_renews_the_two_week_cookie(): void
+    {
+        $this->freezeTime();
+        $user = User::factory()->create();
+        $name = Auth::guard('web')->getRecallerName();
+
+        $response = $this->withHeader('Origin', 'http://localhost')
+            ->postJson('/api/login', ['data' => [
+                'email' => $user->email,
+                'password' => 'password',
+                'remember' => true,
+            ]]);
+
+        $response->assertOk()->assertCookie($name);
+        $cookie = $response->getCookie($name);
+        $this->assertSame(now()->addDays(14)->timestamp, $cookie->getExpiresTime());
+        $this->assertTrue($cookie->isHttpOnly());
+
+        $this->travel(3)->hours();
+        $this->app['session']->flush();
+        Auth::forgetGuards();
+        Cookie::flushQueuedCookies();
+
+        $restored = $this->withCredentials()->withCookie($name, $cookie->getValue())->getJson('/api/user');
+
+        $restored->assertOk()->assertJsonPath('data.id', (string) $user->id)->assertCookie($name);
+        $this->assertSame(now()->addDays(14)->timestamp, $restored->getCookie($name)->getExpiresTime());
+        $this->assertAuthenticatedAs($user, 'web');
+
+        Cookie::flushQueuedCookies();
+        $this->travel(1)->days();
+        $active = $this->getJson('/api/user');
+        $active->assertOk()->assertCookie($name);
+        $this->assertSame(now()->addDays(14)->timestamp, $active->getCookie($name)->getExpiresTime());
+    }
+
+    public function test_login_without_remember_me_does_not_issue_a_persistent_cookie(): void
+    {
+        $user = User::factory()->create();
+        $name = Auth::guard('web')->getRecallerName();
+
+        $this->withHeader('Origin', 'http://localhost')
+            ->postJson('/api/login', ['data' => [
+                'email' => $user->email,
+                'password' => 'password',
+                'remember' => false,
+            ]])
+            ->assertOk()->assertCookieExpired($name);
+
+        $this->assertSame(120, config('session.lifetime'));
+    }
+
+    public function test_login_returns_422_for_an_invalid_remember_option(): void
+    {
+        $this->withHeader('Origin', 'http://localhost')
+            ->postJson('/api/login', ['data' => [
+                'email' => 'avery@example.com',
+                'password' => 'password',
+                'remember' => 'forever',
+            ]])
+            ->assertUnprocessable()
+            ->assertJsonPath('errors.0.source.pointer', '/data/remember');
+
+        $this->assertGuest('web');
+    }
+
+    public function test_logout_revokes_the_remember_cookie(): void
+    {
+        $user = User::factory()->create();
+        $name = Auth::guard('web')->getRecallerName();
+        $login = $this->withHeader('Origin', 'http://localhost')
+            ->postJson('/api/login', ['data' => [
+                'email' => $user->email,
+                'password' => 'password',
+                'remember' => true,
+            ]]);
+        $cookie = $login->getCookie($name);
+        Cookie::flushQueuedCookies();
+
+        $this->withCredentials()->withCookie($name, $cookie->getValue())
+            ->postJson('/api/logout')
+            ->assertOk()->assertCookieExpired($name);
+
+        Auth::forgetGuards();
+        Cookie::flushQueuedCookies();
+        $this->getJson('/api/user')->assertUnauthorized();
     }
 
     public function test_authenticated_user_endpoint_returns_only_default_user_fields(): void

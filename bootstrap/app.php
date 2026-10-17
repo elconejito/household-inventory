@@ -1,6 +1,7 @@
 <?php
 
 use App\Exceptions\ApiExceptionRenderer;
+use App\Http\Middleware\RefreshRememberCookie;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -15,6 +16,7 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->statefulApi();
+        $middleware->api(append: [RefreshRememberCookie::class]);
         $middleware->trimStrings(except: ['data.body']);
         $middleware->redirectGuestsTo(
             fn (Request $request): ?string => $request->is('api/*') ? null : '/login',

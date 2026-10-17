@@ -29,6 +29,19 @@ describe('login invitation return', () => {
 
     afterEach(() => { wrapper?.unmount(); wrapper = undefined; client.clear(); vi.restoreAllMocks(); });
 
+    it.each([false, true])('submits remember me as %s', async (remember) => {
+        expect((wrapper!.get('#login-remember').element as HTMLInputElement).checked).toBe(false);
+        await wrapper!.get('#login-email').setValue('sam@example.com');
+        await wrapper!.get('#login-password').setValue('safe-password');
+        await wrapper!.get('#login-remember').setValue(remember);
+        await wrapper!.get('form').trigger('submit');
+        await flushPromises();
+
+        expect(http.post).toHaveBeenCalledWith('/login', {
+            data: { email: 'sam@example.com', password: 'safe-password', remember },
+        });
+    });
+
     it('keeps the token in the invitation fragment after sign-in', async () => {
         await wrapper!.get('#login-email').setValue('sam@example.com');
         await wrapper!.get('#login-password').setValue('safe-password');

@@ -28,6 +28,7 @@ type UserResponse = {
 type Credentials = {
     email: string;
     password: string;
+    remember?: boolean;
 };
 
 type RegistrationDetails = Credentials & {
@@ -143,6 +144,7 @@ export const useSessionStore = defineStore('session', () => {
 
     return {
         user,
+        clearSession,
         status,
         pendingDestination,
         ensureLoaded,

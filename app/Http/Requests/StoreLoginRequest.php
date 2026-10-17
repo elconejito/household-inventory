@@ -28,9 +28,10 @@ class StoreLoginRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'data' => ['required', 'array:email,password'],
+            'data' => ['required', 'array:email,password,remember'],
             'data.email' => ['required', 'string', 'email', 'max:255'],
             'data.password' => ['required', 'string'],
+            'data.remember' => ['sometimes', 'boolean'],
         ];
     }
 }

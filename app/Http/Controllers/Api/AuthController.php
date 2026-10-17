@@ -15,6 +15,7 @@ use Illuminate\Auth\AuthenticationException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Cookie;
 use Illuminate\Support\Facades\DB;
 use Spatie\QueryBuilder\Exceptions\InvalidIncludeQuery;
 
@@ -59,10 +60,15 @@ class AuthController extends Controller
         UserTransformer $transformer,
     ): JsonResponse {
         /** @var array{email: string, password: string} $credentials */
-        $credentials = $request->validated('data');
+        $credentials = $request->safe()->only(['data.email', 'data.password'])['data'];
+        $remember = $request->boolean('data.remember');
 
-        if (! Auth::guard('web')->attempt($credentials)) {
+        if (! Auth::guard('web')->attempt($credentials, $remember)) {
             throw new AuthenticationException;
+        }
+
+        if (! $remember) {
+            Cookie::queue(Cookie::forget(Auth::guard('web')->getRecallerName()));
         }
 
         $request->session()->regenerate();

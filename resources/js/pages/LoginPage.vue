@@ -10,6 +10,7 @@ const router = useRouter();
 const session = useSessionStore();
 const email = ref('');
 const password = ref('');
+const remember = ref(false);
 const errors = ref<FormErrors>({ fields: {}, form: '' });
 const isSubmitting = ref(false);
 
@@ -18,7 +19,7 @@ async function submit(): Promise<void> {
     isSubmitting.value = true;
 
     try {
-        await session.login({ email: email.value, password: password.value });
+        await session.login({ email: email.value, password: password.value, remember: remember.value });
         const destination = postAuthenticationPath(route.query.redirect);
         await router.push(destination === '/invitations/accept' && route.hash ? `${destination}${route.hash}` : destination);
     } catch (error) {
@@ -78,6 +79,17 @@ async function submit(): Promise<void> {
                         >
                         <p v-if="errors.fields.password" id="login-password-error" class="text-sm text-rose-700">{{ errors.fields.password }}</p>
                     </div>
+
+                    <label class="flex items-center gap-3 text-sm text-ink">
+                        <input
+                            id="login-remember"
+                            v-model="remember"
+                            type="checkbox"
+                            name="remember"
+                            class="size-4 rounded border-line accent-sage focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sage"
+                        >
+                        <span>Remember me <span class="text-ink-muted">(2 weeks of inactivity)</span></span>
+                    </label>
 
                     <button
                         type="submit"
