@@ -64,7 +64,7 @@ describe('item creation panel', () => {
         await input.trigger('change');
     }
 
-    async function submitWithIntent(value: 'detail' | 'stock' | 'another') {
+    async function submitWithIntent(value: 'detail' | 'another') {
         const button = wrapper!.get(`button[value="${value}"]`);
         await wrapper!.get('form').trigger('submit', { submitter: button.element });
     }
@@ -75,11 +75,11 @@ describe('item creation panel', () => {
         await button!.trigger('click');
     }
 
-    it('creates the item once, uploads the selected photo, then opens the requested stock flow', async () => {
+    it('creates the item once, uploads the selected photo, then opens the item detail page', async () => {
         await mountPanel();
         await choosePhoto(new File(['image'], 'soap.webp', { type: 'image/webp' }));
 
-        await submitWithIntent('stock');
+        await submitWithIntent('detail');
         await flushPromises();
 
         expect(http.post).toHaveBeenCalledWith('/items', { data: {
@@ -89,7 +89,7 @@ describe('item creation panel', () => {
         const upload = vi.mocked(http.post).mock.calls.find(([url]) => url === '/items/31/images');
         expect(upload?.[1]).toBeInstanceOf(FormData);
         expect((upload?.[1] as FormData).get('image')).toBeInstanceOf(File);
-        expect(router.currentRoute.value.fullPath).toBe('/items/31?restock=1');
+        expect(router.currentRoute.value.fullPath).toBe('/items/31');
     });
 
     it.each([false, true])('resets the form after saving another item with photo=%s', async (withPhoto) => {
@@ -197,7 +197,7 @@ describe('item creation panel', () => {
             throw new Error(`Unexpected POST ${String(url)}`);
         });
 
-        await submitWithIntent('stock');
+        await submitWithIntent('detail');
         await flushPromises();
         await router.replace({ query: { source: 'test' } });
         await wrapper!.get('form').trigger('submit');

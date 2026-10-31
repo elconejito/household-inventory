@@ -86,16 +86,17 @@ describe('item editor', () => {
         expect(wrapper!.emitted('submit')?.[0]?.[2]).toBe('detail');
     });
 
-    it('emits stock intent only from its submit button and defaults Enter submissions to detail', async () => {
+    it('keeps Save item and defaults Enter submissions to detail', async () => {
         mountEditor({ item: null });
         await flushPromises();
         const form = wrapper!.get('form').element as HTMLFormElement;
-        const stockButton = wrapper!.findAll('button[type="submit"]').find((button) => button.text() === 'Save and add stock')!.element as HTMLButtonElement;
+        expect(wrapper!.text()).not.toContain('Save and add stock');
+        const saveButton = wrapper!.get('button[value="detail"]').element as HTMLButtonElement;
 
-        form.dispatchEvent(new SubmitEvent('submit', { bubbles: true, cancelable: true, submitter: stockButton }));
+        form.dispatchEvent(new SubmitEvent('submit', { bubbles: true, cancelable: true, submitter: saveButton }));
         form.dispatchEvent(new SubmitEvent('submit', { bubbles: true, cancelable: true }));
 
-        expect(wrapper!.emitted('submit')?.map((event) => event[2])).toEqual(['stock', 'detail']);
+        expect(wrapper!.emitted('submit')?.map((event) => event[2])).toEqual(['detail', 'detail']);
     });
 
     it('keeps the create-fields slot create-only and disables editable fields and cancel while saving', async () => {

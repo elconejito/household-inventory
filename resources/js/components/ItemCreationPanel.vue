@@ -9,7 +9,7 @@ import { parseApiErrors, type FormErrors } from '../lib/api-errors';
 import { useItemImageMutations } from '../queries/item-images';
 import { useCreateItemMutation } from '../queries/items';
 
-type CreateIntent = 'detail' | 'stock' | 'another';
+type CreateIntent = 'detail' | 'another';
 const maximumPhotoSize = 20 * 1024 * 1024;
 const allowedPhotoTypes = new Set(['image/jpeg', 'image/png', 'image/webp']);
 
@@ -76,11 +76,10 @@ function isCurrent(generation: number): boolean {
     return isMounted && generation === operationGeneration;
 }
 
-function itemDestination(): { name: string; params: { item: string }; query?: Record<string, string> } {
+function itemDestination(): { name: string; params: { item: string } } {
     return {
         name: 'inventory-item',
         params: { item: createdItemId.value },
-        ...(intent.value === 'stock' ? { query: { restock: '1' } } : {}),
     };
 }
 
@@ -268,7 +267,7 @@ onUnmounted(() => {
 <template>
     <div ref="panel">
         <p v-if="savedMessage" class="mt-4 text-sm text-sage-dark" role="status">{{ savedMessage }}</p>
-        <ItemEditor :key="editorGeneration" v-if="!createdItemId" id="create-item-panel" class="mt-6" :item="null" :saving="processing" :errors="creationErrors" @submit="submitCreate" @cancel="cancel">
+        <ItemEditor :key="editorGeneration" v-if="!createdItemId" id="create-item-panel" :item="null" :saving="processing" :errors="creationErrors" @submit="submitCreate" @cancel="cancel">
             <template #create-fields>
                 <div class="grid gap-2 sm:col-span-2">
                     <label for="create-item-photo" class="text-sm font-medium text-ink">Primary photo (optional)</label>
@@ -280,7 +279,7 @@ onUnmounted(() => {
             </template>
         </ItemEditor>
 
-        <section v-else class="mt-6 rounded-panel border border-line bg-white p-5 shadow-card sm:p-7" :aria-busy="processing" aria-labelledby="saved-created-item-title">
+        <section v-else class="rounded-panel border border-line bg-white p-5 shadow-card sm:p-7" :aria-busy="processing" aria-labelledby="saved-created-item-title">
             <p class="eyebrow">Item saved</p>
             <h2 id="saved-created-item-title" class="mt-1 text-xl font-semibold text-ink">{{ createdItemName }}</h2>
             <p v-if="photoUploadFailed" class="mt-3 text-sm text-rose-700" role="alert">The item was saved, but its photo could not be uploaded. {{ photoUploadError }}</p>
