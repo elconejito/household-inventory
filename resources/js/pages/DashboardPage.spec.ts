@@ -92,7 +92,7 @@ describe('dashboard finder and attention', () => {
         expect(wrapper!.get('#dashboard-location').text()).not.toContain('Closet');
         await wrapper!.get('#dashboard-location').setValue('2');
         await wrapper!.get('input[type="checkbox"]').setValue(true);
-        await wrapper!.get('form').trigger('submit');
+        await wrapper!.get('section[aria-labelledby="quick-action-title"] form').trigger('submit');
         await flushPromises();
         expect(http.post).toHaveBeenCalledWith('/inventory-movements', { data: { movement_type: 'consumption', item_id: '42', location_id: '2', quantity: 1 } });
 
@@ -104,7 +104,7 @@ describe('dashboard finder and attention', () => {
         await wrapper!.get('#dashboard-location').setValue('3');
         await wrapper!.get('#dashboard-quantity').setValue('2');
         await wrapper!.get('input[type="checkbox"]').setValue(true);
-        await wrapper!.get('form').trigger('submit');
+        await wrapper!.get('section[aria-labelledby="quick-action-title"] form').trigger('submit');
         await flushPromises();
         expect(http.post).toHaveBeenCalledWith('/inventory-movements', { data: { movement_type: 'restock', item_id: '42', location_id: '3', quantity: 2 } });
         expect(http.post).not.toHaveBeenCalledWith('/inventory-alerts/101/resolve');
@@ -136,7 +136,7 @@ describe('dashboard finder and attention', () => {
         await wrapper!.get('#dashboard-location').setValue('2');
         await wrapper!.get('input[type="checkbox"]').setValue(true);
 
-        await wrapper!.get('form').trigger('submit');
+        await wrapper!.get('section[aria-labelledby="quick-action-title"] form').trigger('submit');
         await flushPromises();
 
         expect(wrapper!.text()).toContain('There is not enough stock at this location.');

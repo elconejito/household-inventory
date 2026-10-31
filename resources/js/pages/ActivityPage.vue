@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import ListFilters from '../components/ListFilters.vue';
+import ListPagination from '../components/ListPagination.vue';
 import { computed, reactive, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { parseApiErrors } from '../lib/api-errors';
@@ -111,12 +113,10 @@ function retry(): void { void movementsQuery.refetch(); }
 
 <template>
     <section aria-labelledby="page-title">
-        <p class="eyebrow">Changes over time</p>
-        <h1 id="page-title" class="page-title mt-2">Activity</h1>
-        <p class="mt-2 max-w-2xl text-sm leading-6 text-ink-muted sm:text-base">A record of stock changes across your household.</p>
+        <h1 id="page-title" class="page-title">Activity</h1>
 
-        <section class="mt-6 rounded-panel border border-line bg-white p-4 shadow-card sm:p-5" aria-label="Filter activity">
-            <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div class="mt-6 flex justify-end">
+            <ListFilters :active="Boolean(state.itemId || state.locationId || state.movementType || state.recordedBy || state.recordedFrom || state.recordedUntil)">
                 <div class="grid min-w-0 gap-2"><label for="activity-item" class="text-sm font-medium text-ink">Item</label><select id="activity-item" :value="state.itemId" class="min-h-11 w-full min-w-0 max-w-full rounded-md border border-line bg-white px-3 text-sm" @change="setFilter('itemId', ($event.target as HTMLSelectElement).value)"><option value="">All items</option><option v-for="item in itemList.data.value ?? []" :key="item.id" :value="item.id">{{ item.name }}</option></select><p v-if="itemList.isPending.value" role="status" class="text-xs text-ink-muted">Loading items…</p><p v-else-if="itemList.isError.value" role="alert" class="text-xs text-red-700">Items could not be loaded. <button type="button" class="underline" @click="itemList.refetch()">Retry</button></p></div>
                 <div class="grid min-w-0 gap-2"><label for="activity-location" class="text-sm font-medium text-ink">Location</label><select id="activity-location" :value="state.locationId" class="min-h-11 w-full min-w-0 max-w-full rounded-md border border-line bg-white px-3 text-sm" @change="setFilter('locationId', ($event.target as HTMLSelectElement).value)"><option value="">All locations</option><option v-for="location in locationsQuery.data.value ?? []" :key="location.id" :value="location.id">{{ locationPath(location) }}</option></select><p v-if="locationsQuery.isPending.value" role="status" class="text-xs text-ink-muted">Loading locations…</p><p v-else-if="locationsQuery.isError.value" role="alert" class="text-xs text-red-700">Locations could not be loaded. <button type="button" class="underline" @click="locationsQuery.refetch()">Retry</button></p></div>
                 <div class="grid min-w-0 gap-2"><label for="activity-location-mode" class="text-sm font-medium text-ink">Location role</label><select id="activity-location-mode" :value="state.locationMode" class="min-h-11 w-full rounded-md border border-line bg-white px-3 text-sm" @change="setFilter('locationMode', ($event.target as HTMLSelectElement).value as typeof state.locationMode)"><option value="either">Either location</option><option value="from">From</option><option value="to">To</option></select></div>
@@ -125,8 +125,8 @@ function retry(): void { void movementsQuery.refetch(); }
                 <div class="grid min-w-0 gap-2"><label for="activity-from" class="text-sm font-medium text-ink">From date</label><input id="activity-from" type="date" :value="state.recordedFrom" class="min-h-11 w-full min-w-0 max-w-full rounded-md border border-line bg-white px-3 text-sm" @change="setFilter('recordedFrom', ($event.target as HTMLInputElement).value)"></div>
                 <div class="grid min-w-0 gap-2"><label for="activity-until" class="text-sm font-medium text-ink">Until date</label><input id="activity-until" type="date" :value="state.recordedUntil" class="min-h-11 w-full min-w-0 max-w-full rounded-md border border-line bg-white px-3 text-sm" @change="setFilter('recordedUntil', ($event.target as HTMLInputElement).value)"></div>
                 <div class="grid min-w-0 gap-2"><label for="activity-page-size" class="text-sm font-medium text-ink">Movements per page</label><select id="activity-page-size" :value="state.perPage" class="min-h-11 rounded-md border border-line bg-white px-3 text-sm" @change="setFilter('perPage', Number(($event.target as HTMLSelectElement).value))"><option v-for="size in pageSizes" :key="size" :value="size">{{ size }}</option></select></div>
-            </div>
-        </section>
+            </ListFilters>
+        </div>
 
         <p v-if="!dateRangeValid" class="mt-4 text-sm text-red-700" role="alert">The start date must be on or before the end date.</p>
         <section class="mt-6 rounded-panel border border-line bg-white shadow-card" aria-label="Inventory activity" :aria-busy="movementsQuery.isFetching.value">
@@ -136,8 +136,8 @@ function retry(): void { void movementsQuery.refetch(); }
             <div v-else-if="!movementsQuery.data.value?.data.length" class="grid min-h-48 place-items-center p-6 text-center"><div><h2 class="font-semibold text-ink">No changes found</h2><p class="mt-1 text-sm text-ink-muted">When stock is added, moved, or used, it will appear here.</p></div></div>
             <template v-else>
                 <MovementTimeline :movements="movementsQuery.data.value.data" :locations="locationsQuery.data.value ?? []" />
-                <div v-if="movementsQuery.data.value.meta.last_page > 1" class="flex items-center justify-between gap-4 border-t border-line px-5 py-4 sm:px-6"><p class="text-sm text-ink-muted">Page {{ movementsQuery.data.value.meta.current_page }} of {{ movementsQuery.data.value.meta.last_page }}</p><div class="flex gap-2"><button type="button" :disabled="state.page <= 1 || movementsQuery.isFetching.value" class="min-h-10 rounded-md border border-line px-3 text-sm disabled:opacity-50" @click="state.page--">Previous</button><button type="button" :disabled="state.page >= movementsQuery.data.value.meta.last_page || movementsQuery.isFetching.value" class="min-h-10 rounded-md border border-line px-3 text-sm disabled:opacity-50" @click="state.page++">Next</button></div></div>
             </template>
+            <ListPagination v-if="movementsQuery.data.value" :meta="movementsQuery.data.value.meta" :page="state.page" :busy="movementsQuery.isFetching.value" singular="change" plural="changes" @change="state.page = $event" />
         </section>
     </section>
 </template>

@@ -72,7 +72,7 @@ describe('household settings', () => {
         mountPage();
         await flushPromises();
         await wrapper!.get('#invite-email').setValue('new@example.com');
-        await wrapper!.findAll('form')[1].trigger('submit');
+        await wrapper!.get('section[aria-labelledby="invitations-heading"] form').trigger('submit');
         await flushPromises();
 
         expect(http.post).toHaveBeenCalledWith('/household-invitations', { data: { email: 'new@example.com' } });
@@ -104,9 +104,9 @@ describe('household settings', () => {
         expect(http.get).toHaveBeenCalledWith('/household-invitations', { params: { per_page: 10, page: 1 } });
 
         await wrapper!.get('#invite-email').setValue('new@example.com');
-        await wrapper!.findAll('form')[1].trigger('submit');
+        await wrapper!.get('section[aria-labelledby="invitations-heading"] form').trigger('submit');
         await flushPromises();
-        await wrapper!.findAll('button').find((button) => button.text() === 'Next')!.trigger('click');
+        await wrapper!.get('section[aria-labelledby="invitations-heading"]').findAll('button').find((button) => button.text() === 'Next')!.trigger('click');
         await flushPromises();
 
         expect(http.get).toHaveBeenCalledWith('/household-invitations', { params: { per_page: 10, page: 2 } });
@@ -181,7 +181,7 @@ describe('household settings', () => {
         vi.spyOn(window, 'confirm').mockReturnValue(true);
         mountPage();
         await flushPromises();
-        await wrapper!.findAll('button').find((button) => button.text() === 'Next')!.trigger('click');
+        await wrapper!.get('section[aria-labelledby="members-heading"]').findAll('button').find((button) => button.text() === 'Next')!.trigger('click');
         await flushPromises();
         vi.mocked(http.get).mockImplementation(async (url, config) => {
             if (url === '/household') return { data: { data: { type: 'households', id: '4', name: 'Ramos Home' } } } as never;
@@ -233,7 +233,7 @@ describe('household settings', () => {
         await flushPromises();
         await wrapper!.get('select').setValue('only');
         await flushPromises();
-        await wrapper!.findAll('button').find((button) => button.text() === 'Next')!.trigger('click');
+        await wrapper!.get('section[aria-labelledby="members-heading"]').findAll('button').find((button) => button.text() === 'Next')!.trigger('click');
         await flushPromises();
         await wrapper!.findAll('button').find((button) => button.text() === 'Restore')!.trigger('click');
         await flushPromises();

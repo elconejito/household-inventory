@@ -30,6 +30,11 @@ describe('ItemStockSummary', () => {
     it('shows positive location paths and pluralizes each quantity', () => {
         const wrapper = mount(ItemStockSummary, { props: { item, locations } });
 
+        const trigger = wrapper.get('button[aria-label="View locations for Soap"]');
+        const popup = wrapper.get('[popover]');
+        expect(trigger.attributes('popovertarget')).toBe(popup.attributes('id'));
+        expect(popup.attributes('open')).toBeUndefined();
+        expect(popup.get('ul').text()).toContain('House — 1 bottle');
         expect(wrapper.text()).toContain('House — 1 bottle');
         expect(wrapper.text()).toContain('House / Pantry — 3 bottles');
         expect(wrapper.text()).not.toContain('House / Bathroom — 0 bottles');

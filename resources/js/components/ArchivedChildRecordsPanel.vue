@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import ListPagination from './ListPagination.vue';
 import { computed, ref, watch } from 'vue';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query';
 import { getArchivedChildren, permanentlyDeleteArchivedChild, restoreArchivedChild, type ArchivedChildKind } from '../api/archived-children';
@@ -180,6 +181,6 @@ function imageRows(items: Array<Note | ItemImage>): ItemImage[] {
             </li>
         </ol>
 
-        <div v-if="expanded && query.data.value && lastPage > 1" class="mt-2 flex items-center justify-between border-t border-line pt-3 text-sm"><span class="text-ink-muted">Page {{ page }} of {{ lastPage }}</span><div class="flex gap-2"><button type="button" :disabled="page <= 1 || query.isFetching.value || pending" class="min-h-9 rounded-md border border-line px-3 disabled:opacity-50" @click="page--">Previous</button><button type="button" :disabled="page >= lastPage || query.isFetching.value || pending" class="min-h-9 rounded-md border border-line px-3 disabled:opacity-50" @click="page++">Next</button></div></div>
+        <ListPagination v-if="expanded && query.data.value" :meta="query.data.value.meta" :page="page" :busy="query.isFetching.value || pending" singular="record" plural="records" @change="page = $event" />
     </details>
 </template>

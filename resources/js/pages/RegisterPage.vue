@@ -44,9 +44,7 @@ async function submit(): Promise<void> {
             </RouterLink>
 
             <div class="mt-8 rounded-panel border border-line bg-white p-6 shadow-card sm:p-9">
-                <p class="eyebrow">A little more organized</p>
-                <h1 id="register-title" class="mt-2 text-2xl font-semibold tracking-tight text-ink">Create your household</h1>
-                <p class="mt-2 text-sm leading-6 text-ink-muted">Start with an account for you and a name for your home.</p>
+                <h1 id="register-title" class="text-2xl font-semibold tracking-tight text-ink">Create your household</h1>
 
                 <div v-if="errors.form" class="mt-6 rounded-md border border-rose-200 bg-rose-50 px-4 py-3 text-sm leading-5 text-rose-800" role="alert">
                     {{ errors.form }}

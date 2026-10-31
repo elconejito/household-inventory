@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import ListPagination from '../components/ListPagination.vue';
+import ListFilters from '../components/ListFilters.vue';
 import { computed, ref, watch } from 'vue';
 import { RouterLink } from 'vue-router';
 import { parseApiErrors } from '../lib/api-errors';
@@ -17,6 +19,15 @@ const confirmingId = ref('');
 const confirmationText = ref('');
 const mutationPending = computed(() => mutations.restoreArchived.isPending.value || mutations.permanentlyDelete.isPending.value);
 const typeLabels: Record<ArchivedType, string> = { items: 'Items', categories: 'Categories', locations: 'Locations' };
+
+const search = ref('');
+const page = ref(1);
+const perPage = ref(10);
+const filteredResources = computed(() => (query.data.value ?? []).filter((resource) => resource.name.toLocaleLowerCase().includes(search.value.trim().toLocaleLowerCase())));
+const paginationMeta = computed(() => ({ current_page: page.value, last_page: Math.max(1, Math.ceil(filteredResources.value.length / perPage.value)), total: filteredResources.value.length }));
+const visibleResources = computed(() => filteredResources.value.slice((page.value - 1) * perPage.value, page.value * perPage.value));
+watch([search, perPage, selectedType], () => { page.value = 1; });
+watch(() => paginationMeta.value.last_page, (lastPage) => { page.value = Math.min(page.value, lastPage); });
 
 watch(selectedType, () => {
     confirmingId.value = '';
@@ -68,9 +79,7 @@ async function permanentlyDelete(id: string, name: string): Promise<void> {
 <template>
     <section aria-labelledby="archives-title">
         <RouterLink to="/settings" class="text-sm font-medium text-sage-dark hover:underline">← Settings</RouterLink>
-        <p class="eyebrow mt-5">Household tools</p>
-        <h1 id="archives-title" class="page-title mt-2">Archived inventory</h1>
-        <p class="mt-2 max-w-2xl text-sm leading-6 text-ink-muted">Restore an archived record or permanently remove it. Permanent deletion cannot be undone.</p>
+        <h1 id="archives-title" class="page-title mt-5">Archived inventory</h1>
 
         <nav class="mt-6 flex gap-2 overflow-x-auto" aria-label="Archived resource type">
             <button v-for="(label, type) in typeLabels" :key="type" type="button" :disabled="mutationPending" :aria-pressed="selectedType === type" class="min-h-10 shrink-0 rounded-md border px-4 text-sm font-medium transition disabled:cursor-wait disabled:opacity-50" :class="selectedType === type ? 'border-sage bg-sage-soft text-sage-dark' : 'border-line bg-white text-ink-muted hover:bg-surface-soft'" @click="selectedType = type">{{ label }}</button>
@@ -80,11 +89,16 @@ async function permanentlyDelete(id: string, name: string): Promise<void> {
         <p v-if="error" class="mt-4 rounded-md border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800" role="alert">{{ error }}</p>
 
         <section class="mt-4 overflow-hidden rounded-panel border border-line bg-white shadow-card" :aria-label="`Archived ${typeLabels[selectedType].toLowerCase()}`" :aria-busy="query.isFetching.value">
+            <div class="flex items-center gap-3 border-b border-line px-5 py-4 sm:px-6">
+                <label for="archives-search" class="sr-only">Search archived records</label>
+                <input id="archives-search" v-model="search" type="search" placeholder="Search archived records" class="min-h-11 min-w-0 flex-1 rounded-md border border-line bg-canvas px-3 text-sm text-ink focus:border-sage focus:outline-sage">
+                <ListFilters label="Display"><div class="grid gap-2"><label for="archives-page-size" class="text-xs font-semibold text-ink-muted">Records per page</label><select id="archives-page-size" v-model.number="perPage" class="min-h-10 rounded-md border border-line bg-white px-3 text-sm"><option v-for="size in [10, 25, 50, 100]" :key="size" :value="size">{{ size }}</option></select></div></ListFilters>
+            </div>
             <div v-if="query.isPending.value" class="grid min-h-40 place-items-center p-6 text-sm text-ink-muted" role="status">Loading archived {{ typeLabels[selectedType].toLowerCase() }}…</div>
             <div v-else-if="query.isError.value" class="p-6" role="alert"><p class="font-semibold text-ink">Archived records could not be loaded</p><p class="mt-1 text-sm text-ink-muted">{{ parseApiErrors(query.error.value).form || 'Try again in a moment.' }}</p><button type="button" class="mt-3 rounded-md border border-line px-3 py-2 text-sm" @click="query.refetch()">Try again</button></div>
-            <div v-else-if="!query.data.value?.length" class="grid min-h-40 place-items-center p-6 text-center"><div><h2 class="font-semibold text-ink">No archived {{ typeLabels[selectedType].toLowerCase() }}</h2><p class="mt-1 text-sm text-ink-muted">Archived {{ typeLabels[selectedType].toLowerCase() }} will appear here.</p></div></div>
+            <div v-else-if="!filteredResources.length" class="grid min-h-40 place-items-center p-6 text-center"><div><h2 class="font-semibold text-ink">{{ search.trim() ? 'No archived records match that search' : `No archived ${typeLabels[selectedType].toLowerCase()}` }}</h2><p class="mt-1 text-sm text-ink-muted">Archived {{ typeLabels[selectedType].toLowerCase() }} will appear here.</p></div></div>
             <ul v-else class="divide-y divide-line">
-                <li v-for="resource in query.data.value" :key="resource.id" class="grid gap-4 px-4 py-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:px-6">
+                <li v-for="resource in visibleResources" :key="resource.id" class="grid gap-4 px-4 py-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:px-6">
                     <div class="min-w-0"><h2 class="truncate font-semibold text-ink">{{ resource.name }}</h2><p class="mt-1 text-sm text-ink-muted">{{ resource.counting_unit ? `Counted in ${resource.counting_unit}` : typeLabels[selectedType].slice(0, -1) }} · Archived</p></div>
                     <div class="flex flex-wrap gap-2">
                         <button type="button" :disabled="mutationPending" class="min-h-10 rounded-md border border-line px-3 text-sm font-semibold text-sage-dark hover:bg-sage-soft disabled:opacity-50" @click="restore(resource.id, resource.name)">Restore</button>
@@ -96,6 +110,7 @@ async function permanentlyDelete(id: string, name: string): Promise<void> {
                     </form>
                 </li>
             </ul>
+            <ListPagination v-if="query.data.value" :meta="paginationMeta" :page="page" :busy="query.isFetching.value || mutationPending" singular="record" plural="records" @change="page = $event" />
         </section>
         <p class="mt-4 text-sm text-ink-muted">{{ owner ? 'You can restore archived records as a household member. Only owners can permanently delete them.' : 'You can restore archived records. Permanent deletion is available to household owners.' }}</p>
     </section>

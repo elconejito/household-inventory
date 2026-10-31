@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import ListFilters from '../components/ListFilters.vue';
+import ListPagination from '../components/ListPagination.vue';
 import { computed, ref, watch } from 'vue';
 import { useQueryClient } from '@tanstack/vue-query';
 import { RouterLink, useRouter } from 'vue-router';
@@ -227,9 +229,7 @@ function canManageInvitation(invitation: (typeof invitations.value)[number]): bo
 
 <template>
     <section aria-labelledby="settings-title">
-        <p class="eyebrow">Your household</p>
-        <h1 id="settings-title" class="page-title mt-2">Settings</h1>
-        <p class="mt-2 max-w-2xl text-sm leading-6 text-ink-muted sm:text-base">Manage your household, people, and invitations.</p>
+        <h1 id="settings-title" class="page-title">Settings</h1>
 
         <div v-if="owner && householdQuery.isPending.value" class="mt-6 grid min-h-40 place-items-center rounded-panel border border-line bg-white text-sm text-ink-muted" role="status">Loading household…</div>
         <div v-else-if="owner && householdQuery.isError.value" class="mt-6 rounded-panel border border-line bg-white p-5" role="alert">
@@ -252,7 +252,7 @@ function canManageInvitation(invitation: (typeof invitations.value)[number]): bo
 
             <section class="mt-6 rounded-panel border border-line bg-white p-5 shadow-card sm:p-6" aria-labelledby="members-heading">
                 <div class="flex flex-wrap items-center justify-between gap-3"><div><h2 id="members-heading" class="text-lg font-semibold text-ink">People</h2><p class="mt-1 text-sm text-ink-muted">{{ owner ? 'Owners and members who share this household.' : 'Your household membership.' }}</p></div>
-                    <label v-if="owner" class="flex items-center gap-2 text-sm text-ink-muted">Show <select v-model="memberStatus" class="min-h-10 rounded-md border border-line bg-white px-2 text-sm text-ink"><option value="without">Active</option><option value="only">Archived</option></select></label>
+                    <ListFilters v-if="owner" :active="memberStatus === 'only'"><label class="flex items-center gap-2 text-sm text-ink-muted">Show <select v-model="memberStatus" class="min-h-10 rounded-md border border-line bg-white px-2 text-sm text-ink"><option value="without">Active</option><option value="only">Archived</option></select></label></ListFilters>
                 </div>
                 <p v-if="memberError" class="mt-4 rounded-md border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800" role="alert">{{ memberError }}</p>
                 <p v-if="memberSuccess" class="mt-4 text-sm font-medium text-sage-dark" role="status">{{ memberSuccess }}</p>
@@ -277,7 +277,7 @@ function canManageInvitation(invitation: (typeof invitations.value)[number]): bo
                         </div>
                     </li>
                 </ul>
-                <div v-if="owner && membersQuery.data.value && membersQuery.data.value.meta.last_page > 1" class="mt-4 flex items-center justify-between gap-3"><p class="text-sm text-ink-muted">Page {{ membersQuery.data.value.meta.current_page }} of {{ membersQuery.data.value.meta.last_page }}</p><div class="flex gap-2"><button type="button" :disabled="memberPage <= 1 || membersQuery.isFetching.value || memberMutationPending" class="min-h-10 rounded-md border border-line px-3 text-sm disabled:opacity-50" @click="memberPage--">Previous</button><button type="button" :disabled="memberPage >= membersQuery.data.value.meta.last_page || membersQuery.isFetching.value || memberMutationPending" class="min-h-10 rounded-md border border-line px-3 text-sm disabled:opacity-50" @click="memberPage++">Next</button></div></div>
+                <ListPagination v-if="owner && membersQuery.data.value" :meta="membersQuery.data.value.meta" :page="memberPage" :busy="membersQuery.isFetching.value || memberMutationPending" singular="member" plural="members" @change="memberPage = $event" />
             </section>
 
             <section v-if="owner" class="mt-6 rounded-panel border border-line bg-white p-5 shadow-card sm:p-6" aria-labelledby="invitations-heading">
@@ -298,7 +298,7 @@ function canManageInvitation(invitation: (typeof invitations.value)[number]): bo
                     </div>
                 </div>
                 <p v-else class="mt-5 text-sm text-ink-muted">There are no invitations yet.</p>
-                <div v-if="inviteQuery.data.value && inviteQuery.data.value.meta.last_page > 1" class="mt-4 flex items-center justify-between gap-3"><p class="text-sm text-ink-muted">Page {{ inviteQuery.data.value.meta.current_page }} of {{ inviteQuery.data.value.meta.last_page }}</p><div class="flex gap-2"><button type="button" :disabled="invitationPage <= 1 || inviteQuery.isFetching.value" class="min-h-10 rounded-md border border-line px-3 text-sm disabled:opacity-50" @click="invitationPage--">Previous</button><button type="button" :disabled="invitationPage >= inviteQuery.data.value.meta.last_page || inviteQuery.isFetching.value" class="min-h-10 rounded-md border border-line px-3 text-sm disabled:opacity-50" @click="invitationPage++">Next</button></div></div>
+                <ListPagination v-if="inviteQuery.data.value" :meta="inviteQuery.data.value.meta" :page="invitationPage" :busy="inviteQuery.isFetching.value" singular="invitation" plural="invitations" @change="invitationPage = $event" />
             </section>
 
             <section class="mt-6 grid gap-3 sm:grid-cols-2">

@@ -145,7 +145,7 @@ describe('archived child records panel', () => {
         await flushPromises();
 
         expect(wrapper!.text()).toContain('Earlier note 1');
-        expect(wrapper!.findAll('button').some((button) => button.text() === 'Next')).toBe(false);
+        expect(wrapper!.findAll('button').find((button) => button.text() === 'Next')!.attributes('disabled')).toBeDefined();
     });
 
     it('invalidates the parent context that started a pending mutation', async () => {

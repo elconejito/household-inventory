@@ -88,9 +88,7 @@ async function submit(): Promise<void> {
     <main class="grid min-h-screen place-items-center bg-canvas px-5 py-10 sm:px-8">
         <section class="w-full max-w-lg rounded-panel border border-line bg-white p-6 shadow-card sm:p-9" aria-labelledby="accept-invitation-title">
             <RouterLink to="/login" class="text-sm font-medium text-sage-dark hover:underline">Household Inventory</RouterLink>
-            <p class="eyebrow mt-7">You’re invited</p>
-            <h1 id="accept-invitation-title" class="mt-2 text-2xl font-semibold tracking-tight text-ink">Join a household</h1>
-            <p class="mt-2 text-sm leading-6 text-ink-muted">Accept this invitation to share a household inventory.</p>
+            <h1 id="accept-invitation-title" class="mt-7 text-2xl font-semibold tracking-tight text-ink">Join a household</h1>
 
             <p v-if="errors.form" class="mt-5 rounded-md border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800" role="alert">{{ errors.form }}</p>
             <div v-if="!token && isAuthenticated && !session.user?.membership?.household?.id" class="mt-5 rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">

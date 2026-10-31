@@ -39,6 +39,29 @@ describe('archived inventory management', () => {
         wrapper = mount(ArchivesPage, { global: { plugins: [pinia, router, [VueQueryPlugin, { queryClient: client }]] } });
     }
 
+    it('searches the complete archive collection and resets pagination', async () => {
+        const records = Array.from({ length: 12 }, (_, index) => ({ type: 'items', id: String(index + 1), name: `Archived supply ${index + 1}` }));
+        vi.mocked(http.get).mockResolvedValue({ data: { data: records, meta: { current_page: 1, last_page: 1, total: 12 } } } as never);
+        mountPage();
+        await flushPromises();
+
+        expect(wrapper!.findAll('ul > li')).toHaveLength(10);
+        expect(wrapper!.text()).toContain('12 records · Page 1 of 2');
+        await wrapper!.get('button[aria-label="Page 2"]').trigger('click');
+        expect(wrapper!.findAll('ul > li')).toHaveLength(2);
+        expect(wrapper!.text()).toContain('Archived supply 12');
+
+        await wrapper!.get('#archives-search').setValue('supply 12');
+        expect(wrapper!.findAll('ul > li')).toHaveLength(1);
+        expect(wrapper!.text()).toContain('1 record · Page 1 of 1');
+        expect(wrapper!.get('button[aria-label="Page 1"]').attributes('aria-current')).toBe('page');
+        expect(wrapper!.get('[popover]').find('#archives-page-size').exists()).toBe(true);
+
+        await wrapper!.get('#archives-search').setValue('missing supply');
+        expect(wrapper!.text()).toContain('No archived records match that search');
+        expect(wrapper!.text()).toContain('0 records · Page 1 of 1');
+    });
+
     it('clears destructive confirmation when switching resource tabs', async () => {
         mountPage();
         await flushPromises();

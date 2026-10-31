@@ -1,10 +1,12 @@
 <script setup lang="ts">
+import FormModal from '../components/FormModal.vue';
+import ListFilters from '../components/ListFilters.vue';
+import ListPagination from '../components/ListPagination.vue';
 import { computed, onUnmounted, ref, watch } from 'vue';
 import { useQuery } from '@tanstack/vue-query';
 import { useRoute } from 'vue-router';
 import NotesPanel from '../components/NotesPanel.vue';
 import ArchiveResourceButton from '../components/ArchiveResourceButton.vue';
-import InventoryTabs from '../components/InventoryTabs.vue';
 import ItemStockSummary from '../components/ItemStockSummary.vue';
 import StockStatusBadge from '../components/StockStatusBadge.vue';
 import LocationStockActions, { type LocationStockAction } from '../components/LocationStockActions.vue';
@@ -323,14 +325,13 @@ function closeStockAction(force = false): void {
 
 <template>
     <section aria-labelledby="context-title">
-        <RouterLink :to="{ name: 'inventory' }" class="text-sm font-medium text-sage-dark hover:underline">← Inventory</RouterLink>
-        <InventoryTabs />
+        <RouterLink v-if="!contextQuery.data.value || contextQuery.isError.value" :to="{ name: 'inventory' }" class="text-sm font-medium text-sage-dark hover:underline">← Inventory</RouterLink>
         <div v-if="contextQuery.isPending.value" class="mt-5 grid min-h-40 place-items-center text-sm text-ink-muted" role="status">Loading {{ title.toLowerCase() }}…</div>
         <div v-else-if="contextQuery.isError.value" class="mt-5 rounded-panel border border-line bg-white p-6" role="alert"><h1 id="context-title" class="text-xl font-semibold text-ink">We couldn’t load this {{ title.toLowerCase() }}</h1><p class="mt-2 text-sm text-ink-muted">{{ parseError(contextQuery.error.value, 'Try again in a moment.') }}</p><button type="button" class="mt-3 text-sm text-sage-dark underline" @click="contextQuery.refetch()">Try again</button></div>
         <template v-else-if="contextQuery.data.value">
-            <p class="eyebrow mt-5">{{ title }}</p>
-            <div class="mt-2 flex flex-wrap items-end justify-between gap-4">
+            <div class="flex flex-wrap items-end justify-between gap-4">
                 <div class="min-w-0 max-w-full">
+                    <RouterLink :to="{ name: 'inventory' }" class="mb-2 block text-sm font-medium text-sage-dark hover:underline">← Inventory</RouterLink>
                     <h1 id="context-title" class="page-title break-words">{{ contextQuery.data.value.name }}</h1>
                     <p v-if="contextType === 'locations' && locationPath" class="mt-2 text-sm text-ink-muted">{{ locationPath }}</p>
                     <p v-if="contextType === 'locations' && location?.description" class="mt-2 whitespace-pre-line text-sm leading-6 text-ink-muted">{{ location.description }}</p>
@@ -355,33 +356,35 @@ function closeStockAction(force = false): void {
                 @assign="setItemCategoryAssignment"
             />
 
-            <section v-if="showCategoryEdit" class="mt-5 rounded-panel border border-line bg-white p-5 shadow-card" aria-labelledby="edit-category-title">
-                <h2 id="edit-category-title" class="text-lg font-semibold text-ink">Edit category</h2>
-                <p v-if="formErrors.form" class="mt-3 text-sm text-rose-700" role="alert">{{ formErrors.form }}</p>
-                <form class="mt-4 grid max-w-xl gap-4" @submit.prevent="saveCategory">
-                    <div class="grid gap-2"><label for="edit-category-name" class="text-sm font-medium text-ink">Category name</label><input id="edit-category-name" v-model="categoryName" required maxlength="255" class="min-h-11 rounded-md border border-line px-3 text-ink"><p v-if="formErrors.fields.name" class="text-sm text-rose-700">{{ formErrors.fields.name }}</p></div>
-                    <div class="flex gap-2"><button type="submit" :disabled="!canSaveCategory" class="min-h-10 rounded-md bg-sage px-4 text-sm font-semibold text-white disabled:opacity-50">{{ updateCategoryMutation.isPending.value ? 'Saving…' : 'Save changes' }}</button><button type="button" :disabled="editPending" class="min-h-10 rounded-md border border-line px-4 text-sm" @click="cancelEdit">Cancel</button></div>
-                </form>
-            </section>
+            <FormModal v-if="showCategoryEdit" label="Edit category" :busy="editPending" @close="cancelEdit">
+                <section class="rounded-panel border border-line bg-white p-5 shadow-card" aria-labelledby="edit-category-title">
+                    <h2 id="edit-category-title" class="text-lg font-semibold text-ink">Edit category</h2>
+                    <p v-if="formErrors.form" class="mt-3 text-sm text-rose-700" role="alert">{{ formErrors.form }}</p>
+                    <form class="mt-4 grid max-w-xl gap-4" @submit.prevent="saveCategory">
+                        <div class="grid gap-2"><label for="edit-category-name" class="text-sm font-medium text-ink">Category name</label><input id="edit-category-name" v-model="categoryName" required maxlength="255" class="min-h-11 rounded-md border border-line px-3 text-ink"><p v-if="formErrors.fields.name" class="text-sm text-rose-700">{{ formErrors.fields.name }}</p></div>
+                        <div class="flex gap-2"><button type="submit" :disabled="!canSaveCategory" class="min-h-10 rounded-md bg-sage px-4 text-sm font-semibold text-white disabled:opacity-50">{{ updateCategoryMutation.isPending.value ? 'Saving…' : 'Save changes' }}</button><button type="button" :disabled="editPending" class="min-h-10 rounded-md border border-line px-4 text-sm" @click="cancelEdit">Cancel</button></div>
+                    </form>
+                </section>
+            </FormModal>
 
-            <section v-if="showLocationEdit && location" class="mt-5 rounded-panel border border-line bg-white p-5 shadow-card" aria-labelledby="edit-location-title">
-                <h2 id="edit-location-title" class="text-lg font-semibold text-ink">Edit location</h2>
-                <p v-if="formErrors.form" class="mt-3 text-sm text-rose-700" role="alert">{{ formErrors.form }}</p>
-                <form class="mt-4 grid gap-4 sm:grid-cols-2" @submit.prevent="saveLocation">
-                    <div class="grid gap-2"><label for="edit-location-name" class="text-sm font-medium text-ink">Location name</label><input id="edit-location-name" v-model="locationName" required maxlength="255" class="min-h-11 rounded-md border border-line px-3 text-ink"><p v-if="formErrors.fields.name" class="text-sm text-rose-700">{{ formErrors.fields.name }}</p></div>
-                    <div class="grid gap-2"><label for="edit-location-parent" class="text-sm font-medium text-ink">Parent location</label><p v-if="locationOptions.isPending.value" class="text-sm text-ink-muted" role="status">Loading locations…</p><p v-else-if="locationOptions.isError.value" class="text-sm text-rose-700" role="alert">Parent choices could not be loaded. <button type="button" class="font-semibold underline" @click="locationOptions.refetch()">Try again</button></p><select id="edit-location-parent" v-model="locationParentId" :disabled="!locationOptions.isSuccess.value" class="min-h-11 rounded-md border border-line bg-white px-3 text-ink disabled:opacity-50"><option value="">No parent</option><option v-for="candidate in eligibleLocationParents" :key="candidate.id" :value="candidate.id">{{ locationForPath(candidate) }}</option></select><p v-if="formErrors.fields.parent_id" class="text-sm text-rose-700">{{ formErrors.fields.parent_id }}</p></div>
-                    <div class="grid gap-2 sm:col-span-2"><label for="edit-location-description" class="text-sm font-medium text-ink">Description <span class="font-normal text-ink-muted">(optional)</span></label><textarea id="edit-location-description" v-model="locationDescription" rows="3" class="min-h-24 resize-y rounded-md border border-line px-3 py-2 text-ink" /></div>
-                    <div class="flex gap-2 sm:col-span-2"><button type="submit" :disabled="!canSaveLocation" class="min-h-10 rounded-md bg-sage px-4 text-sm font-semibold text-white disabled:opacity-50">{{ updateLocationMutation.isPending.value ? 'Saving…' : 'Save changes' }}</button><button type="button" :disabled="editPending" class="min-h-10 rounded-md border border-line px-4 text-sm" @click="cancelEdit">Cancel</button></div>
-                </form>
-            </section>
+            <FormModal v-if="showLocationEdit && location" label="Edit location" :busy="editPending" @close="cancelEdit">
+                <section class="rounded-panel border border-line bg-white p-5 shadow-card" aria-labelledby="edit-location-title">
+                    <h2 id="edit-location-title" class="text-lg font-semibold text-ink">Edit location</h2>
+                    <p v-if="formErrors.form" class="mt-3 text-sm text-rose-700" role="alert">{{ formErrors.form }}</p>
+                    <form class="mt-4 grid gap-4 sm:grid-cols-2" @submit.prevent="saveLocation">
+                        <div class="grid gap-2"><label for="edit-location-name" class="text-sm font-medium text-ink">Location name</label><input id="edit-location-name" v-model="locationName" required maxlength="255" class="min-h-11 rounded-md border border-line px-3 text-ink"><p v-if="formErrors.fields.name" class="text-sm text-rose-700">{{ formErrors.fields.name }}</p></div>
+                        <div class="grid gap-2"><label for="edit-location-parent" class="text-sm font-medium text-ink">Parent location</label><p v-if="locationOptions.isPending.value" class="text-sm text-ink-muted" role="status">Loading locations…</p><p v-else-if="locationOptions.isError.value" class="text-sm text-rose-700" role="alert">Parent choices could not be loaded. <button type="button" class="font-semibold underline" @click="locationOptions.refetch()">Try again</button></p><select id="edit-location-parent" v-model="locationParentId" :disabled="!locationOptions.isSuccess.value" class="min-h-11 rounded-md border border-line bg-white px-3 text-ink disabled:opacity-50"><option value="">No parent</option><option v-for="candidate in eligibleLocationParents" :key="candidate.id" :value="candidate.id">{{ locationForPath(candidate) }}</option></select><p v-if="formErrors.fields.parent_id" class="text-sm text-rose-700">{{ formErrors.fields.parent_id }}</p></div>
+                        <div class="grid gap-2 sm:col-span-2"><label for="edit-location-description" class="text-sm font-medium text-ink">Description <span class="font-normal text-ink-muted">(optional)</span></label><textarea id="edit-location-description" v-model="locationDescription" rows="3" class="min-h-24 resize-y rounded-md border border-line px-3 py-2 text-ink" /></div>
+                        <div class="flex gap-2 sm:col-span-2"><button type="submit" :disabled="!canSaveLocation" class="min-h-10 rounded-md bg-sage px-4 text-sm font-semibold text-white disabled:opacity-50">{{ updateLocationMutation.isPending.value ? 'Saving…' : 'Save changes' }}</button><button type="button" :disabled="editPending" class="min-h-10 rounded-md border border-line px-4 text-sm" @click="cancelEdit">Cancel</button></div>
+                    </form>
+                </section>
+            </FormModal>
 
             <section v-if="contextType === 'categories'" class="mt-6 overflow-hidden rounded-panel border border-line bg-white shadow-card" aria-labelledby="category-items-heading" :aria-busy="categoryItemsQuery.isFetching.value">
-                <div class="flex flex-wrap items-center justify-between gap-4 border-b border-line px-5 py-4 sm:px-6">
-                    <div><h2 id="category-items-heading" class="text-base font-semibold text-ink">Items in this category</h2><p v-if="categoryItemsQuery.data.value" class="mt-1 text-sm text-ink-muted">{{ categoryItemsQuery.data.value.meta.total }} {{ categoryItemsQuery.data.value.meta.total === 1 ? 'item' : 'items' }}</p></div>
-                    <div class="flex flex-wrap items-center gap-3">
-                        <label for="category-items-page-size" class="sr-only">Items per page</label><select id="category-items-page-size" :value="categoryPageSize" class="min-h-10 rounded-md border border-line bg-white px-3 text-sm" @change="changePageSize('category', ($event.target as HTMLSelectElement).value)"><option v-for="size in pageSizes" :key="size" :value="size">{{ size }} per page</option></select>
-                        <label for="category-items-search" class="sr-only">Search category items</label><input id="category-items-search" v-model="categorySearch" type="search" placeholder="Search items" class="min-h-10 rounded-md border border-line bg-canvas px-3 text-sm outline-none focus:border-sage focus:ring-2 focus:ring-sage/20">
-                    </div>
+                <h2 id="category-items-heading" class="sr-only">Items in this category</h2>
+                <div class="flex items-center gap-3 border-b border-line px-5 py-4 sm:px-6">
+                    <div class="min-w-0 flex-1"><label for="category-items-search" class="sr-only">Search category items</label><input id="category-items-search" v-model="categorySearch" type="search" placeholder="Search items" class="min-h-11 w-full rounded-md border border-line bg-canvas px-3 text-sm outline-none focus:border-sage focus:ring-2 focus:ring-sage/20"></div>
+                    <ListFilters label="Display"><div class="grid gap-2"><label for="category-items-page-size" class="text-xs font-semibold text-ink-muted">Items per page</label><select id="category-items-page-size" :value="categoryPageSize" class="min-h-10 rounded-md border border-line bg-white px-3 text-sm" @change="changePageSize('category', ($event.target as HTMLSelectElement).value)"><option v-for="size in pageSizes" :key="size" :value="size">{{ size }} per page</option></select></div></ListFilters>
                 </div>
                 <div v-if="categoryItemsQuery.isPending.value" class="grid min-h-40 place-items-center p-6 text-sm text-ink-muted" role="status">Loading category items…</div>
                 <div v-else-if="categoryItemsQuery.isError.value" class="p-5" role="alert"><p class="text-sm text-rose-700">{{ parseError(categoryItemsQuery.error.value, 'Category items could not be loaded.') }}</p><button type="button" class="mt-2 text-sm text-sage-dark underline" @click="categoryItemsQuery.refetch()">Try again</button></div>
@@ -400,7 +403,7 @@ function closeStockAction(force = false): void {
                         <ItemStockSummary :item="item" :locations="locationOptions.data.value ?? []" />
                     </li>
                 </ul>
-                <div v-if="categoryItemsQuery.data.value && categoryItemsQuery.data.value.meta.last_page > 1" class="flex items-center justify-between gap-4 border-t border-line px-5 py-4 sm:px-6"><p class="text-sm text-ink-muted">Page {{ categoryItemsQuery.data.value.meta.current_page }} of {{ categoryItemsQuery.data.value.meta.last_page }}</p><div class="flex gap-2"><button type="button" :disabled="categoryPage <= 1 || categoryItemsQuery.isFetching.value" class="min-h-10 rounded-md border border-line px-3 text-sm disabled:opacity-50" @click="changePage('category', categoryPage - 1)">Previous</button><button type="button" :disabled="categoryPage >= categoryItemsQuery.data.value.meta.last_page || categoryItemsQuery.isFetching.value" class="min-h-10 rounded-md border border-line px-3 text-sm disabled:opacity-50" @click="changePage('category', categoryPage + 1)">Next</button></div></div>
+                <ListPagination v-if="categoryItemsQuery.data.value" :meta="categoryItemsQuery.data.value.meta" :page="categoryPage" :busy="categoryItemsQuery.isFetching.value" singular="item" plural="items" @change="changePage('category', $event)" />
             </section>
 
             <template v-else>
@@ -415,12 +418,12 @@ function closeStockAction(force = false): void {
                 </section>
 
                 <section class="mt-6 overflow-hidden rounded-panel border border-line bg-white shadow-card" aria-labelledby="location-stock-heading" :aria-busy="locationLevelsQuery.isFetching.value">
-                    <div class="flex flex-wrap items-center justify-between gap-4 border-b border-line px-5 py-4 sm:px-6">
-                        <div><h2 id="location-stock-heading" class="text-base font-semibold text-ink">Stock by location</h2><p v-if="locationLevelsQuery.data.value" class="mt-1 text-sm text-ink-muted">{{ locationLevelsQuery.data.value.meta.total }} stock {{ locationLevelsQuery.data.value.meta.total === 1 ? 'record' : 'records' }}</p></div>
-                        <div class="flex flex-wrap items-center gap-3">
+                    <div class="flex items-center justify-between gap-3 border-b border-line px-5 py-4 sm:px-6">
+                        <h2 id="location-stock-heading" class="text-base font-semibold text-ink">Stock by location</h2>
+                        <ListFilters>
                             <template v-if="directChildren.length"><label for="inventory-scope" class="text-sm font-medium text-ink">Inventory scope</label><select id="inventory-scope" :value="inventoryScope" class="min-h-10 rounded-md border border-line bg-white px-3 text-sm" @change="setInventoryScope(($event.target as HTMLSelectElement).value)"><option value="all">All within this location</option><option value="direct">Directly here</option></select></template>
                             <label for="inventory-page-size" class="sr-only">Stock records per page</label><select id="inventory-page-size" :value="inventoryPageSize" class="min-h-10 rounded-md border border-line bg-white px-3 text-sm" @change="changePageSize('inventory', ($event.target as HTMLSelectElement).value)"><option v-for="size in pageSizes" :key="size" :value="size">{{ size }} per page</option></select>
-                        </div>
+                        </ListFilters>
                     </div>
                     <div v-if="locationOptions.isPending.value" class="grid min-h-40 place-items-center p-6 text-sm text-ink-muted" role="status">Loading location hierarchy before stock…</div>
                     <div v-else-if="locationOptions.isError.value" class="p-5" role="alert"><p class="text-sm text-rose-700">The location hierarchy could not be loaded, so stock scope is unavailable.</p><button type="button" class="mt-2 text-sm text-sage-dark underline" @click="locationOptions.refetch()">Try again</button></div>
@@ -441,7 +444,7 @@ function closeStockAction(force = false): void {
                             <LocationStockActions :key="`${contextType}:${contextId}:${level.id}`" :level="level" :locations="locationOptions.data.value ?? []" :active-action="activeStockAction" :busy="stockMovementMutation.isPending.value" :errors="activeStockAction?.levelId === level.id ? stockActionErrors : { fields: {}, form: '' }" :locations-loading="locationOptions.isPending.value" :locations-error="locationOptions.isError.value" @activate="beginStockAction" @submit="saveStockAction" @close="closeStockAction" @retry-locations="locationOptions.refetch()" />
                         </li>
                     </ul>
-                    <div v-if="locationLevelsQuery.data.value && locationLevelsQuery.data.value.meta.last_page > 1" class="flex items-center justify-between gap-4 border-t border-line px-5 py-4 sm:px-6"><p class="text-sm text-ink-muted">Page {{ locationLevelsQuery.data.value.meta.current_page }} of {{ locationLevelsQuery.data.value.meta.last_page }}</p><div class="flex gap-2"><button type="button" :disabled="inventoryPage <= 1 || locationLevelsQuery.isFetching.value" class="min-h-10 rounded-md border border-line px-3 text-sm disabled:opacity-50" @click="changePage('inventory', inventoryPage - 1)">Previous</button><button type="button" :disabled="inventoryPage >= locationLevelsQuery.data.value.meta.last_page || locationLevelsQuery.isFetching.value" class="min-h-10 rounded-md border border-line px-3 text-sm disabled:opacity-50" @click="changePage('inventory', inventoryPage + 1)">Next</button></div></div>
+                    <ListPagination v-if="locationLevelsQuery.data.value" :meta="locationLevelsQuery.data.value.meta" :page="inventoryPage" :busy="locationLevelsQuery.isFetching.value" singular="stock record" plural="stock records" @change="changePage('inventory', $event)" />
                 </section>
 
                 <section class="mt-6 rounded-panel border border-line bg-white p-5 shadow-card sm:p-6" aria-labelledby="restock-here-heading">

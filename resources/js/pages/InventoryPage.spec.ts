@@ -81,6 +81,7 @@ describe('inventory page', () => {
 
         await flushPromises();
         await wrapper.get('button[aria-controls="create-item-panel"]').trigger('click');
+        expect(wrapper.get('dialog[open][aria-label="Add item"]').find('#create-item-panel').exists()).toBe(true);
         await wrapper.get('#item-name').setValue('Dish soap');
         await wrapper.get('#item-counting-unit').setValue('bottle');
         await wrapper.get('#item-description').setValue('Keep under the sink.');
@@ -132,6 +133,35 @@ describe('inventory page', () => {
             per_page: 25,
             include: 'categories,images,inventory_levels.location,active_alerts',
         }) });
+    });
+
+    it('supports numbered pages and direct page entry with bounded navigation', async () => {
+        vi.mocked(http.get).mockImplementation(async (url, config) => {
+            if (url === '/items') return { data: { data: [], links: {}, meta: { current_page: (config?.params as { page?: number } | undefined)?.page ?? 1, last_page: 20, total: 200 } } } as never;
+            return { data: { data: [], meta: { current_page: 1, last_page: 1, total: 0 } } } as never;
+        });
+        wrapper = mount(InventoryPage, { global: { plugins: [[VueQueryPlugin, { queryClient }]] } });
+        await flushPromises();
+
+        expect(wrapper.get('nav[aria-label="Inventory pagination"]').text()).toContain('…');
+        await wrapper.get('button[aria-label="Page 20"]').trigger('click');
+        await flushPromises();
+        expect(wrapper.get('button[aria-label="Page 20"]').attributes('aria-current')).toBe('page');
+        expect((wrapper.get('#inventory-page-number').element as HTMLInputElement).value).toBe('20');
+
+        await wrapper.get('#inventory-page-number').setValue('10');
+        await wrapper.get('nav form').trigger('submit');
+        await flushPromises();
+        expect(http.get).toHaveBeenLastCalledWith('/items', expect.objectContaining({ params: expect.objectContaining({ page: 10 }) }));
+        expect(wrapper.get('button[aria-label="Page 10"]').attributes('aria-current')).toBe('page');
+
+        const requests = vi.mocked(http.get).mock.calls.length;
+        for (const invalidPage of ['0', '21', '1.5', '']) {
+            await wrapper.get('#inventory-page-number').setValue(invalidPage);
+            await wrapper.get('nav form').trigger('submit');
+            await flushPromises();
+        }
+        expect(http.get).toHaveBeenCalledTimes(requests);
     });
 
     it('resets pagination and explains empty stock-filtered results with clear filters', async () => {
@@ -217,9 +247,16 @@ describe('inventory page', () => {
 
         const row = wrapper.get('li article');
         expect(row.text()).toContain(longName);
-        expect(row.classes()).not.toContain('sm:grid-cols-[3.5rem_minmax(0,1.3fr)_9rem_8rem_minmax(0,1fr)]');
-        expect(row.classes()).toContain('sm:grid-cols-[minmax(0,1.3fr)_9rem_8rem_minmax(0,1fr)]');
-        expect(wrapper.findAll('div[aria-hidden="true"]').some((element) => element.classes().includes('grid-cols-[minmax(0,1.3fr)_9rem_8rem_minmax(0,1fr)]'))).toBe(true);
+        expect(row.text()).not.toContain('Counted by');
+        expect(wrapper.text()).not.toContain('Your items');
+        expect(wrapper.get('[popovertarget="inventory-filters"]').text()).toBe('Filters');
+        expect(wrapper.get('#inventory-filters').attributes('popover')).toBeDefined();
+        expect(wrapper.text()).toContain('1 item · Page 1 of 1');
+        expect(wrapper.findAll('button').find((button) => button.text() === 'Previous')!.attributes('disabled')).toBeDefined();
+        expect(wrapper.findAll('button').find((button) => button.text() === 'Next')!.attributes('disabled')).toBeDefined();
+        expect(row.classes()).not.toContain('sm:grid-cols-[3.5rem_minmax(0,calc((100%_-_24.5rem)*13/23))_minmax(0,1fr)_minmax(0,0.65fr)]');
+        expect(row.classes()).toContain('sm:grid-cols-[minmax(0,calc((100%_-_20rem)*13/23))_minmax(0,1fr)_minmax(0,0.65fr)]');
+        expect(wrapper.findAll('div[aria-hidden="true"]').some((element) => element.classes().includes('grid-cols-[minmax(0,calc((100%_-_20rem)*13/23))_minmax(0,1fr)_minmax(0,0.65fr)]'))).toBe(true);
     });
 
     it('keeps rows aligned when only some items on a page have primary images', async () => {

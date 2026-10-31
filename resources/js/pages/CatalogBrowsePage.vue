@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import FormModal from '../components/FormModal.vue';
+import ListFilters from '../components/ListFilters.vue';
+import ListPagination from '../components/ListPagination.vue';
 import { computed, nextTick, onUnmounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { buildLocationPath, type Location as StockLocation } from '../api/stock';
@@ -158,17 +161,13 @@ async function browseChildren(id: string): Promise<void> {
 
 <template>
     <section aria-labelledby="catalog-title">
-        <p class="eyebrow">Browse your supplies</p>
-        <div class="mt-2 flex flex-wrap items-end justify-between gap-4">
+        <div class="flex flex-wrap items-end justify-between gap-4">
             <div>
                 <h1 id="catalog-title" class="page-title">{{ isCategoriesPage ? 'Categories' : 'Locations' }}</h1>
-                <p class="mt-2 max-w-2xl text-sm leading-6 text-ink-muted">
-                    {{ isCategoriesPage ? 'Group related household items so they’re easier to find.' : 'Browse the rooms, shelves, and storage areas where supplies live.' }}
-                </p>
             </div>
-            <button type="button" :aria-expanded="showCreateForm" aria-controls="catalog-create-panel" class="inline-flex min-h-11 items-center justify-center gap-2 rounded-md bg-sage px-4 text-sm font-semibold text-white transition hover:bg-sage-dark focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sage" @click="toggleCreateForm">
+            <button type="button" aria-haspopup="dialog" :aria-expanded="showCreateForm" aria-controls="catalog-create-panel" class="inline-flex min-h-11 items-center justify-center gap-2 rounded-md bg-sage px-4 text-sm font-semibold text-white transition hover:bg-sage-dark focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sage" @click="toggleCreateForm">
                 <span aria-hidden="true">＋</span>
-                {{ showCreateForm ? 'Cancel' : (isCategoriesPage ? 'Add category' : 'Add location') }}
+                {{ isCategoriesPage ? 'Add category' : 'Add location' }}
             </button>
         </div>
 
@@ -181,67 +180,67 @@ async function browseChildren(id: string): Promise<void> {
 
         <p v-if="success" class="mt-5 rounded-md border border-sage/20 bg-sage-soft px-4 py-3 text-sm font-medium text-sage-dark" role="status">{{ success }}</p>
 
-        <section v-if="showCreateForm" id="catalog-create-panel" class="mt-6 rounded-panel border border-line bg-white p-5 shadow-card sm:p-7" aria-labelledby="catalog-create-title">
-            <p class="eyebrow">New {{ isCategoriesPage ? 'group' : 'storage place' }}</p>
-            <h2 id="catalog-create-title" class="mt-1 text-xl font-semibold tracking-tight text-ink">{{ isCategoriesPage ? 'Add a category' : 'Add a location' }}</h2>
-            <p v-if="errors.form" class="mt-4 rounded-md border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800" role="alert">{{ errors.form }}</p>
-            <form v-if="isCategoriesPage" class="mt-5 grid max-w-xl gap-4" @submit.prevent="createCategory">
-                <div class="grid gap-2">
-                    <label for="category-name" class="text-sm font-medium text-ink">Category name <span aria-hidden="true">*</span></label>
-                    <input id="category-name" ref="categoryNameInput" v-model="categoryName" required maxlength="255" :aria-invalid="Boolean(errors.fields.name)" aria-describedby="category-name-error" class="min-h-12 rounded-md border border-line bg-white px-3.5 text-base text-ink outline-none focus:border-sage focus:ring-2 focus:ring-sage/20">
-                    <p v-if="errors.fields.name" id="category-name-error" class="text-sm text-rose-700">{{ errors.fields.name }}</p>
-                </div>
-                <div class="flex flex-wrap gap-3">
-                    <button type="submit" :disabled="isPending || !categoryName.trim()" class="min-h-11 rounded-md bg-sage px-4 text-sm font-semibold text-white disabled:opacity-60">{{ createCategoryMutation.isPending.value ? 'Saving…' : 'Save category' }}</button>
-                    <button type="submit" value="another" :disabled="isPending || !categoryName.trim()" class="inline-flex min-h-11 items-center justify-center rounded-md border border-sage px-4 text-sm font-semibold text-sage-dark transition hover:bg-sage-soft focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sage disabled:opacity-60">{{ createCategoryMutation.isPending.value ? 'Saving…' : 'Save and add another' }}</button>
-                    <button type="button" class="min-h-11 rounded-md border border-line px-4 text-sm font-medium" @click="toggleCreateForm">Cancel</button>
-                </div>
-            </form>
-            <form v-else class="mt-5 grid gap-4 sm:grid-cols-2" @submit.prevent="createLocation">
-                <div class="grid gap-2">
-                    <label for="location-name" class="text-sm font-medium text-ink">Location name <span aria-hidden="true">*</span></label>
-                    <input id="location-name" v-model="locationName" required maxlength="255" :aria-invalid="Boolean(errors.fields.name)" aria-describedby="location-name-error" class="min-h-12 rounded-md border border-line bg-white px-3.5 text-base text-ink outline-none focus:border-sage focus:ring-2 focus:ring-sage/20">
-                    <p v-if="errors.fields.name" id="location-name-error" class="text-sm text-rose-700">{{ errors.fields.name }}</p>
-                </div>
-                <div class="grid gap-2">
-                    <label for="location-parent" class="text-sm font-medium text-ink">Parent location <span class="font-normal text-ink-muted">(optional)</span></label>
-                    <p v-if="locationOptions.isPending.value" class="text-sm text-ink-muted" role="status">Loading location options…</p>
-                    <p v-else-if="locationOptions.isError.value" class="text-sm text-rose-700" role="alert">Location options could not be loaded. <button type="button" class="font-semibold underline" @click="locationOptions.refetch()">Try again</button></p>
-                    <select id="location-parent" v-model="createParentId" class="min-h-12 rounded-md border border-line bg-white px-3.5 text-base text-ink outline-none focus:border-sage focus:ring-2 focus:ring-sage/20">
-                        <option value="">No parent</option>
-                        <option v-for="location in eligibleParents" :key="location.id" :value="location.id">{{ searchResultLocationLabel(location) }}</option>
-                    </select>
-                    <p v-if="errors.fields.parent_id" class="text-sm text-rose-700">{{ errors.fields.parent_id }}</p>
-                </div>
-                <div class="grid gap-2 sm:col-span-2">
-                    <label for="location-description" class="text-sm font-medium text-ink">Description <span class="font-normal text-ink-muted">(optional)</span></label>
-                    <textarea id="location-description" v-model="locationDescription" rows="3" class="min-h-24 resize-y rounded-md border border-line bg-white px-3.5 py-3 text-base leading-6 text-ink outline-none focus:border-sage focus:ring-2 focus:ring-sage/20" />
-                </div>
-                <div class="flex gap-3 sm:col-span-2">
-                    <button type="submit" :disabled="isPending || !locationName.trim() || locationOptions.isPending.value || locationOptions.isError.value" class="min-h-11 rounded-md bg-sage px-4 text-sm font-semibold text-white disabled:opacity-60">{{ createLocationMutation.isPending.value ? 'Saving…' : 'Save location' }}</button>
-                    <button type="button" class="min-h-11 rounded-md border border-line px-4 text-sm font-medium" @click="toggleCreateForm">Cancel</button>
-                </div>
-            </form>
-        </section>
+        <FormModal v-if="showCreateForm" :label="isCategoriesPage ? 'Add category' : 'Add location'" :busy="isPending" @close="toggleCreateForm">
+            <section id="catalog-create-panel" class="rounded-panel border border-line bg-white p-5 shadow-card sm:p-7" aria-labelledby="catalog-create-title">
+                <p class="eyebrow">New {{ isCategoriesPage ? 'group' : 'storage place' }}</p>
+                <h2 id="catalog-create-title" class="mt-1 text-xl font-semibold tracking-tight text-ink">{{ isCategoriesPage ? 'Add a category' : 'Add a location' }}</h2>
+                <p v-if="errors.form" class="mt-4 rounded-md border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800" role="alert">{{ errors.form }}</p>
+                <form v-if="isCategoriesPage" class="mt-5 grid max-w-xl gap-4" @submit.prevent="createCategory">
+                    <div class="grid gap-2">
+                        <label for="category-name" class="text-sm font-medium text-ink">Category name <span aria-hidden="true">*</span></label>
+                        <input id="category-name" ref="categoryNameInput" v-model="categoryName" required maxlength="255" :aria-invalid="Boolean(errors.fields.name)" aria-describedby="category-name-error" class="min-h-12 rounded-md border border-line bg-white px-3.5 text-base text-ink outline-none focus:border-sage focus:ring-2 focus:ring-sage/20">
+                        <p v-if="errors.fields.name" id="category-name-error" class="text-sm text-rose-700">{{ errors.fields.name }}</p>
+                    </div>
+                    <div class="flex flex-wrap gap-3">
+                        <button type="submit" :disabled="isPending || !categoryName.trim()" class="min-h-11 rounded-md bg-sage px-4 text-sm font-semibold text-white disabled:opacity-60">{{ createCategoryMutation.isPending.value ? 'Saving…' : 'Save category' }}</button>
+                        <button type="submit" value="another" :disabled="isPending || !categoryName.trim()" class="inline-flex min-h-11 items-center justify-center rounded-md border border-sage px-4 text-sm font-semibold text-sage-dark transition hover:bg-sage-soft focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sage disabled:opacity-60">{{ createCategoryMutation.isPending.value ? 'Saving…' : 'Save and add another' }}</button>
+                        <button type="button" :disabled="isPending" class="min-h-11 rounded-md border border-line px-4 text-sm font-medium disabled:opacity-60" @click="toggleCreateForm">Cancel</button>
+                    </div>
+                </form>
+                <form v-else class="mt-5 grid gap-4 sm:grid-cols-2" @submit.prevent="createLocation">
+                    <div class="grid gap-2">
+                        <label for="location-name" class="text-sm font-medium text-ink">Location name <span aria-hidden="true">*</span></label>
+                        <input id="location-name" v-model="locationName" required maxlength="255" :aria-invalid="Boolean(errors.fields.name)" aria-describedby="location-name-error" class="min-h-12 rounded-md border border-line bg-white px-3.5 text-base text-ink outline-none focus:border-sage focus:ring-2 focus:ring-sage/20">
+                        <p v-if="errors.fields.name" id="location-name-error" class="text-sm text-rose-700">{{ errors.fields.name }}</p>
+                    </div>
+                    <div class="grid gap-2">
+                        <label for="location-parent" class="text-sm font-medium text-ink">Parent location <span class="font-normal text-ink-muted">(optional)</span></label>
+                        <p v-if="locationOptions.isPending.value" class="text-sm text-ink-muted" role="status">Loading location options…</p>
+                        <p v-else-if="locationOptions.isError.value" class="text-sm text-rose-700" role="alert">Location options could not be loaded. <button type="button" class="font-semibold underline" @click="locationOptions.refetch()">Try again</button></p>
+                        <select id="location-parent" v-model="createParentId" class="min-h-12 rounded-md border border-line bg-white px-3.5 text-base text-ink outline-none focus:border-sage focus:ring-2 focus:ring-sage/20">
+                            <option value="">No parent</option>
+                            <option v-for="location in eligibleParents" :key="location.id" :value="location.id">{{ searchResultLocationLabel(location) }}</option>
+                        </select>
+                        <p v-if="errors.fields.parent_id" class="text-sm text-rose-700">{{ errors.fields.parent_id }}</p>
+                    </div>
+                    <div class="grid gap-2 sm:col-span-2">
+                        <label for="location-description" class="text-sm font-medium text-ink">Description <span class="font-normal text-ink-muted">(optional)</span></label>
+                        <textarea id="location-description" v-model="locationDescription" rows="3" class="min-h-24 resize-y rounded-md border border-line bg-white px-3.5 py-3 text-base leading-6 text-ink outline-none focus:border-sage focus:ring-2 focus:ring-sage/20" />
+                    </div>
+                    <div class="flex gap-3 sm:col-span-2">
+                        <button type="submit" :disabled="isPending || !locationName.trim() || locationOptions.isPending.value || locationOptions.isError.value" class="min-h-11 rounded-md bg-sage px-4 text-sm font-semibold text-white disabled:opacity-60">{{ createLocationMutation.isPending.value ? 'Saving…' : 'Save location' }}</button>
+                        <button type="button" :disabled="isPending" class="min-h-11 rounded-md border border-line px-4 text-sm font-medium disabled:opacity-60" @click="toggleCreateForm">Cancel</button>
+                    </div>
+                </form>
+            </section>
+        </FormModal>
 
         <section class="mt-7 overflow-hidden rounded-panel border border-line bg-white shadow-card" :aria-busy="activeQuery.isFetching.value" :aria-labelledby="isCategoriesPage ? 'categories-heading' : 'locations-heading'">
-            <div class="flex flex-wrap items-center justify-between gap-4 border-b border-line px-5 py-4 sm:px-6">
-                <div>
-                    <h2 :id="isCategoriesPage ? 'categories-heading' : 'locations-heading'" class="text-base font-semibold text-ink">{{ isCategoriesPage ? 'Your categories' : currentParentPath }}</h2>
-                    <RouterLink v-if="!isCategoriesPage && parentId" :to="{ name: 'catalog-locations', query: currentParent?.parent?.id ? { parent: currentParent.parent.id } : { parent: 'root' } }" class="mt-1 inline-block text-sm font-medium text-sage-dark hover:underline">← {{ currentParent?.parent?.name ?? 'All locations' }}</RouterLink>
-                    <p v-if="activeQuery.data.value" class="mt-1 text-sm text-ink-muted" aria-live="polite">{{ activeQuery.data.value.meta.total }} {{ activeQuery.data.value.meta.total === 1 ? (isCategoriesPage ? 'category' : 'location') : (isCategoriesPage ? 'categories' : 'locations') }}</p>
+            <div v-if="!isCategoriesPage" class="border-b border-line px-5 py-3 sm:px-6">
+                <h2 id="locations-heading" class="text-sm font-semibold text-ink">{{ currentParentPath }}</h2>
+                <RouterLink v-if="parentId" :to="{ name: 'catalog-locations', query: currentParent?.parent?.id ? { parent: currentParent.parent.id } : { parent: 'root' } }" class="text-sm font-medium text-sage-dark hover:underline">← {{ currentParent?.parent?.name ?? 'All locations' }}</RouterLink>
+            </div>
+            <h2 v-else id="categories-heading" class="sr-only">Categories</h2>
+            <div class="flex items-center gap-3 border-b border-line px-5 py-4 sm:px-6">
+                <div class="relative min-w-0 flex-1">
+                    <label for="catalog-search" class="sr-only">Search {{ isCategoriesPage ? 'categories' : 'locations' }}</label>
+                    <span class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-muted" aria-hidden="true">⌕</span>
+                    <input id="catalog-search" v-model="search" type="search" :placeholder="`Search ${isCategoriesPage ? 'categories' : 'locations'}`" class="min-h-10 w-full rounded-md border border-line bg-canvas pl-9 pr-3 text-sm text-ink outline-none focus:border-sage focus:ring-2 focus:ring-sage/20">
                 </div>
-                <div class="flex w-full flex-wrap items-center justify-end gap-3 sm:w-auto">
-                    <label class="sr-only" for="catalog-page-size">Rows per page</label>
+                <ListFilters label="Display"><div class="grid gap-2"><label class="text-xs font-semibold text-ink-muted" for="catalog-page-size">Rows per page</label>
                     <select id="catalog-page-size" :value="pageSize" class="min-h-10 rounded-md border border-line bg-white px-3 text-sm text-ink" @change="changePageSize(($event.target as HTMLSelectElement).value)">
                         <option v-for="size in pageSizes" :key="size" :value="size">{{ size }} per page</option>
-                    </select>
-                    <div class="relative w-full sm:w-64">
-                        <label for="catalog-search" class="sr-only">Search {{ isCategoriesPage ? 'categories' : 'locations' }}</label>
-                        <span class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-muted" aria-hidden="true">⌕</span>
-                        <input id="catalog-search" v-model="search" type="search" :placeholder="`Search ${isCategoriesPage ? 'categories' : 'locations'}`" class="min-h-10 w-full rounded-md border border-line bg-canvas pl-9 pr-3 text-sm text-ink outline-none focus:border-sage focus:ring-2 focus:ring-sage/20">
-                    </div>
-                </div>
+                    </select></div></ListFilters>
             </div>
 
             <div v-if="activeQuery.isPending.value" class="grid min-h-44 place-items-center p-6 text-sm text-ink-muted" role="status">Loading {{ isCategoriesPage ? 'categories' : 'locations' }}…</div>
@@ -269,10 +268,7 @@ async function browseChildren(id: string): Promise<void> {
                     </li>
                 </ul>
             </template>
-            <div v-if="activeQuery.data.value && activeQuery.data.value.meta.last_page > 1" class="flex flex-wrap items-center justify-between gap-3 border-t border-line px-5 py-4 sm:px-6">
-                <p class="text-sm text-ink-muted">Page {{ activeQuery.data.value.meta.current_page }} of {{ activeQuery.data.value.meta.last_page }}</p>
-                <div class="flex gap-2"><button type="button" :disabled="page <= 1 || activeQuery.isFetching.value" class="min-h-10 rounded-md border border-line px-3 text-sm font-medium disabled:opacity-50" @click="changePage(page - 1)">Previous</button><button type="button" :disabled="page >= activeQuery.data.value.meta.last_page || activeQuery.isFetching.value" class="min-h-10 rounded-md border border-line px-3 text-sm font-medium disabled:opacity-50" @click="changePage(page + 1)">Next</button></div>
-            </div>
+            <ListPagination v-if="activeQuery.data.value" :meta="activeQuery.data.value.meta" :page="page" :busy="activeQuery.isFetching.value" :singular="isCategoriesPage ? 'category' : 'location'" :plural="isCategoriesPage ? 'categories' : 'locations'" @change="changePage" />
         </section>
     </section>
 </template>

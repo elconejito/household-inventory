@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import FormModal from './FormModal.vue';
 import { computed, ref, watch } from 'vue';
 import { useStockItemQuery } from '../queries/stock';
 import { buildLocationPath, type InventoryLevel, type Location } from '../api/stock';
@@ -109,7 +110,8 @@ function submit(): void {
             <button type="button" :disabled="busy" class="min-h-9 rounded-md border border-line px-3 text-sm font-medium hover:bg-surface-soft disabled:opacity-50" @click="begin('move-in')">Move in</button>
         </div>
 
-        <form v-if="activeAction" class="grid gap-3 rounded-md border border-line bg-canvas p-3 sm:grid-cols-2" :aria-labelledby="`stock-action-title-${level.id}`" @submit.prevent="submit">
+        <FormModal v-if="activeAction" label="Change stock" :busy="busy" @close="emit('close')">
+        <form class="grid gap-3 rounded-md border border-line bg-white p-5 sm:grid-cols-2 sm:p-6" :aria-labelledby="`stock-action-title-${level.id}`" @submit.prevent="submit">
             <p :id="`stock-action-title-${level.id}`" class="font-semibold text-ink sm:col-span-2">{{ activeAction === 'restock' ? 'Restock' : activeAction === 'move-out' ? 'Move stock out' : 'Move stock in' }}</p>
             <template v-if="activeAction === 'move-out'">
                 <div class="grid min-w-0 gap-2 sm:col-span-2"><label :for="`move-out-destination-${level.id}`" class="text-sm font-medium text-ink">Move to</label><p v-if="locationsLoading" class="text-sm text-ink-muted" role="status">Loading locations…</p><p v-else-if="locationsError" class="text-sm text-rose-700" role="alert">Locations could not be loaded. <button type="button" class="underline" @click="emit('retryLocations')">Try again</button></p><p v-else-if="!destinationLocations.length" class="text-sm text-ink-muted">No other active locations are available.</p><select v-else :id="`move-out-destination-${level.id}`" v-model="targetLocationId" required :disabled="locationsLoading || locationsError" class="min-h-10 w-full min-w-0 max-w-full rounded-md border border-line bg-white px-3 text-sm"><option value="" disabled>Select a destination</option><option v-for="location in destinationLocations" :key="location.id" :value="location.id">{{ buildLocationPath(location, locations) }}</option></select></div>
@@ -122,5 +124,6 @@ function submit(): void {
             <div v-if="errors.form || Object.keys(errors.fields).length" class="grid gap-1 text-sm text-rose-700 sm:col-span-2" role="alert"><p v-if="errors.form">{{ errors.form }}</p><p v-for="(message, field) in errors.fields" :key="field">{{ message }}</p></div>
             <div class="flex gap-2 sm:col-span-2"><button type="submit" :disabled="!canSubmit" class="min-h-10 rounded-md bg-sage px-4 text-sm font-semibold text-white disabled:opacity-50">{{ busy ? 'Saving…' : 'Save change' }}</button><button type="button" :disabled="busy" class="min-h-10 rounded-md border border-line px-4 text-sm" @click="emit('close')">Cancel</button></div>
         </form>
+        </FormModal>
     </div>
 </template>
