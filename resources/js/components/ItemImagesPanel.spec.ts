@@ -39,9 +39,16 @@ describe('item images panel', () => {
         wrapper = mount(ItemImagesPanel, { props: { itemId: '7' }, global: { plugins: [createPinia(), [VueQueryPlugin, { queryClient: client }]] } });
     }
 
+    async function openManager(): Promise<void> {
+        await wrapper!.findAll('button').find((button) => button.text() === 'Manage photos' || button.text() === 'Add photo')!.trigger('click');
+        await flushPromises();
+    }
+
     it('shows the full primary image and secondary thumbnails, with an enlargement dialog', async () => {
         mountPanel();
         await flushPromises();
+        expect(wrapper!.find('dialog[aria-label="Manage photos"]').exists()).toBe(false);
+        expect(wrapper!.text()).not.toContain('Archived photos');
         expect(http.get).toHaveBeenCalledWith('/items/7/images', { params: { include: 'uploaded_by', per_page: 100, page: 1 } });
         expect(wrapper!.find('img[src="/api/images/1/display"]').attributes('src')).toBe('/api/images/1/display');
         expect(wrapper!.find('img[src="/api/images/2/thumb"]').attributes('src')).toBe('/api/images/2/thumb');
@@ -53,19 +60,21 @@ describe('item images panel', () => {
         const invalidate = vi.spyOn(client, 'invalidateQueries');
         mountPanel();
         await flushPromises();
+        await openManager();
         await wrapper!.findAll('button').find((button) => button.text() === 'Make primary')!.trigger('click');
         await flushPromises();
         expect(http.patch).toHaveBeenCalledWith('/item-images/image-2', { data: { is_primary: true } });
         await wrapper!.findAll('button').find((button) => button.text() === 'Remove photo')!.trigger('click');
         await flushPromises();
-        expect(window.confirm).toHaveBeenCalledWith('Delete this photo?');
+        expect(window.confirm).toHaveBeenCalledWith('Delete this photo permanently? This cannot be undone.');
         expect(http.delete).toHaveBeenCalledWith('/item-images/image-1');
-        expect(invalidate).toHaveBeenCalledWith({ queryKey: ['archived-child-records', 'item-images', 'items', '7'] });
+        expect(invalidate).toHaveBeenCalledWith({ queryKey: ['item-images', '7'] });
     });
 
     it('uploads a selected image and optional caption as multipart form data', async () => {
         mountPanel();
         await flushPromises();
+        await openManager();
         const photo = new File(['pixels'], 'pantry.png', { type: 'image/png' });
         const input = wrapper!.get('input[type="file"]');
         Object.defineProperty(input.element, 'files', { configurable: true, value: [photo] });
@@ -87,10 +96,12 @@ describe('item images panel', () => {
         const invalidate = vi.spyOn(client, 'invalidateQueries');
         mountPanel();
         await flushPromises();
+        await openManager();
         await wrapper!.findAll('button').find((button) => button.text() === 'Make primary')!.trigger('click');
         await flushPromises();
         await wrapper!.setProps({ itemId: '8' });
         await flushPromises();
+        await openManager();
         await wrapper!.setProps({ itemId: '7' });
         await flushPromises();
 
@@ -107,6 +118,7 @@ describe('item images panel', () => {
         vi.mocked(http.post).mockImplementation(() => new Promise((_resolve, reject) => { rejectUpload = reject; }) as never);
         mountPanel();
         await flushPromises();
+        await openManager();
         const photo = new File(['pixels'], 'pantry.png', { type: 'image/png' });
         const input = wrapper!.get('input[type="file"]');
         Object.defineProperty(input.element, 'files', { configurable: true, value: [photo] });
@@ -115,6 +127,7 @@ describe('item images panel', () => {
         await flushPromises();
         await wrapper!.setProps({ itemId: '8' });
         await flushPromises();
+        await openManager();
 
         rejectUpload!(new Error('Item seven upload failed'));
         await flushPromises();
@@ -128,6 +141,7 @@ describe('item images panel', () => {
         vi.mocked(http.post).mockImplementation(() => new Promise((resolve) => { finishUpload = resolve; }) as never);
         mountPanel();
         await flushPromises();
+        await openManager();
         const originalPhoto = new File(['original'], 'original.png', { type: 'image/png' });
         const originalInput = wrapper!.get('#image-upload-7');
         Object.defineProperty(originalInput.element, 'files', { configurable: true, value: [originalPhoto] });
@@ -136,6 +150,7 @@ describe('item images panel', () => {
         await flushPromises();
         await wrapper!.setProps({ itemId: '8' });
         await flushPromises();
+        await openManager();
 
         const nextPhoto = new File(['next'], 'next.png', { type: 'image/png' });
         const nextInput = wrapper!.get('#image-upload-8');
@@ -158,12 +173,14 @@ describe('item images panel', () => {
         vi.mocked(http.patch).mockImplementation(() => new Promise((_resolve, reject) => { rejectUpdate = reject; }) as never);
         mountPanel();
         await flushPromises();
+        await openManager();
         await wrapper!.findAll('button').find((button) => button.text() === 'Edit caption')!.trigger('click');
         await wrapper!.get('#image-caption-image-1').setValue('Changed on item seven');
         await wrapper!.findAll('form')[0].trigger('submit');
         await flushPromises();
         await wrapper!.setProps({ itemId: '8' });
         await flushPromises();
+        await openManager();
 
         rejectUpdate!(new Error('Item seven caption update failed'));
         await flushPromises();

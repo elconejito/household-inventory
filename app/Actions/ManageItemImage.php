@@ -13,6 +13,8 @@ class ManageItemImage
 {
     use RequiresActiveHouseholdMembership;
 
+    public function __construct(private PermanentlyDeleteInventoryRecord $deletion) {}
+
     /** @param array{caption?: string|null, is_primary?: bool} $data */
     public function update(Household $household, ItemImage $itemImage, array $data, User $actor): ItemImage
     {
@@ -35,15 +37,7 @@ class ManageItemImage
 
     public function delete(Household $household, ItemImage $itemImage, User $actor): void
     {
-        DB::transaction(function () use ($household, $itemImage, $actor): void {
-            [$lockedItem, $lockedImage] = $this->lockItemAndImage($household, $itemImage, $actor);
-            $wasPrimary = $lockedImage->is_primary;
-            $lockedImage->delete();
-
-            if ($wasPrimary) {
-                $this->promoteOldest($lockedItem);
-            }
-        });
+        $this->deletion->deleteActiveImage($household, $actor, $itemImage);
     }
 
     public function restore(Household $household, ItemImage $itemImage, User $actor): ItemImage
@@ -77,20 +71,5 @@ class ManageItemImage
         $lockedImage = $imageQuery->findOrFail($itemImage->getKey());
 
         return [$lockedItem, $lockedImage];
-    }
-
-    private function promoteOldest(Item $item): void
-    {
-        $oldest = ItemImage::query()
-            ->where('item_id', $item->getKey())
-            ->orderBy('uploaded_at')
-            ->orderBy('id')
-            ->lockForUpdate()
-            ->first();
-
-        if ($oldest !== null) {
-            $oldest->is_primary = true;
-            $oldest->save();
-        }
     }
 }

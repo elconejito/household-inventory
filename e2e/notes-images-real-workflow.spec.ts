@@ -66,24 +66,25 @@ test('identifies an item with private photos and preserves editable multiline no
     await expect(notes).toContainText('edited');
 
     const photos = page.getByRole('region', { name: 'Photos', exact: true });
-    await photos.locator('summary').filter({ hasText: 'Add or manage photos' }).click();
-    await photos.getByLabel('Add a photo', { exact: true }).setInputFiles({ name: 'front.png', mimeType: 'image/png', buffer: await photoFixture(page, 'CARTRIDGE A') });
-    await photos.getByLabel(/Caption/).fill('Front label');
-    await photos.getByRole('button', { name: 'Upload photo', exact: true }).click();
-    await expect(photos).toContainText('Front label');
-    await expect(photos.getByLabel('Add a photo', { exact: true })).toBeEnabled();
-    await photos.getByLabel('Add a photo', { exact: true }).setInputFiles({ name: 'instructions.png', mimeType: 'image/png', buffer: await photoFixture(page, 'INSTRUCTIONS') });
-    await photos.getByLabel(/Caption/).fill('Rear instructions');
-    await photos.getByRole('button', { name: 'Upload photo', exact: true }).click();
-    await expect(photos).toContainText('Rear instructions');
+    await photos.getByRole('button', { name: 'Add photo', exact: true }).click();
+    const photoManager = page.getByRole('dialog', { name: 'Manage photos', exact: true });
+    await photoManager.getByLabel('Add a photo', { exact: true }).setInputFiles({ name: 'front.png', mimeType: 'image/png', buffer: await photoFixture(page, 'CARTRIDGE A') });
+    await photoManager.getByLabel(/Caption/).fill('Front label');
+    await photoManager.getByRole('button', { name: 'Upload photo', exact: true }).click();
+    await expect(photoManager).toContainText('Front label');
+    await expect(photoManager.getByLabel('Add a photo', { exact: true })).toBeEnabled();
+    await photoManager.getByLabel('Add a photo', { exact: true }).setInputFiles({ name: 'instructions.png', mimeType: 'image/png', buffer: await photoFixture(page, 'INSTRUCTIONS') });
+    await photoManager.getByLabel(/Caption/).fill('Rear instructions');
+    await photoManager.getByRole('button', { name: 'Upload photo', exact: true }).click();
+    await expect(photoManager).toContainText('Rear instructions');
 
-    const rearPhoto = photos.getByRole('listitem').filter({ hasText: 'Rear instructions' });
+    const rearPhoto = photoManager.getByRole('listitem').filter({ hasText: 'Rear instructions' });
     await rearPhoto.getByRole('button', { name: 'Make primary', exact: true }).click();
-    await expect(photos.getByRole('button', { name: 'Enlarge Rear instructions', exact: true }).locator('..')).toContainText('Primary photo');
-    await expect.poll(() => photos.getByRole('img', { name: 'Rear instructions', exact: true }).evaluate((image) => (image as HTMLImageElement).naturalWidth)).toBeGreaterThan(0);
+    await expect(photoManager.getByRole('button', { name: 'Enlarge Rear instructions', exact: true }).locator('..')).toContainText('Primary photo');
+    await expect.poll(() => photoManager.getByRole('img', { name: 'Rear instructions', exact: true }).evaluate((image) => (image as HTMLImageElement).naturalWidth)).toBeGreaterThan(0);
     await page.reload();
     await expect(notes).toContainText('Replace every three months.');
-    await expect(photos.getByRole('button', { name: 'Enlarge Rear instructions', exact: true }).locator('..')).toContainText('Primary photo');
+    await expect(photos.getByRole('img', { name: 'Rear instructions', exact: true })).toBeVisible();
     await photos.getByRole('button', { name: 'Enlarge Rear instructions', exact: true }).click();
     await expect(page.getByRole('dialog', { name: 'Enlarged photo' })).toBeVisible();
     await page.keyboard.press('Escape');
@@ -91,9 +92,11 @@ test('identifies an item with private photos and preserves editable multiline no
     await page.screenshot({ path: testInfo.outputPath('item-context-desktop.png'), fullPage: true });
     await page.setViewportSize({ width: 390, height: 844 });
     await page.screenshot({ path: testInfo.outputPath('item-context-mobile.png'), fullPage: true });
+    await photos.getByRole('button', { name: 'Manage photos', exact: true }).click();
     page.once('dialog', (dialog) => dialog.accept());
-    await photos.getByRole('button', { name: 'Remove photo', exact: true }).click();
-    await expect(photos.getByRole('button', { name: 'Enlarge Front label', exact: true }).locator('..')).toContainText('Primary photo');
+    await photoManager.getByRole('button', { name: 'Remove photo', exact: true }).first().click();
+    await expect(photoManager.getByRole('button', { name: 'Enlarge Front label', exact: true }).locator('..')).toContainText('Primary photo');
+    await photoManager.getByRole('button', { name: 'Done', exact: true }).click();
 
     const persisted = await page.request.get(`/api/items/${item.id}/notes?include=created_by`, {
         headers: { Accept: 'application/json', Origin: 'http://127.0.0.1:8000', Referer: 'http://127.0.0.1:8000/' },
@@ -101,19 +104,12 @@ test('identifies an item with private photos and preserves editable multiline no
     expect(persisted.ok()).toBe(true);
     expect((await persisted.json()).data[0].body).toBe('Use cartridge A\nReplace every three months.\n\nKeep the label for reference.');
 
-    const archivedPhotos = photos.locator('details').filter({ has: page.locator('summary', { hasText: 'Archived photos' }) });
-    await archivedPhotos.locator('summary').click();
-    await expect(archivedPhotos).toContainText('Rear instructions');
-    await archivedPhotos.getByRole('button', { name: 'Restore photo', exact: true }).click();
-    await expect(archivedPhotos).toContainText('No archived photos.');
-    await photos.locator('summary').filter({ hasText: 'Add or manage photos' }).click();
-    page.once('dialog', (dialog) => dialog.accept());
-    await photos.getByRole('listitem').filter({ hasText: 'Rear instructions' }).getByRole('button', { name: 'Remove photo', exact: true }).click();
-    await expect(archivedPhotos).toContainText('Rear instructions');
-    await archivedPhotos.getByRole('button', { name: 'Permanently delete', exact: true }).click();
-    await archivedPhotos.getByLabel('Type DELETE to confirm').fill('DELETE');
-    await archivedPhotos.getByRole('button', { name: 'Confirm permanent deletion', exact: true }).click();
-    await expect(archivedPhotos).toContainText('No archived photos.');
+    await expect(photos.getByText('Archived photos', { exact: true })).toHaveCount(0);
+    const currentPhotos = await page.request.get(`/api/items/${item.id}/images`, {
+        headers: { Accept: 'application/json', Origin: 'http://127.0.0.1:8000', Referer: 'http://127.0.0.1:8000/' },
+    });
+    expect(currentPhotos.ok()).toBe(true);
+    expect((await currentPhotos.json()).data.map((image: { caption: string }) => image.caption)).toEqual(['Front label']);
 
     page.once('dialog', (dialog) => dialog.accept());
     await notes.getByRole('button', { name: 'Delete note', exact: true }).click();

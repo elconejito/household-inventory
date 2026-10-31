@@ -12,6 +12,7 @@ use Illuminate\Foundation\Testing\LazilyRefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Mockery;
 use Tests\TestCase;
 use Throwable;
 
@@ -509,7 +510,7 @@ class ItemImageTest extends TestCase
         $this->actingAs($otherUser, 'web')->getJson('/api/items/'.$item->id.'/images?filter[trashed]=only')->assertNotFound();
     }
 
-    public function test_primary_photo_can_be_changed_deleted_and_restored_without_replacing_current_primary(): void
+    public function test_deleting_a_primary_photo_removes_its_files_and_promotes_the_oldest_remaining_photo(): void
     {
         Storage::fake('inventory-images');
         [$user, $household] = $this->householdMember();
@@ -519,22 +520,69 @@ class ItemImageTest extends TestCase
         $this->actingAs($user, 'web');
 
         $this->patchJson('/api/item-images/'.$second->id, ['data' => ['is_primary' => true]])
-            ->assertOk()
-            ->assertJsonPath('data.is_primary', true);
+            ->assertOk()->assertJsonPath('data.is_primary', true);
         $this->assertFalse($first->fresh()->is_primary);
 
         $this->deleteJson('/api/item-images/'.$second->id)->assertNoContent();
         $this->assertTrue($first->fresh()->is_primary);
-        $this->assertSoftDeleted('item_images', ['id' => $second->id]);
-
-        $this->postJson('/api/item-images/'.$second->id.'/restore')
-            ->assertOk()
-            ->assertJsonPath('data.is_primary', false);
-        $this->assertTrue($first->fresh()->is_primary);
+        $this->assertDatabaseMissing('item_images', ['id' => $second->id]);
+        Storage::disk('inventory-images')->assertMissing([$second->thumbnail_path, $second->display_path]);
+        Storage::disk('inventory-images')->assertExists([$first->thumbnail_path, $first->display_path]);
+        $this->postJson('/api/item-images/'.$second->id.'/restore')->assertNotFound();
 
         $this->deleteJson('/api/item-images/'.$first->id)->assertNoContent();
-        $this->assertTrue($second->fresh()->is_primary);
-        $this->assertNotSoftDeleted('item_images', ['id' => $second->id]);
+        $this->assertDatabaseMissing('item_images', ['id' => $first->id]);
+        Storage::disk('inventory-images')->assertDirectoryEmpty('/');
+    }
+
+    public function test_failed_photo_deletion_preserves_the_active_photo_and_both_files(): void
+    {
+        Storage::fake('inventory-images');
+        [$user, $household] = $this->householdMember();
+        $item = Item::factory()->for($household)->create();
+        $image = $this->storedImage($item, $user, ['is_primary' => true]);
+        $disk = Storage::disk('inventory-images');
+        $thumbnail = $disk->get($image->thumbnail_path);
+        $display = $disk->get($image->display_path);
+        $partialDisk = Mockery::mock($disk)->makePartial();
+        $partialDisk->shouldReceive('delete')->once()->with($image->thumbnail_path)
+            ->andReturnUsing(fn (string $path): bool => $disk->delete($path));
+        $partialDisk->shouldReceive('delete')->once()->with($image->display_path)->andReturnFalse();
+        Storage::shouldReceive('disk')->with('inventory-images')->andReturn($partialDisk);
+
+        $this->actingAs($user, 'web')->deleteJson('/api/item-images/'.$image->id)->assertServerError();
+
+        $this->assertDatabaseHas('item_images', ['id' => $image->id, 'deleted_at' => null, 'is_primary' => true]);
+        $this->assertSame($thumbnail, $disk->get($image->thumbnail_path));
+        $this->assertSame($display, $disk->get($image->display_path));
+    }
+
+    public function test_another_household_cannot_delete_a_photo_or_its_files(): void
+    {
+        Storage::fake('inventory-images');
+        [$user, $household] = $this->householdMember();
+        $item = Item::factory()->for($household)->create();
+        $image = $this->storedImage($item, $user, ['is_primary' => true]);
+        [$otherUser] = $this->householdMember();
+
+        $this->actingAs($otherUser, 'web')->deleteJson('/api/item-images/'.$image->id)->assertNotFound();
+
+        $this->assertDatabaseHas('item_images', ['id' => $image->id, 'deleted_at' => null]);
+        Storage::disk('inventory-images')->assertExists([$image->thumbnail_path, $image->display_path]);
+    }
+
+    public function test_restoring_a_legacy_archived_photo_keeps_the_current_primary(): void
+    {
+        Storage::fake('inventory-images');
+        [$user, $household] = $this->householdMember();
+        $item = Item::factory()->for($household)->create();
+        $first = $this->storedImage($item, $user, ['is_primary' => true]);
+        $archived = $this->storedImage($item, $user, ['is_primary' => false]);
+        $archived->delete();
+
+        $this->actingAs($user, 'web')->postJson('/api/item-images/'.$archived->id.'/restore')
+            ->assertOk()->assertJsonPath('data.is_primary', false);
+        $this->assertTrue($first->fresh()->is_primary);
     }
 
     public function test_image_metadata_update_rejects_false_primary_and_internal_fields(): void

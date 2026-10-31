@@ -166,7 +166,7 @@ describe('item stock detail', () => {
 
         expect(wrapper!.text()).toContain('Every active location already has a stock level for this item.');
         expect(wrapper!.find('#setup-location').exists()).toBe(false);
-        expect(wrapper!.find('#setup-location-form button[type="submit"]').exists()).toBe(false);
+        expect(wrapper!.find('button[type="submit"][form="setup-location-form"]').exists()).toBe(false);
     });
 
     it('offers the existing create-location flow when there are no active locations', async () => {
@@ -291,7 +291,7 @@ describe('item stock detail', () => {
         await wrapper!.get('#setup-location-form').trigger('submit');
         await flushPromises();
 
-        expect(wrapper!.find('#setup-location-form button[type="submit"]').attributes('disabled')).toBeDefined();
+        expect(wrapper!.find('button[type="submit"][form="setup-location-form"]').attributes('disabled')).toBeDefined();
         await wrapper!.get('#setup-location-form').trigger('submit');
         (await import('vue-router') as unknown as { setMockItem: (id: string) => void }).setMockItem('8');
         await flushPromises();
@@ -399,7 +399,9 @@ describe('item stock detail', () => {
         vi.mocked(http.post).mockResolvedValue({ data: { data: { id: '11' } } } as never);
         mountPage();
         await flushPromises();
-        await wrapper!.findAll('button').find((button) => button.text() === 'Restock at another location')!.trigger('click');
+        expect(wrapper!.text()).not.toContain('Restock at another location');
+        (await import('vue-router') as unknown as { setMockQuery: (query: Record<string, string>) => void }).setMockQuery({ restock: '1' });
+        await flushPromises();
         await wrapper!.get('#new-level-location').setValue('3');
         await wrapper!.get('#new-level-quantity').setValue('6');
         expect(wrapper!.text()).toContain('Restock 6 packs at Closet.');

@@ -2,6 +2,7 @@
 
 namespace App\Actions;
 
+use App\Actions\Concerns\RequiresActiveHouseholdMembership;
 use App\Exceptions\PermanentDeletionBlocked;
 use App\Models\Category;
 use App\Models\Household;
@@ -21,6 +22,8 @@ use Throwable;
 
 class PermanentlyDeleteInventoryRecord
 {
+    use RequiresActiveHouseholdMembership;
+
     public function permanentlyDeleteItem(Household $household, User $user, Item $item): void
     {
         $this->runWithFileRollback(function (array &$backups, array &$attempted) use ($household, $user, $item): void {
@@ -102,6 +105,33 @@ class PermanentlyDeleteInventoryRecord
             $lockedNote->setRelation('notable', $lockedNotable);
             Gate::forUser($user)->authorize('forceDelete', $lockedNote);
             $lockedNote->forceDelete();
+        });
+    }
+
+    public function deleteActiveImage(Household $household, User $user, ItemImage $itemImage): void
+    {
+        $this->runWithFileRollback(function (array &$backups, array &$attempted) use ($household, $user, $itemImage): void {
+            $lockedHousehold = $this->lockHousehold($household);
+            $this->assertActiveMembership($lockedHousehold, $user);
+            $lockedItem = $lockedHousehold->items()->lockForUpdate()->findOrFail($itemImage->item_id);
+            $lockedImage = ItemImage::query()->where('item_id', $lockedItem->getKey())
+                ->lockForUpdate()->findOrFail($itemImage->getKey());
+
+            $lockedImage->setRelation('item', $lockedItem);
+            Gate::forUser($user)->authorize('delete', $lockedImage);
+            $wasPrimary = $lockedImage->is_primary;
+            $this->deleteImageFiles(collect([$lockedImage]), $backups, $attempted);
+            $lockedImage->forceDelete();
+
+            if ($wasPrimary) {
+                $oldest = ItemImage::query()->where('item_id', $lockedItem->getKey())
+                    ->orderBy('uploaded_at')->orderBy('id')->lockForUpdate()->first();
+
+                if ($oldest !== null) {
+                    $oldest->is_primary = true;
+                    $oldest->save();
+                }
+            }
         });
     }
 
