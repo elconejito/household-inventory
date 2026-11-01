@@ -32,6 +32,14 @@ describe('catalog browse page', () => {
         wrapper = mount(CatalogBrowsePage, { global: { plugins: [createPinia(), [VueQueryPlugin, { queryClient: client }]], stubs: { RouterLink: { template: '<a><slot /></a>' } } } });
     }
 
+    it('omits the redundant root-location header and back link', async () => {
+        mountPage();
+        await flushPromises();
+        expect(wrapper!.text()).not.toContain('Top-level locations');
+        expect(wrapper!.findAll('a').some((link) => link.text() === '← All locations')).toBe(false);
+        expect(wrapper!.find('#catalog-search').exists()).toBe(true);
+    });
+
     it('browses top-level locations and never submits the root sentinel as a parent ID', async () => {
         mountPage();
         await flushPromises();

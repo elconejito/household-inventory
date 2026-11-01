@@ -226,11 +226,11 @@ async function browseChildren(id: string): Promise<void> {
         </FormModal>
 
         <section class="mt-7 overflow-hidden rounded-panel border border-line bg-white shadow-card" :aria-busy="activeQuery.isFetching.value" :aria-labelledby="isCategoriesPage ? 'categories-heading' : 'locations-heading'">
-            <div v-if="!isCategoriesPage" class="border-b border-line px-5 py-3 sm:px-6">
+            <div v-if="!isCategoriesPage && parentId !== 'root'" class="border-b border-line px-5 py-3 sm:px-6">
                 <h2 id="locations-heading" class="text-sm font-semibold text-ink">{{ currentParentPath }}</h2>
                 <RouterLink v-if="parentId" :to="{ name: 'catalog-locations', query: currentParent?.parent?.id ? { parent: currentParent.parent.id } : { parent: 'root' } }" class="text-sm font-medium text-sage-dark hover:underline">← {{ currentParent?.parent?.name ?? 'All locations' }}</RouterLink>
             </div>
-            <h2 v-else id="categories-heading" class="sr-only">Categories</h2>
+            <h2 v-else :id="isCategoriesPage ? 'categories-heading' : 'locations-heading'" class="sr-only">{{ isCategoriesPage ? 'Categories' : 'Locations' }}</h2>
             <div class="flex items-center gap-3 border-b border-line px-5 py-4 sm:px-6">
                 <div class="relative min-w-0 flex-1">
                     <label for="catalog-search" class="sr-only">Search {{ isCategoriesPage ? 'categories' : 'locations' }}</label>

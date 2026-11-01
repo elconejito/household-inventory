@@ -30,15 +30,19 @@ async function addLocation(page: Page, name: string, parent?: string): Promise<v
     await expect(page.getByRole('status').filter({ hasText: `${name} was created.` })).toBeVisible();
 }
 
-async function restockHere(page: Page, locationId: string, itemName: string, quantity: number): Promise<void> {
-    await page.goto(`/locations/${locationId}`);
-    const restock = page.getByRole('region', { name: 'Restock here', exact: true });
-    await restock.getByLabel('Item to restock', { exact: true }).selectOption({ label: itemName });
-    await restock.getByRole('link', { name: 'Restock here', exact: true }).click();
-    await expect(page.getByRole('heading', { name: 'Restock', exact: true })).toBeVisible();
-    await page.getByLabel(/Quantity/).fill(String(quantity));
-    await page.getByLabel('I’ve checked this direction and quantity.').check();
-    await page.getByRole('button', { name: 'Save change', exact: true }).click();
+async function setUpAndRestock(page: Page, locationId: string, itemId: string, quantity: number): Promise<void> {
+    await page.goto(`/inventory/${itemId}`);
+    await page.getByRole('button', { name: 'Set up a stock location', exact: true }).click();
+    const setup = page.getByRole('dialog', { name: 'Set up stock location', exact: true });
+    await setup.getByLabel('Location', { exact: true }).selectOption(locationId);
+    await setup.getByRole('button', { name: 'Set up location', exact: true }).click();
+    await expect(setup).not.toBeVisible();
+    const row = page.getByRole('region', { name: 'Stock by location', exact: true }).getByRole('listitem').filter({ has: page.locator(`a[href="/locations/${locationId}"]`) });
+    await row.getByRole('button', { name: 'Restock', exact: true }).click();
+    const action = page.getByRole('dialog', { name: 'Change stock', exact: true });
+    await action.getByLabel(/Quantity/).fill(String(quantity));
+    await action.getByLabel('I’ve checked this direction and quantity.').check();
+    await action.getByRole('button', { name: 'Save change', exact: true }).click();
     await expect(page.getByRole('status').filter({ hasText: 'Stock updated.' })).toBeVisible();
 }
 
@@ -81,56 +85,58 @@ test('creates and edits a catalog, assigns equal categories, and distinguishes p
     expect((await descriptionPatch).postDataJSON()).toEqual({ data: { description: 'Blue connector\nKeep with the outdoor tap.' } });
     await expect(page.getByText('Blue connector\nKeep with the outdoor tap.', { exact: true })).toBeVisible();
 
-    await restockHere(page, basementId, itemName, 6);
-    await restockHere(page, binId, itemName, 4);
+    await setUpAndRestock(page, basementId, itemId, 6);
+    await setUpAndRestock(page, binId, itemId, 4);
     await page.goto(`/locations/${basementId}`);
-    const stock = page.getByRole('region', { name: 'Stock by location', exact: true });
-    await expect(stock).toContainText('Basement / Shelf / Bin');
+    const stock = page.getByRole('region', { name: 'Contents', exact: true });
+    await expect(stock).toContainText('Shelf');
+    await expect(stock).toContainText('Child location');
     await expect(stock).toContainText('6 hoses');
-    await expect(stock).toContainText('4 hoses');
-    await expect(stock.getByRole('listitem').filter({ hasText: 'Basement / Shelf / Bin' }).getByRole('button', { name: 'Restock', exact: true })).toBeVisible();
-    await page.getByLabel('Inventory scope', { exact: true }).selectOption('direct');
-    await expect(stock).not.toContainText('Basement / Shelf / Bin');
-    await expect(stock).toContainText('6 hoses');
+    await expect(stock).not.toContainText('4 hoses');
+    await expect(stock.getByRole('link', { name: 'Bin', exact: true })).toHaveCount(0);
+    await expect(page.getByLabel('Inventory scope', { exact: true })).toHaveCount(0);
     await page.screenshot({ path: testInfo.outputPath('location-direct-stock-desktop.png'), fullPage: true });
 
-    await page.getByLabel('Inventory scope', { exact: true }).selectOption('all');
-    const binStock = stock.getByRole('listitem').filter({ hasText: 'Basement / Shelf / Bin' });
+    await page.goto(`/locations/${binId}`);
+    const binStock = stock.getByRole('listitem').filter({ hasText: itemName });
+    const stockAction = page.getByRole('dialog', { name: 'Change stock', exact: true });
     const consumptionRequest = page.waitForRequest((request) => request.method() === 'POST' && request.url().endsWith('/api/inventory-movements'));
     await binStock.getByRole('button', { name: 'Use 1', exact: true }).click();
     expect((await consumptionRequest).postDataJSON()).toEqual({ data: { movement_type: 'consumption', item_id: itemId, location_id: binId, quantity: 1 } });
     await expect(binStock).toContainText('3 hoses');
 
     await binStock.getByRole('button', { name: 'Move out', exact: true }).click();
-    await binStock.getByLabel('Move to', { exact: true }).selectOption({ label: 'Basement' });
-    await binStock.getByLabel(/Quantity/).fill('2');
-    await expect(binStock).toContainText('Move 2 hoses from Basement / Shelf / Bin to Basement.');
-    await binStock.getByLabel('Confirm this stock change.').check();
+    await stockAction.getByLabel('Move to', { exact: true }).selectOption({ label: 'Basement' });
+    await stockAction.getByLabel(/Quantity/).fill('2');
+    await expect(stockAction).toContainText('Move 2 hoses from Basement / Shelf / Bin to Basement.');
+    await stockAction.getByLabel('Confirm this stock change.').check();
     const pushRequest = page.waitForRequest((request) => request.method() === 'POST' && request.url().endsWith('/api/inventory-movements'));
-    await binStock.getByRole('button', { name: 'Save change', exact: true }).click();
+    await stockAction.getByRole('button', { name: 'Save change', exact: true }).click();
     expect((await pushRequest).postDataJSON()).toEqual({ data: { movement_type: 'transfer', item_id: itemId, source_location_id: binId, destination_location_id: basementId, quantity: 2 } });
     await expect(binStock).toContainText('1 hose');
 
     await binStock.getByRole('button', { name: 'Move in', exact: true }).click();
-    await binStock.getByLabel('Move from', { exact: true }).selectOption(basementId);
-    await expect(binStock.getByLabel(/Quantity/)).toHaveAttribute('max', '8');
-    await expect(binStock).toContainText('Move 1 hose from Basement to Basement / Shelf / Bin.');
-    await binStock.getByLabel('Confirm this stock change.').check();
+    await stockAction.getByLabel('Move from', { exact: true }).selectOption(basementId);
+    await expect(stockAction.getByLabel(/Quantity/)).toHaveAttribute('max', '8');
+    await expect(stockAction).toContainText('Move 1 hose from Basement to Basement / Shelf / Bin.');
+    await stockAction.getByLabel('Confirm this stock change.').check();
     const pullRequest = page.waitForRequest((request) => request.method() === 'POST' && request.url().endsWith('/api/inventory-movements'));
-    await binStock.getByRole('button', { name: 'Save change', exact: true }).click();
+    await stockAction.getByRole('button', { name: 'Save change', exact: true }).click();
     expect((await pullRequest).postDataJSON()).toEqual({ data: { movement_type: 'transfer', item_id: itemId, source_location_id: basementId, destination_location_id: binId, quantity: 1 } });
     await expect(binStock).toContainText('2 hoses');
 
     await binStock.getByRole('button', { name: 'Restock', exact: true }).click();
-    await binStock.getByLabel(/Quantity/).fill('2');
-    await binStock.getByLabel('Confirm this stock change.').check();
-    await binStock.getByRole('button', { name: 'Save change', exact: true }).click();
+    await stockAction.getByLabel(/Quantity/).fill('2');
+    await stockAction.getByLabel('Confirm this stock change.').check();
+    await stockAction.getByRole('button', { name: 'Save change', exact: true }).click();
     await expect(binStock).toContainText('4 hoses');
     await page.screenshot({ path: testInfo.outputPath('location-row-actions.png'), fullPage: true });
 
     await page.goto('/inventory');
+    await page.getByRole('button', { name: 'Filters', exact: true }).click();
     await page.getByLabel('Category', { exact: true }).selectOption({ label: 'Garden supplies' });
     await page.getByLabel('Location', { exact: true }).selectOption({ label: 'Basement' });
+    await page.getByRole('button', { name: 'Done', exact: true }).click();
     await expect(page.getByRole('link', { name: itemName, exact: true })).toBeVisible();
     await expect(page.getByText('11 hoses total on hand', { exact: true })).toBeVisible();
     await page.screenshot({ path: testInfo.outputPath('inventory-filtered-desktop.png'), fullPage: true });
@@ -139,7 +145,9 @@ test('creates and edits a catalog, assigns equal categories, and distinguishes p
     await page.getByRole('link', { name: 'Garden supplies', exact: true }).click();
     const categoryItems = page.getByRole('region', { name: 'Items in this category', exact: true });
     await expect(categoryItems).toContainText('11 hoses total on hand');
+    await categoryItems.getByRole('button', { name: `View locations for ${itemName}`, exact: true }).click();
     await expect(categoryItems).toContainText('Basement / Shelf / Bin — 4 hoses');
+    await page.getByRole('button', { name: 'Close', exact: true }).click();
     await page.screenshot({ path: testInfo.outputPath('category-stock-desktop.png'), fullPage: true });
 
     await page.goto(itemUrl);
@@ -166,20 +174,21 @@ test('creates and edits a catalog, assigns equal categories, and distinguishes p
     await page.getByRole('button', { name: 'Save changes', exact: true }).click();
     expect((await locationPatch).postDataJSON()).toEqual({ data: { name: 'Storage room', description: 'Bulk supplies\nKeep access to the stairs clear.' } });
     await expect(page.getByRole('heading', { level: 1, name: 'Storage room', exact: true })).toBeVisible();
-    await expect(stock).toContainText('Storage room / Shelf / Bin');
+    await expect(stock.getByRole('link', { name: 'Shelf', exact: true })).toBeVisible();
 
     await page.setViewportSize({ width: 320, height: 740 });
     await page.goto(`/locations/${basementId}`);
     await expect(page.getByRole('heading', { level: 1, name: 'Storage room', exact: true })).toBeVisible();
-    await expect(page.getByRole('navigation', { name: 'Inventory browsing' })).toBeVisible();
-    await expect(stock).toContainText('Storage room / Shelf / Bin');
-    await expect(page.getByLabel('Item to restock', { exact: true }).getByRole('option', { name: itemName, exact: true })).toHaveCount(1);
+    await expect(page.getByRole('navigation', { name: 'Breadcrumb' })).toBeVisible();
+    await expect(stock.getByRole('link', { name: 'Shelf', exact: true })).toBeVisible();
+    await expect(page.getByLabel('Item to restock', { exact: true })).toHaveCount(0);
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(320);
     await page.screenshot({ path: testInfo.outputPath('location-stock-mobile.png'), fullPage: true });
-    const mobileBinStock = stock.getByRole('listitem').filter({ hasText: 'Storage room / Shelf / Bin' });
+    await page.goto(`/locations/${binId}`);
+    const mobileBinStock = stock.getByRole('listitem').filter({ hasText: itemName });
     await mobileBinStock.getByRole('button', { name: 'Move out', exact: true }).click();
-    await mobileBinStock.getByLabel('Move to', { exact: true }).selectOption(basementId);
-    await expect(mobileBinStock).toContainText('Move 1 hose from Storage room / Shelf / Bin to Storage room.');
+    await stockAction.getByLabel('Move to', { exact: true }).selectOption(basementId);
+    await expect(stockAction).toContainText('Move 1 hose from Storage room / Shelf / Bin to Storage room.');
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(320);
     await page.screenshot({ path: testInfo.outputPath('location-transfer-mobile.png'), fullPage: true });
 });

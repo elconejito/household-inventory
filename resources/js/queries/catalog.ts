@@ -54,6 +54,21 @@ export function useLocationLevelsQuery(locationIds: ComputedRef<string[]>, param
     });
 }
 
+export function useDirectLocationLevelsQuery(locationId: ComputedRef<string>) {
+    return useQuery({
+        queryKey: computed(() => ['inventory-levels', 'location-contents', locationId.value] as const),
+        enabled: computed(() => Boolean(locationId.value)),
+        queryFn: async () => {
+            const ids = [locationId.value];
+            const firstPage = await getLocationLevels(ids, 1, 100);
+            const remainingPages = await Promise.all(Array.from({ length: Math.max(0, firstPage.meta.last_page - 1) }, (_, index) =>
+                getLocationLevels(ids, index + 2, 100),
+            ));
+            return [...firstPage.data, ...remainingPages.flatMap((page) => page.data)];
+        },
+    });
+}
+
 function useCatalogMutation<TData, TVariables>(mutationFn: (variables: TVariables) => Promise<TData>) {
     const queryClient = useQueryClient();
 
