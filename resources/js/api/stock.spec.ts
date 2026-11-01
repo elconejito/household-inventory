@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { http } from '../lib/http';
-import { buildLocationPath, createBuySoon, createInventoryLevel, getActiveAlerts, getMovementRecorders, getMovements, getTriggeredLevels, resolveAlert } from './stock';
+import { buildLocationPath, compareLocationPaths, getLocationTrail, type Location, createBuySoon, createInventoryLevel, getActiveAlerts, getMovementRecorders, getMovements, getTriggeredLevels, resolveAlert } from './stock';
 
 vi.mock('../lib/http', () => ({ http: { get: vi.fn(), post: vi.fn() } }));
 
@@ -14,6 +14,27 @@ describe('stock activity API', () => {
 
         expect(buildLocationPath(locations[2], locations)).toBe('House / Kitchen / Pantry');
         expect(buildLocationPath({ id: '3', name: 'Pantry', description: null }, locations)).toBe('House / Kitchen / Pantry');
+    });
+
+    it('returns each ancestor in root-to-leaf order and stops at a malformed cycle', () => {
+        const root: Location = { id: '1', name: 'House', description: null };
+        const floor: Location = { id: '2', name: 'Floor', description: null, parent: root };
+        const room: Location = { id: '3', name: 'Room', description: null, parent: { ...floor, parent: null } };
+        expect(getLocationTrail(room, [root, floor, room]).map((location) => location.id)).toEqual(['1', '2', '3']);
+        root.parent = room;
+        expect(getLocationTrail(room, [root, floor, room]).map((location) => location.id)).toEqual(['1', '2', '3']);
+    });
+
+    it('sorts full location labels alphabetically without case sensitivity and with natural numbers', () => {
+        const locations: Location[] = [
+            { id: '1', name: 'zebra room', description: null },
+            { id: '2', name: 'Box 10', description: null, parent: { id: '4', name: 'Attic', description: null } },
+            { id: '3', name: 'Box 2', description: null, parent: { id: '4', name: 'Attic', description: null } },
+            { id: '4', name: 'Attic', description: null },
+            { id: '5', name: 'basement', description: null },
+        ];
+        expect([...locations].sort((first, second) => compareLocationPaths(first, second, locations)).map((location) => location.id)).toEqual(['4', '3', '2', '5', '1']);
+        expect(locations.map((location) => location.id)).toEqual(['1', '2', '3', '4', '5']);
     });
 
     it('requests an allowed page size and uses the documented location filter names', async () => {

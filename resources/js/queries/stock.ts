@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query';
 import { computed, type ComputedRef } from 'vue';
 import { getItem, getItems } from '../api/items';
-import { createBuySoon, createInventoryLevel, createLocation, getActiveAlerts, getLocations, getMovementRecorders, getMovements, getTriggeredLevels, recordMovement, resolveAlert, updateThreshold, type AlertListParams, type InventoryAlertStatus, type MovementFilters } from '../api/stock';
+import { compareLocationPaths, createBuySoon, createInventoryLevel, createLocation, getActiveAlerts, getLocations, getMovementRecorders, getMovements, getTriggeredLevels, recordMovement, resolveAlert, updateThreshold, type AlertListParams, type InventoryAlertStatus, type MovementFilters } from '../api/stock';
 
 export const stockQueryKeys = {
     detail: (id: string) => ['items', 'detail', id] as const,
@@ -45,7 +45,8 @@ export function useLocationsQuery(enabled: boolean | ComputedRef<boolean> = true
         queryFn: async () => {
             const firstPage = await getLocations(1);
             const rest = await Promise.all(Array.from({ length: Math.max(0, firstPage.meta.last_page - 1) }, (_, index) => getLocations(index + 2)));
-            return [...firstPage.data, ...rest.flatMap((page) => page.data)];
+            const locations = [...firstPage.data, ...rest.flatMap((page) => page.data)];
+            return locations.sort((first, second) => compareLocationPaths(first, second, locations));
         },
     });
 }

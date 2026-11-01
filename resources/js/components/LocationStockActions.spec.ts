@@ -62,7 +62,7 @@ describe('LocationStockActions', () => {
         await wrapper.setProps({ activeAction: { levelId: 'level-bin', action: 'move-out' } });
 
         const destination = wrapper.get('#move-out-destination-level-bin');
-        expect(destination.findAll('option').map((option) => option.text())).toEqual(['Select a destination', 'House', 'House / Kitchen', 'House / Closet', 'House / Garage']);
+        expect(destination.findAll('option').map((option) => option.text())).toEqual(['Select a destination', 'House', 'House / Closet', 'House / Garage', 'House / Kitchen']);
         expect(destination.findAll('option').map((option) => option.element.value)).not.toContain('22');
         await destination.setValue('30');
         await wrapper.get('#stock-action-quantity-level-bin').setValue('2');

@@ -4,7 +4,7 @@ import axios from 'axios';
 import { computed, onUnmounted, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { parseApiErrors, type FormErrors } from '../lib/api-errors';
-import { buildLocationPath, type InventoryLevel } from '../api/stock';
+import { buildLocationPath, compareLocationPaths, type InventoryLevel } from '../api/stock';
 import { useActiveAlertsQuery, useBuySoonMutation, useCreateInventoryLevelMutation, useCreateLocationMutation, useLocationsQuery, useRecordMovementMutation, useResolveAlertMutation, useStockItemQuery, useUpdateThresholdMutation } from '../queries/stock';
 import NotesPanel from '../components/NotesPanel.vue';
 import ItemImagesPanel from '../components/ItemImagesPanel.vue';
@@ -65,7 +65,8 @@ const existingLocationIds = computed(() => new Set((itemQuery.data.value?.invent
 const eligibleSetupLocations = computed(() => locationOptions.value.filter(({ location }) => !existingLocationIds.value.has(location.id)));
 const validSetupThreshold = computed(() => setupThreshold.value === '' || (Number.isInteger(Number(setupThreshold.value)) && Number(setupThreshold.value) >= 0));
 const canSaveSetup = computed(() => eligibleSetupLocations.value.some(({ location }) => location.id === setupLocationId.value) && validSetupThreshold.value && !locationsQuery.isFetching.value && !locationsQuery.isError.value);
-const positiveLevels = computed(() => (itemQuery.data.value?.inventory_levels ?? []).filter((level) => level.quantity > 0 && level.id !== selectedLevel.value?.id));
+const positiveLevels = computed(() => (itemQuery.data.value?.inventory_levels ?? []).filter((level) => level.quantity > 0 && level.id !== selectedLevel.value?.id)
+    .sort((first, second) => compareLocationPaths(first.location, second.location, locationsQuery.data.value ?? [])));
 
 function locationPath(location: InventoryLevel['location']): string {
     return buildLocationPath(location, locationsQuery.data.value ?? []);

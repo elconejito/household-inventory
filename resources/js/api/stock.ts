@@ -8,22 +8,31 @@ export type Location = {
     parent?: Location | null;
 };
 
-export function buildLocationPath(location: Location, locations: Location[]): string {
+export function getLocationTrail(location: Location, locations: Location[]): Location[] {
     const locationsById = new Map(locations.map((candidate) => [candidate.id, candidate]));
+    const trail: Location[] = [];
+    const visited = new Set<string>();
+    let current: Location | null = locationsById.get(location.id) ?? location;
 
-    function resolvePath(current: Location, visited: Set<string>): string {
-        if (visited.has(current.id)) {
-            return current.name;
-        }
-
+    while (current && !visited.has(current.id)) {
         visited.add(current.id);
-        const parentId = current.parent?.id;
-        const parent = parentId ? locationsById.get(parentId) ?? current.parent ?? null : null;
-
-        return parent ? `${resolvePath(parent, visited)} / ${current.name}` : current.name;
+        trail.push(current);
+        const parent: Location | null = current.parent ?? null;
+        current = parent ? locationsById.get(parent.id) ?? parent : null;
     }
 
-    return resolvePath(locationsById.get(location.id) ?? location, new Set());
+    return trail.reverse();
+}
+
+export function buildLocationPath(location: Location, locations: Location[]): string {
+    return getLocationTrail(location, locations).map((part) => part.name).join(' / ');
+}
+
+const locationCollator = new Intl.Collator(undefined, { sensitivity: 'base', numeric: true });
+
+export function compareLocationPaths(first: Location, second: Location, locations: Location[]): number {
+    return locationCollator.compare(buildLocationPath(first, locations), buildLocationPath(second, locations))
+        || locationCollator.compare(first.id, second.id);
 }
 
 export type InventoryLevel = {

@@ -5,7 +5,7 @@ import { computed, onUnmounted, ref, watch } from 'vue';
 import { useQuery } from '@tanstack/vue-query';
 import { RouterLink } from 'vue-router';
 import { getItems, type InventoryItem } from '../api/items';
-import { buildLocationPath, getActiveAlerts, type InventoryLevel, type InventoryAlert } from '../api/stock';
+import { buildLocationPath, compareLocationPaths, getActiveAlerts, type InventoryLevel, type InventoryAlert } from '../api/stock';
 import { parseApiErrors } from '../lib/api-errors';
 import { useActiveAlertsQuery, useBuySoonMutation, useLocationsQuery, useRecordMovementMutation, useResolveAlertMutation, useTriggeredLevelsQuery } from '../queries/stock';
 import NotesPanel from '../components/NotesPanel.vue';
@@ -59,7 +59,8 @@ async function getItemsActiveAlert(itemId: string): Promise<InventoryAlert | nul
 }
 
 const levels = computed(() => (selectedItem.value?.inventory_levels ?? []) as InventoryLevel[]);
-const positiveLevels = computed(() => levels.value.filter((level) => level.quantity > 0));
+const positiveLevels = computed(() => levels.value.filter((level) => level.quantity > 0)
+    .sort((first, second) => compareLocationPaths(first.location, second.location, locationsQuery.data.value ?? [])));
 const locationOptions = computed(() => (locationsQuery.data.value ?? []).map((location) => ({
     location,
     path: buildLocationPath(location, locationsQuery.data.value ?? []),

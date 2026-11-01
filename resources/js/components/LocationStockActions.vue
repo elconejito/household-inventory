@@ -2,7 +2,7 @@
 import FormModal from './FormModal.vue';
 import { computed, ref, watch } from 'vue';
 import { useStockItemQuery } from '../queries/stock';
-import { buildLocationPath, type InventoryLevel, type Location } from '../api/stock';
+import { buildLocationPath, compareLocationPaths, type InventoryLevel, type Location } from '../api/stock';
 import type { CatalogInventoryLevel } from '../api/catalog';
 import type { FormErrors } from '../lib/api-errors';
 
@@ -34,8 +34,10 @@ const confirmed = ref(false);
 const activeAction = computed(() => props.activeAction?.levelId === props.level.id ? props.activeAction.action : null);
 const detailItemId = computed(() => activeAction.value === 'move-in' ? props.level.item.id : '');
 const itemDetailQuery = useStockItemQuery(detailItemId);
-const sourceLevels = computed(() => (itemDetailQuery.data.value?.inventory_levels ?? []).filter((source: InventoryLevel) => source.quantity > 0 && source.location.id !== props.level.location.id));
-const destinationLocations = computed(() => props.locations.filter((location) => location.id !== props.level.location.id));
+const sourceLevels = computed(() => (itemDetailQuery.data.value?.inventory_levels ?? []).filter((source: InventoryLevel) => source.quantity > 0 && source.location.id !== props.level.location.id)
+    .sort((first, second) => compareLocationPaths(first.location, second.location, props.locations)));
+const destinationLocations = computed(() => props.locations.filter((location) => location.id !== props.level.location.id)
+    .sort((first, second) => compareLocationPaths(first, second, props.locations)));
 const selectedSource = computed(() => sourceLevels.value.find((source) => source.location.id === sourceLocationId.value));
 const quantityValue = computed(() => Number(quantity.value));
 const validQuantity = computed(() => Number.isInteger(quantityValue.value) && quantityValue.value > 0 && (activeAction.value === 'move-out' ? quantityValue.value <= props.level.quantity : activeAction.value === 'move-in' ? Boolean(selectedSource.value && quantityValue.value <= selectedSource.value.quantity) : true));

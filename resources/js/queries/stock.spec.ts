@@ -43,6 +43,27 @@ describe('catalog picker queries', () => {
         expect(http.get).toHaveBeenCalledWith('/items', expect.objectContaining({ params: expect.objectContaining({ page: 1, per_page: 100, include: '' }) }));
     });
 
+    it('sorts location choices across every API page by the displayed hierarchy path', async () => {
+        vi.mocked(http.get).mockImplementation(async (_url, config) => {
+            const page = Number((config?.params as { page?: number } | undefined)?.page);
+            return { data: { data: page === 1 ? [
+                { id: '3', name: 'Pantry', description: null, parent: { id: '2', name: 'Kitchen', description: null } },
+                { id: '2', name: 'Kitchen', description: null, parent: null },
+            ] : [{ id: '1', name: 'Attic', description: null, parent: null }], meta: { last_page: 2 } } };
+        });
+        const component = defineComponent({
+            setup() {
+                const locations = useLocationsQuery();
+                return () => locations.data.value?.map((location) => location.name).join(', ') ?? '';
+            },
+        });
+        wrapper = mount(component, { global: { plugins: [[VueQueryPlugin, { queryClient: client }]] } });
+        await flushPromises();
+
+        expect(wrapper.text()).toBe('Attic, Kitchen, Pantry');
+        expect(http.get).toHaveBeenCalledTimes(2);
+    });
+
     it('loads item choices beyond the first page without unrelated relationships', async () => {
         vi.mocked(http.get).mockImplementation(async (_url, config) => {
             const page = Number((config?.params as { page?: number } | undefined)?.page);
