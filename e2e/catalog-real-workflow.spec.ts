@@ -14,7 +14,7 @@ async function registerHousehold(page: Page, suffix: string): Promise<void> {
 }
 
 async function addCategory(page: Page, name: string): Promise<void> {
-    await page.goto('/inventory/categories');
+    await page.goto('/categories');
     await page.getByRole('button', { name: 'Add category', exact: true }).first().click();
     await page.getByLabel(/^Category name/).fill(name);
     await page.getByRole('button', { name: 'Save category', exact: true }).click();
@@ -22,7 +22,7 @@ async function addCategory(page: Page, name: string): Promise<void> {
 }
 
 async function addLocation(page: Page, name: string, parent?: string): Promise<void> {
-    await page.goto('/inventory/locations');
+    await page.goto('/locations');
     await page.getByRole('button', { name: 'Add location', exact: true }).first().click();
     await page.getByLabel(/^Location name/).fill(name);
     if (parent) await page.getByLabel(/^Parent location/).selectOption({ label: parent });
@@ -31,7 +31,7 @@ async function addLocation(page: Page, name: string, parent?: string): Promise<v
 }
 
 async function setUpAndRestock(page: Page, locationId: string, itemId: string, quantity: number): Promise<void> {
-    await page.goto(`/inventory/${itemId}`);
+    await page.goto(`/items/${itemId}`);
     await page.getByRole('button', { name: 'Set up a stock location', exact: true }).click();
     const setup = page.getByRole('dialog', { name: 'Set up stock location', exact: true });
     await setup.getByLabel('Location', { exact: true }).selectOption(locationId);
@@ -65,7 +65,7 @@ test('creates and edits a catalog, assigns equal categories, and distinguishes p
     const basementId = locations.find((location) => location.name === 'Basement')!.id;
     const binId = locations.find((location) => location.name === 'Bin')!.id;
 
-    await page.getByRole('navigation', { name: 'Inventory browsing' }).getByRole('link', { name: 'Items', exact: true }).click();
+    await page.getByRole('navigation', { name: 'Main navigation' }).first().getByRole('link', { name: 'Items', exact: true }).click();
     await page.getByRole('button', { name: 'Add item', exact: true }).click();
     await page.getByRole('textbox', { name: /^Name/ }).fill(itemName);
     await page.getByRole('textbox', { name: /^Counting unit/ }).fill('hose');
@@ -74,7 +74,7 @@ test('creates and edits a catalog, assigns equal categories, and distinguishes p
     await page.getByRole('button', { name: 'Save item', exact: true }).click();
     await expect(page.getByRole('heading', { level: 1, name: itemName, exact: true })).toBeVisible();
     const itemUrl = page.url().split('?')[0]!;
-    expect(itemUrl).toMatch(/^.*\/inventory\/\d+$/);
+    expect(itemUrl).toMatch(/^.*\/items\/\d+$/);
     const itemId = itemUrl.split('/').at(-1)!;
 
     await page.getByRole('button', { name: 'Edit item', exact: true }).click();
@@ -132,7 +132,7 @@ test('creates and edits a catalog, assigns equal categories, and distinguishes p
     await expect(binStock).toContainText('4 hoses');
     await page.screenshot({ path: testInfo.outputPath('location-row-actions.png'), fullPage: true });
 
-    await page.goto('/inventory');
+    await page.goto('/items');
     await page.getByRole('button', { name: 'Filters', exact: true }).click();
     await page.getByLabel('Category', { exact: true }).selectOption({ label: 'Garden supplies' });
     await page.getByLabel('Location', { exact: true }).selectOption({ label: 'Basement' });
@@ -141,7 +141,7 @@ test('creates and edits a catalog, assigns equal categories, and distinguishes p
     await expect(page.getByText('11 hoses total on hand', { exact: true })).toBeVisible();
     await page.screenshot({ path: testInfo.outputPath('inventory-filtered-desktop.png'), fullPage: true });
 
-    await page.goto('/inventory/categories');
+    await page.goto('/categories');
     await page.getByRole('link', { name: 'Garden supplies', exact: true }).click();
     const categoryItems = page.getByRole('region', { name: 'Items in this category', exact: true });
     await expect(categoryItems).toContainText('11 hoses total on hand');
@@ -158,7 +158,7 @@ test('creates and edits a catalog, assigns equal categories, and distinguishes p
     await page.getByRole('button', { name: 'Save changes', exact: true }).click();
     expect((await categoryPatch).postDataJSON()).toEqual({ data: { category_ids: [] } });
 
-    await page.goto('/inventory/categories');
+    await page.goto('/categories');
     await page.getByRole('link', { name: 'Garden supplies', exact: true }).click();
     await expect(page.getByRole('region', { name: 'Items in this category', exact: true })).toContainText('No items in this category yet');
     await page.getByRole('button', { name: 'Edit category', exact: true }).click();

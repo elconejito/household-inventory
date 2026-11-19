@@ -28,7 +28,7 @@ describe('application shell', () => {
             status: 'authenticated',
         });
 
-        await router.push('/inventory');
+        await router.push('/items');
         await router.isReady();
 
         const wrapper = mount(App, {
@@ -41,11 +41,18 @@ describe('application shell', () => {
         expect(document.activeElement).toBe(document.body);
         expect(wrapper.get('a[href="#main-content"]').text()).toBe('Skip to main content');
         expect(wrapper.get('main#main-content').attributes('tabindex')).toBe('-1');
-        expect(wrapper.get('h1').text()).toBe('Inventory');
-        expect(wrapper.get('a[href="/inventory"]').attributes('aria-current')).toBe('page');
+        expect(wrapper.get('h1').text()).toBe('Items');
+        expect(wrapper.get('a[href="/items"]').attributes('aria-current')).toBe('page');
         expect(wrapper.findAll('nav a').map((link) => link.text())).toContain('Activity');
-        expect(wrapper.findAll('a[aria-label="Household Inventory home"] span').find((span) => span.text() === 'Home inventory')!.classes()).toContain('max-[360px]:hidden');
-        expect(wrapper.get('header .bg-sage-soft').classes()).toContain('max-[360px]:hidden');
+        expect(wrapper.get('a[aria-label="Household home"]').text()).toContain('Household');
+        expect(wrapper.get('header [role="search"] input').attributes('placeholder')).toBe('Search items');
+        expect(wrapper.get('header summary').text()).toContain('Account');
+
+        await wrapper.get('#global-search').setValue('Paper towels');
+        await wrapper.get('header [role="search"]').trigger('submit');
+        await flushPromises();
+
+        expect(router.currentRoute.value).toMatchObject({ name: 'inventory', query: { search: 'Paper towels' } });
 
         await wrapper.get('a[href="/activity"]').trigger('click');
         await flushPromises();
@@ -55,7 +62,7 @@ describe('application shell', () => {
         expect(document.activeElement).toBe(wrapper.get('h1').element);
         expect(wrapper.get('a[href="/activity"]').attributes('aria-current')).toBe('page');
 
-        const signOutButton = wrapper.get('header button').element as HTMLElement;
+        const signOutButton = wrapper.findAll('header button').find((button) => button.text() === 'Sign out')!.element as HTMLElement;
         signOutButton.focus();
         expect(document.activeElement).toBe(signOutButton);
 

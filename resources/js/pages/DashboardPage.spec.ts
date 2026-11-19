@@ -182,7 +182,7 @@ describe('dashboard finder and attention', () => {
 
         const buySoonSection = wrapper!.get('section[aria-labelledby="buysoon-heading"]');
         expect(buySoonSection.text()).toContain('Alert 9');
-        await buySoonSection.findAll('button').find((button) => button.text() === 'Next')!.trigger('click');
+        await buySoonSection.findAll('button').find((button) => button.attributes('aria-label') === 'Next')!.trigger('click');
         await flushPromises();
         expect(wrapper!.text()).toContain('Alert 10');
 

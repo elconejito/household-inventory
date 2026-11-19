@@ -130,7 +130,7 @@ describe('archived child records panel', () => {
         vi.mocked(http.delete).mockImplementation(async () => { deleted = true; return undefined as never; });
         mountPanel('notes', 'owner');
         await expand();
-        const nextPage = wrapper!.findAll('button').find((button) => button.text() === 'Next')!;
+        const nextPage = wrapper!.findAll('button').find((button) => button.attributes('aria-label') === 'Next')!;
         expect(nextPage.attributes('disabled')).toBeUndefined();
         await nextPage.trigger('click');
         await flushPromises();
@@ -145,7 +145,7 @@ describe('archived child records panel', () => {
         await flushPromises();
 
         expect(wrapper!.text()).toContain('Earlier note 1');
-        expect(wrapper!.findAll('button').find((button) => button.text() === 'Next')!.attributes('disabled')).toBeDefined();
+        expect(wrapper!.findAll('button').find((button) => button.attributes('aria-label') === 'Next')!.attributes('disabled')).toBeDefined();
     });
 
     it('invalidates the parent context that started a pending mutation', async () => {

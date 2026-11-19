@@ -106,7 +106,7 @@ describe('household settings', () => {
         await wrapper!.get('#invite-email').setValue('new@example.com');
         await wrapper!.get('section[aria-labelledby="invitations-heading"] form').trigger('submit');
         await flushPromises();
-        await wrapper!.get('section[aria-labelledby="invitations-heading"]').findAll('button').find((button) => button.text() === 'Next')!.trigger('click');
+        await wrapper!.get('section[aria-labelledby="invitations-heading"]').findAll('button').find((button) => button.attributes('aria-label') === 'Next')!.trigger('click');
         await flushPromises();
 
         expect(http.get).toHaveBeenCalledWith('/household-invitations', { params: { per_page: 10, page: 2 } });
@@ -181,7 +181,7 @@ describe('household settings', () => {
         vi.spyOn(window, 'confirm').mockReturnValue(true);
         mountPage();
         await flushPromises();
-        await wrapper!.get('section[aria-labelledby="members-heading"]').findAll('button').find((button) => button.text() === 'Next')!.trigger('click');
+        await wrapper!.get('section[aria-labelledby="members-heading"]').findAll('button').find((button) => button.attributes('aria-label') === 'Next')!.trigger('click');
         await flushPromises();
         vi.mocked(http.get).mockImplementation(async (url, config) => {
             if (url === '/household') return { data: { data: { type: 'households', id: '4', name: 'Ramos Home' } } } as never;
@@ -194,7 +194,7 @@ describe('household settings', () => {
         });
         await wrapper!.findAll('button').find((button) => button.text() === 'Remove')!.trigger('click');
         await flushPromises();
-        expect(wrapper!.findAll('button').find((button) => button.text() === 'Previous')!.attributes('disabled')).toBeDefined();
+        expect(wrapper!.findAll('button').find((button) => button.attributes('aria-label') === 'Previous')!.attributes('disabled')).toBeDefined();
         finishRemoval?.(undefined);
         await flushPromises();
 
@@ -233,7 +233,7 @@ describe('household settings', () => {
         await flushPromises();
         await wrapper!.get('select').setValue('only');
         await flushPromises();
-        await wrapper!.get('section[aria-labelledby="members-heading"]').findAll('button').find((button) => button.text() === 'Next')!.trigger('click');
+        await wrapper!.get('section[aria-labelledby="members-heading"]').findAll('button').find((button) => button.attributes('aria-label') === 'Next')!.trigger('click');
         await flushPromises();
         await wrapper!.findAll('button').find((button) => button.text() === 'Restore')!.trigger('click');
         await flushPromises();

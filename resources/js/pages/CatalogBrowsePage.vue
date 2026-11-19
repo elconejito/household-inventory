@@ -8,7 +8,6 @@ import { buildLocationPath, type Location as StockLocation } from '../api/stock'
 import { parseApiErrors, type FormErrors } from '../lib/api-errors';
 import { useCategoriesCatalogQuery, useCreateCatalogLocationMutation, useCreateCategoryMutation, useLocationsCatalogQuery } from '../queries/catalog';
 import { useLocationsQuery } from '../queries/stock';
-import InventoryTabs from '../components/InventoryTabs.vue';
 
 const pageSizes = [10, 25, 50, 100];
 const route = useRoute();
@@ -170,8 +169,6 @@ async function browseChildren(id: string): Promise<void> {
                 {{ isCategoriesPage ? 'Add category' : 'Add location' }}
             </button>
         </div>
-
-        <InventoryTabs />
 
         <div v-if="!isCategoriesPage && locationOptions.isError.value" class="mt-5 rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900" role="alert">
             <p>Location hierarchy could not be loaded. Location names may not show their full paths.</p>

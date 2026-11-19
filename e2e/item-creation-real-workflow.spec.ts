@@ -108,7 +108,7 @@ test('saves an item with an optional primary photo and opens its detail page', a
     });
 
     await page.getByRole('button', { name: 'Save item', exact: true }).click();
-    await expect(page).toHaveURL(/\/inventory\/\d+$/);
+    await expect(page).toHaveURL(/\/items\/\d+$/);
     await expect(page.getByRole('heading', { level: 1, name: itemName, exact: true })).toBeVisible();
     expect(requests.items).toHaveLength(1);
     expect(requests.photos).toHaveLength(1);
@@ -189,7 +189,7 @@ test('retries a failed optional photo upload without creating a second item', as
     const createdItem = (await creationResponse).json().then((body) => body.data as { id: string });
     await expect(page.getByRole('button', { name: 'Retry photo upload', exact: true })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Continue without photo', exact: true })).toBeVisible();
-    expect(new URL(page.url()).pathname).toBe('/inventory');
+    expect(new URL(page.url()).pathname).toBe('/items');
     await expect(page.getByRole('heading', { level: 2, name: itemName, exact: true })).toBeVisible();
     expect(requests.items).toHaveLength(1);
     const itemId = (await createdItem).id;
@@ -206,7 +206,7 @@ test('retries a failed optional photo upload without creating a second item', as
     const retryResponse = page.waitForResponse((response) => response.request().method() === 'POST' && new URL(response.url()).pathname === `/api/items/${itemId}/images`);
     await page.getByRole('button', { name: 'Retry photo upload', exact: true }).click();
     expect((await retryResponse).status()).toBe(201);
-    await expect(page).toHaveURL(`/inventory/${itemId}`);
+    await expect(page).toHaveURL(`/items/${itemId}`);
     await expect(page.getByRole('button', { name: 'Retry photo upload', exact: true })).toHaveCount(0);
     expect(requests.items).toHaveLength(1);
     expect(requests.photos).toHaveLength(2);
@@ -261,7 +261,7 @@ test('continues without a failed optional photo and preserves the add-stock inte
     expect(itemPayload.data).not.toHaveProperty('image');
     const savedItemId = (await createdItem).id;
     await page.getByRole('button', { name: 'Continue without photo', exact: true }).click();
-    await expect(page).toHaveURL(/\/inventory\/\d+\?restock=1$/);
+    await expect(page).toHaveURL(/\/items\/\d+\?restock=1$/);
     await expect(page.locator('#new-level-location')).toBeVisible();
     const createdItemId = new URL(page.url()).pathname.split('/').at(-1)!;
     expect(createdItemId).toBe(savedItemId);

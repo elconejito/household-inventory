@@ -164,7 +164,7 @@ describe('category and location note contexts', () => {
         await wrapper!.findAll('button').find((button) => button.text() === 'Add to category')!.trigger('click');
         await flushPromises();
         expect(wrapper!.text()).toContain('Page 1 of 2');
-        const nextPage = wrapper!.findAll('button').find((button) => button.text() === 'Next')!;
+        const nextPage = wrapper!.findAll('button').find((button) => button.attributes('aria-label') === 'Next')!;
         await nextPage.trigger('click');
         await flushPromises();
         expect(wrapper!.text()).toContain('Page 2 of 2');

@@ -27,10 +27,10 @@ describe('session route guards', () => {
         const router = createRouter({ history: createMemoryHistory(), routes });
         installSessionGuards(router);
 
-        await router.push('/inventory');
+        await router.push('/items');
 
         expect(router.currentRoute.value.name).toBe('login');
-        expect(router.currentRoute.value.query.redirect).toBe('/inventory');
+        expect(router.currentRoute.value.query.redirect).toBe('/items');
         expect(http.get).toHaveBeenCalledWith('/user', {
             params: { include: 'membership.household' },
         });
@@ -54,10 +54,10 @@ describe('session route guards', () => {
         const router = createRouter({ history: createMemoryHistory(), routes });
         installSessionGuards(router);
 
-        await router.push('/inventory?create=1');
+        await router.push('/items?create=1');
 
         expect(router.currentRoute.value.name).toBe('session-unavailable');
-        expect(useSessionStore().pendingDestination).toBe('/inventory?create=1');
+        expect(useSessionStore().pendingDestination).toBe('/items?create=1');
     });
 
     it('keeps invitation credentials in the fragment while session lookup recovers', async () => {

@@ -52,7 +52,7 @@ test('identifies an item with private photos and preserves editable multiline no
     await expect(page).toHaveURL('/');
 
     const item = await createResource(page, 'items', { name: itemName, counting_unit: 'filter' });
-    await page.goto(`/inventory/${item.id}`);
+    await page.goto(`/items/${item.id}`);
     await expect(page.getByRole('heading', { name: itemName, exact: true })).toBeVisible();
 
     const notes = page.getByRole('region', { name: 'Notes', exact: true });

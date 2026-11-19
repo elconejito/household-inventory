@@ -44,7 +44,7 @@ test('connects five recent item movements to linkable, paginated and locally dat
     await createResource(page, 'inventory-movements', { movement_type: 'restock', item_id: other.id, location_id: basement.id, quantity: 1 });
     await createResource(page, 'inventory-movements', { movement_type: 'transfer', item_id: item.id, source_location_id: basement.id, destination_location_id: pantry.id, quantity: 3 });
 
-    await page.goto(`/inventory/${item.id}`);
+    await page.goto(`/items/${item.id}`);
     const recent = page.getByRole('region', { name: 'Recent activity', exact: true });
     await expect(recent.locator('article')).toHaveCount(5);
     await expect(recent).toContainText('Transfer');

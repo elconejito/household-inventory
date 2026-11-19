@@ -23,7 +23,7 @@ test('records a one tap stock use from an item detail page', async ({ page }) =>
         await route.fulfill({ status: 201, json: { data: { id: '22' } } });
     });
 
-    await page.goto('/inventory/7');
+    await page.goto('/items/7');
     await expect(page.getByRole('heading', { level: 1, name: 'Batteries' })).toBeVisible();
     await page.getByRole('button', { name: 'Use 1' }).click();
     await expect(page.getByRole('status').filter({ hasText: 'Used 1 pack from Pantry.' })).toBeVisible();

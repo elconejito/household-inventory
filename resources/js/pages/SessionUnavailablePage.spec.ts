@@ -20,14 +20,14 @@ describe('session recovery page', () => {
             .mockResolvedValueOnce({ data: { data: { id: '3', name: 'Taylor', email: 'taylor@example.test', membership: { role: 'owner', household: { id: '2', name: 'Home' } } } } } as never);
         const router = createRouter({ history: createMemoryHistory(), routes });
         installSessionGuards(router);
-        useSessionStore().rememberPendingDestination('/inventory?create=1');
+        useSessionStore().rememberPendingDestination('/items?create=1');
         await router.push('/session-unavailable');
         const wrapper = mount(SessionUnavailablePage, { global: { plugins: [router] } });
 
         await wrapper.get('button').trigger('click');
         await flushPromises();
 
-        expect(router.currentRoute.value.fullPath).toBe('/inventory?create=1');
+        expect(router.currentRoute.value.fullPath).toBe('/items?create=1');
         expect(useSessionStore().pendingDestination).toBeNull();
         expect(wrapper.text()).not.toContain('We still couldn’t reach the server.');
         wrapper.unmount();

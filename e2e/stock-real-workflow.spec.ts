@@ -67,7 +67,7 @@ test('registers a household and manages real inventory stock and activity', asyn
     await page.getByRole('textbox', { name: /^Name/ }).fill(itemName);
     await page.getByRole('textbox', { name: /^Counting unit/ }).fill('bottle');
     await page.getByRole('button', { name: 'Save and add stock', exact: true }).click();
-    await expect(page).toHaveURL(/\/inventory\/\d+\?restock=1$/);
+    await expect(page).toHaveURL(/\/items\/\d+\?restock=1$/);
     await expect(page.locator('#new-level-location')).toBeVisible();
     const itemId = new URL(page.url()).pathname.split('/').at(-1)!;
     await page.locator('#new-level-location').selectOption({ label: 'Basement' });
@@ -114,7 +114,7 @@ test('registers a household and manages real inventory stock and activity', asyn
     const itemUrl = page.url();
     await page.getByRole('button', { name: 'Mark Buy soon', exact: true }).click();
     await expect(page.getByRole('button', { name: 'Resolve Buy soon', exact: true })).toBeVisible();
-    await page.goto('/inventory');
+    await page.goto('/items');
     const inventoryRow = page.locator('article').filter({ has: page.getByRole('link', { name: itemName, exact: true }) });
     await expect(inventoryRow).toContainText('Buy soon');
     await expect(inventoryRow).toContainText('Out of stock');
@@ -126,7 +126,7 @@ test('registers a household and manages real inventory stock and activity', asyn
     await page.goto(itemUrl);
     await page.getByRole('button', { name: 'Resolve Buy soon', exact: true }).click();
     await expect(page.getByRole('button', { name: 'Mark Buy soon', exact: true })).toBeVisible();
-    await page.goto('/inventory');
+    await page.goto('/items');
     await expect(inventoryRow).not.toContainText('Buy soon');
     await expect(inventoryRow).toContainText('Out of stock');
 

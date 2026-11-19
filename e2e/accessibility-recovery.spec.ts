@@ -57,7 +57,7 @@ test('supports keyboard skip navigation and moves focus to the heading after a r
     });
 
     await page.setViewportSize({ width: 1280, height: 800 });
-    await page.goto('/inventory/locations?parent=1');
+    await page.goto('/locations?parent=1');
     await expect(page.getByRole('heading', { level: 1, name: 'Locations', exact: true })).toBeVisible();
 
     await page.keyboard.press('Tab');
@@ -92,7 +92,7 @@ test('recovers the catalog location hierarchy query without losing visible child
         } });
     });
 
-    await page.goto('/inventory/locations?parent=1');
+    await page.goto('/locations?parent=1');
     const pantryLink = page.getByRole('link', { name: 'Pantry', exact: true });
     await expect(pantryLink).toBeVisible();
     const hierarchyAlert = page.getByRole('alert').filter({ hasText: 'Location hierarchy could not be loaded. Location names may not show their full paths.' });

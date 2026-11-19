@@ -121,7 +121,7 @@ test('filters stock and attention across item-wide levels while preserving combi
     }
     expect(pageOnlyItems).toHaveLength(11);
 
-    await page.goto('/inventory');
+    await page.goto('/items');
     const inventory = page.getByRole('region', { name: 'Your items', exact: true });
     const stockFilter = page.locator('#item-stock-filter');
     const attentionFilter = page.locator('#item-attention-filter');

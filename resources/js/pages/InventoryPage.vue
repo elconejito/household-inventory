@@ -7,7 +7,6 @@ import { parseApiErrors } from '../lib/api-errors';
 import { useItemCategoryOptionsQuery, useItemsQuery } from '../queries/items';
 import { useLocationsQuery } from '../queries/stock';
 import ItemCreationPanel from '../components/ItemCreationPanel.vue';
-import InventoryTabs from '../components/InventoryTabs.vue';
 import ItemStockSummary from '../components/ItemStockSummary.vue';
 import StockStatusBadge from '../components/StockStatusBadge.vue';
 import { buildLocationPath } from '../api/stock';
@@ -47,6 +46,13 @@ watch(() => route.query.create, (value) => {
     if (value === '1') {
         showCreateForm.value = true;
     }
+}, { immediate: true });
+
+watch(() => route.query.search, (value) => {
+    const searchQuery = typeof value === 'string' ? value : '';
+    search.value = searchQuery;
+    debouncedSearch.value = searchQuery.trim();
+    page.value = 1;
 }, { immediate: true });
 
 watch(search, (value) => {
@@ -114,7 +120,7 @@ function errorMessage(): string {
     <section aria-labelledby="page-title">
         <div class="flex flex-wrap items-end justify-between gap-4">
             <div>
-                <h1 id="page-title" class="page-title">Inventory</h1>
+                <h1 id="page-title" class="page-title">Items</h1>
             </div>
             <button
                 type="button"
@@ -128,8 +134,6 @@ function errorMessage(): string {
                 Add item
             </button>
         </div>
-
-        <InventoryTabs />
 
         <FormModal v-if="showCreateForm" label="Add item" :busy="creationBusy" @close="showCreateForm = false">
             <ItemCreationPanel @busy="creationBusy = $event" @cancel="showCreateForm = false" />

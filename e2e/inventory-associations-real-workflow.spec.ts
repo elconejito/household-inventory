@@ -50,7 +50,7 @@ test('sets up zero-stock parent and child locations with explicit monitoring and
         }
     });
 
-    await page.goto(`/inventory/${item.id}`);
+    await page.goto(`/items/${item.id}`);
     await page.getByRole('button', { name: 'Set up a stock location', exact: true }).click();
     await page.locator('#setup-location').selectOption({ label: 'Basement' });
     await expect(page.locator('#setup-threshold')).toHaveValue('');

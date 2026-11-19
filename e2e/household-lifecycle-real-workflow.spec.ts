@@ -70,7 +70,7 @@ test('invites a member, revokes and restores their access, and permanently delet
         await memberPage.getByLabel('Confirm password').fill('Shared-home-Password-2');
         await memberPage.getByRole('button', { name: 'Create account and join', exact: true }).click();
         await expect(memberPage).toHaveURL('/');
-        await memberPage.goto(`/inventory/${item.id}`);
+        await memberPage.goto(`/items/${item.id}`);
         await memberPage.getByRole('button', { name: 'Use 1', exact: true }).click();
         await expect(memberPage.getByRole('status').filter({ hasText: 'Used 1 roll' })).toBeVisible();
         await memberPage.goto('/settings');
@@ -95,10 +95,10 @@ test('invites a member, revokes and restores their access, and permanently delet
         await expect(memberRow).toHaveCount(0);
         expect((await api(memberPage, 'GET', 'items')).status()).toBe(200);
 
-        await page.goto(`/inventory/${item.id}`);
+        await page.goto(`/items/${item.id}`);
         page.once('dialog', (dialog) => dialog.accept());
         await page.getByRole('button', { name: 'Archive item', exact: true }).click();
-        await expect(page).toHaveURL('/inventory');
+        await expect(page).toHaveURL('/items');
         await page.goto('/settings/archives');
         const itemRow = page.getByRole('listitem').filter({ hasText: itemName });
         await expect(itemRow).toBeVisible();

@@ -94,7 +94,7 @@ describe('notes panel', () => {
         vi.mocked(http.delete).mockImplementation(async () => { deleted = true; return undefined as never; });
         mountPanel();
         await flushPromises();
-        await wrapper!.findAll('button').find((button) => button.text() === 'Next')!.trigger('click');
+        await wrapper!.findAll('button').find((button) => button.attributes('aria-label') === 'Next')!.trigger('click');
         await flushPromises();
         expect(wrapper!.text()).toContain('Last note');
 

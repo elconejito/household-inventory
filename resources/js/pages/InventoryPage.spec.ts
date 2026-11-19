@@ -35,7 +35,7 @@ describe('inventory page', () => {
     });
 
     async function clickButton(label: string): Promise<void> {
-        const button = wrapper!.findAll('button').find((candidate) => candidate.text() === label);
+        const button = wrapper!.findAll('button').find((candidate) => candidate.text() === label || candidate.attributes('aria-label') === label);
         expect(button, `button labeled ${label}`).toBeDefined();
         await button!.trigger('click');
     }
@@ -252,8 +252,8 @@ describe('inventory page', () => {
         expect(wrapper.get('[popovertarget="inventory-filters"]').text()).toBe('Filters');
         expect(wrapper.get('#inventory-filters').attributes('popover')).toBeDefined();
         expect(wrapper.text()).toContain('1 item · Page 1 of 1');
-        expect(wrapper.findAll('button').find((button) => button.text() === 'Previous')!.attributes('disabled')).toBeDefined();
-        expect(wrapper.findAll('button').find((button) => button.text() === 'Next')!.attributes('disabled')).toBeDefined();
+        expect(wrapper.findAll('button').find((button) => button.attributes('aria-label') === 'Previous')!.attributes('disabled')).toBeDefined();
+        expect(wrapper.findAll('button').find((button) => button.attributes('aria-label') === 'Next')!.attributes('disabled')).toBeDefined();
         expect(row.classes()).not.toContain('sm:grid-cols-[3.5rem_minmax(0,calc((100%_-_24.5rem)*13/23))_minmax(0,1fr)_minmax(0,0.65fr)]');
         expect(row.classes()).toContain('sm:grid-cols-[minmax(0,calc((100%_-_20rem)*13/23))_minmax(0,1fr)_minmax(0,0.65fr)]');
         expect(wrapper.findAll('div[aria-hidden="true"]').some((element) => element.classes().includes('grid-cols-[minmax(0,calc((100%_-_20rem)*13/23))_minmax(0,1fr)_minmax(0,0.65fr)]'))).toBe(true);

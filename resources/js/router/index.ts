@@ -48,14 +48,14 @@ export const routes: RouteRecordRaw[] = [
                 component: DashboardPage,
             },
             {
-                path: 'inventory',
+                path: 'items',
                 name: 'inventory',
                 component: InventoryPage,
             },
-            { path: 'inventory/locations', name: 'catalog-locations', component: CatalogBrowsePage },
-            { path: 'inventory/categories', name: 'catalog-categories', component: CatalogBrowsePage },
+            { path: 'locations', name: 'catalog-locations', component: CatalogBrowsePage },
+            { path: 'categories', name: 'catalog-categories', component: CatalogBrowsePage },
             {
-                path: 'inventory/:item',
+                path: 'items/:item',
                 name: 'inventory-item',
                 component: ItemDetailPage,
             },
