@@ -37,6 +37,17 @@ describe('notes panel', () => {
         expect(wrapper!.find('article').exists()).toBe(true);
     });
 
+    it('requests the selected note page size and resets to the first page', async () => {
+        mountPanel();
+        await flushPromises();
+
+        await wrapper!.get('section[aria-label="Notes"] select').setValue('25');
+        await flushPromises();
+
+        expect(http.get).toHaveBeenLastCalledWith('/items/7/notes', { params: { include: 'created_by', per_page: 25, page: 1 } });
+        expect(wrapper!.text()).toContain('Page 1 of 1');
+    });
+
     it('adds notes and patches only when the edited body changed', async () => {
         mountPanel();
         await flushPromises();

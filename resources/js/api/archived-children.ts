@@ -14,6 +14,7 @@ export async function getArchivedChildren(
     contextId: string,
     kind: ArchivedChildKind,
     page: number,
+    perPage = 10,
 ): Promise<ArchivedChildPage> {
     const isNote = kind === 'notes';
     const url = isNote
@@ -21,7 +22,7 @@ export async function getArchivedChildren(
         : `/items/${contextId}/images`;
     const include = isNote ? 'created_by' : 'uploaded_by';
     const response = await http.get<ArchivedChildPage>(url, {
-        params: { include, 'filter[trashed]': 'only', per_page: 10, page },
+        params: { include, 'filter[trashed]': 'only', per_page: perPage, page },
     });
 
     return response.data;

@@ -2,12 +2,12 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query';
 import { computed, type ComputedRef } from 'vue';
 import { createNote, deleteNote, getNotes, updateNote, type NoteContextType } from '../api/notes';
 
-export const noteQueryKey = (type: NoteContextType, id: string, page: number) => ['notes', type, id, page] as const;
+export const noteQueryKey = (type: NoteContextType, id: string, page: number, perPage: number) => ['notes', type, id, page, perPage] as const;
 
-export function useNotesQuery(type: NoteContextType, id: ComputedRef<string>, page: ComputedRef<number>, enabled?: ComputedRef<boolean>) {
+export function useNotesQuery(type: NoteContextType, id: ComputedRef<string>, page: ComputedRef<number>, perPage: ComputedRef<number>, enabled?: ComputedRef<boolean>) {
     return useQuery({
-        queryKey: computed(() => noteQueryKey(type, id.value, page.value)),
-        queryFn: () => getNotes(type, id.value, page.value),
+        queryKey: computed(() => noteQueryKey(type, id.value, page.value, perPage.value)),
+        queryFn: () => getNotes(type, id.value, page.value, perPage.value),
         enabled: computed(() => Boolean(id.value) && (enabled?.value ?? true)),
     });
 }

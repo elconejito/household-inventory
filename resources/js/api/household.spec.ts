@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { http, requestCsrfCookie } from '../lib/http';
-import { acceptInvitation, getInvitations } from './household';
+import { acceptInvitation, getInvitations, getMembers } from './household';
 
 vi.mock('../lib/http', () => ({
     http: { get: vi.fn(), post: vi.fn(), patch: vi.fn(), delete: vi.fn() },
@@ -29,5 +29,15 @@ describe('household invitation API', () => {
         await expect(getInvitations(3)).resolves.toEqual(result);
 
         expect(http.get).toHaveBeenCalledWith('/household-invitations', { params: { per_page: 10, page: 3 } });
+    });
+
+    it('applies the selected page size to invitation and membership requests', async () => {
+        vi.mocked(http.get).mockResolvedValue({ data: { data: [], meta: { current_page: 1, last_page: 1, total: 0 } } } as never);
+
+        await getInvitations(1, 50);
+        await getMembers(2, 'only', 25);
+
+        expect(http.get).toHaveBeenNthCalledWith(1, '/household-invitations', { params: { per_page: 50, page: 1 } });
+        expect(http.get).toHaveBeenNthCalledWith(2, '/memberships', { params: { include: 'user', 'filter[trashed]': 'only', per_page: 25, page: 2 } });
     });
 });

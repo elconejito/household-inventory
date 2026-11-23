@@ -14,17 +14,18 @@ const movements = Array.from({ length: 10 }, (_, index) => ({
 }));
 
 describe('RecentItemMovements', () => {
-    it('requests ten item records and presents only the five newest with the all activity link', async () => {
+    it('requests and paginates item movements with the all activity link', async () => {
         const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
         vi.mocked(http.get).mockResolvedValue({ data: { data: movements, meta: { current_page: 1, last_page: 3, total: 21 } } } as never);
         const wrapper = mount(RecentItemMovements, { props: { itemId: '7' }, global: { plugins: [[VueQueryPlugin, { queryClient }]], stubs: { RouterLink: { props: ['to'], template: '<a :data-route="JSON.stringify(to)"><slot /></a>' } } } });
         await flushPromises();
 
         expect(http.get).toHaveBeenCalledWith('/inventory-movements', { params: { include: 'item,entries.location,recorded_by', per_page: 10, page: 1, 'filter[item_id]': '7' } });
-        expect(wrapper.findAll('article')).toHaveLength(5);
+        expect(wrapper.findAll('article')).toHaveLength(10);
         expect(wrapper.text()).toContain('1 after');
         expect(wrapper.text()).toContain('5 after');
-        expect(wrapper.text()).not.toContain('6 after');
+        expect(wrapper.text()).toContain('10 after');
+        expect(wrapper.text()).toContain('Page 1 of 3');
         expect(wrapper.get('a').attributes('data-route')).toContain('"name":"activity"');
         expect(wrapper.get('a').attributes('data-route')).toContain('"item_id":"7"');
         wrapper.unmount();

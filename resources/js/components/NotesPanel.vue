@@ -8,13 +8,14 @@ import ArchivedChildRecordsPanel from './ArchivedChildRecordsPanel.vue';
 
 const props = defineProps<{ type: NoteContextType; contextId: string }>();
 const page = ref(1);
+const perPage = ref(10);
 const body = ref('');
 const editingId = ref<string | null>(null);
 const editBody = ref('');
 const error = ref('');
 const contextId = computed(() => props.contextId);
 const currentPage = computed(() => page.value);
-const notesQuery = useNotesQuery(props.type, contextId, currentPage);
+const notesQuery = useNotesQuery(props.type, contextId, currentPage, computed(() => perPage.value));
 const mutations = useNoteMutations(props.type, contextId);
 const pending = computed(() => mutations.create.isPending.value || mutations.update.isPending.value || mutations.remove.isPending.value);
 const notes = computed(() => notesQuery.data.value?.data ?? []);
@@ -27,6 +28,7 @@ watch(() => notesQuery.data.value?.meta.last_page, (lastPage) => {
 watch(() => [props.type, props.contextId], () => {
     contextGeneration++;
     page.value = 1;
+    perPage.value = 10;
     body.value = '';
     editingId.value = null;
     editBody.value = '';
@@ -125,7 +127,7 @@ async function removeNote(noteId: string): Promise<void> {
                 </template>
             </li>
         </ol>
-        <ListPagination v-if="notesQuery.data.value" :meta="notesQuery.data.value.meta" :page="page" :busy="notesQuery.isFetching.value" singular="note" plural="notes" @change="page = $event" />
+        <ListPagination v-if="notesQuery.data.value" v-model:per-page="perPage" :meta="notesQuery.data.value.meta" :page="page" :busy="notesQuery.isFetching.value" singular="note" plural="notes" @change="page = $event" />
         <ArchivedChildRecordsPanel :context-type="type" :context-id="contextId" kind="notes" />
     </section>
 </template>

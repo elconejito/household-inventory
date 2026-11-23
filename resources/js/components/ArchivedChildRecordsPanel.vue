@@ -17,16 +17,17 @@ const props = defineProps<{
 const session = useSessionStore();
 const client = useQueryClient();
 const page = ref(1);
+const perPage = ref(10);
 const expanded = ref(false);
 const error = ref('');
 const confirmingId = ref<string | null>(null);
 const confirmationText = ref('');
 const owner = computed(() => session.user?.membership?.role === 'owner');
 const label = computed(() => props.kind === 'notes' ? 'notes' : 'photos');
-const queryKey = computed(() => ['archived-child-records', props.kind, props.contextType, props.contextId, page.value] as const);
+const queryKey = computed(() => ['archived-child-records', props.kind, props.contextType, props.contextId, page.value, perPage.value] as const);
 const query = useQuery({
     queryKey,
-    queryFn: () => getArchivedChildren(props.contextType, props.contextId, props.kind, page.value),
+    queryFn: () => getArchivedChildren(props.contextType, props.contextId, props.kind, page.value, perPage.value),
     enabled: computed(() => expanded.value && Boolean(props.contextId)),
 });
 
@@ -79,6 +80,7 @@ watch(lastPage, (value) => {
 
 watch(() => [props.contextType, props.contextId, props.kind], () => {
     page.value = 1;
+    perPage.value = 10;
     expanded.value = false;
     error.value = '';
     confirmingId.value = null;
@@ -181,6 +183,6 @@ function imageRows(items: Array<Note | ItemImage>): ItemImage[] {
             </li>
         </ol>
 
-        <ListPagination v-if="expanded && query.data.value" :meta="query.data.value.meta" :page="page" :busy="query.isFetching.value || pending" singular="record" plural="records" @change="page = $event" />
+        <ListPagination v-if="expanded && query.data.value" v-model:per-page="perPage" :meta="query.data.value.meta" :page="page" :busy="query.isFetching.value || pending" singular="record" plural="records" @change="page = $event" />
     </details>
 </template>
