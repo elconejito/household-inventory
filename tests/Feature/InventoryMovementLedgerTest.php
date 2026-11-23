@@ -80,6 +80,44 @@ class InventoryMovementLedgerTest extends TestCase
         $this->assertSame(12, $level->fresh()->quantity);
     }
 
+    public function test_shelf_count_tracks_zero_and_repeated_observations_change_only_this_shelf(): void
+    {
+        [$user, $household, $item] = $this->inventoryContext();
+        $shelf = $household->locations()->create(['name' => 'Shelf']);
+        $cabinet = $household->locations()->create(['name' => 'Cabinet']);
+        $this->actingAs($user, 'web');
+        $this->postJson('/api/inventory-levels', ['data' => ['item_id' => $item->id, 'location_id' => $cabinet->id, 'opening_quantity' => 9, 'alert_threshold' => 3]])
+            ->assertCreated()->assertJsonPath('data.quantity', 9)->assertJsonPath('data.alert_threshold', 3);
+        $url = "/api/locations/{$shelf->id}/items/{$item->id}/count";
+        $this->putJson($url, ['data' => ['observed_quantity' => 0]])->assertOk()->assertJsonPath('data.quantity', 0);
+        $this->assertDatabaseCount('inventory_movements', 1);
+        $this->putJson($url, ['data' => ['observed_quantity' => 3]])->assertOk()->assertJsonPath('data.quantity', 3);
+        $this->putJson($url, ['data' => ['observed_quantity' => 3]])->assertOk();
+        $this->putJson($url, ['data' => ['observed_quantity' => -1]])->assertUnprocessable();
+
+        $this->assertDatabaseHas('inventory_movement_entries', ['location_id' => $shelf->id, 'quantity_delta' => 3, 'balance_after' => 3]);
+        $this->assertDatabaseHas('inventory_levels', ['location_id' => $cabinet->id, 'quantity' => 9, 'alert_threshold' => 3]);
+        $this->assertDatabaseCount('inventory_movements', 2);
+    }
+
+    public function test_creating_an_item_and_tracking_opening_stock_succeeds_or_rolls_back_together(): void
+    {
+        [$user, $household] = $this->inventoryContext();
+        $shelf = $household->locations()->create(['name' => 'Shelf']);
+        $foreignShelf = Household::factory()->create()->locations()->create(['name' => 'Foreign shelf']);
+        $this->actingAs($user, 'web');
+
+        $this->postJson('/api/items', ['data' => ['name' => 'Labels', 'counting_unit' => 'pack', 'opening_stock' => ['location_id' => $foreignShelf->id, 'quantity' => 3]]])->assertUnprocessable();
+        $this->assertDatabaseMissing('items', ['name' => 'Labels']);
+        $this->postJson('/api/items', ['data' => ['name' => 'Labels', 'counting_unit' => 'pack', 'opening_stock' => ['location_id' => $shelf->id, 'quantity' => 3]]])
+            ->assertCreated()->assertJsonPath('data.total_quantity', 3);
+        $this->assertDatabaseHas('inventory_movement_entries', ['location_id' => $shelf->id, 'quantity_delta' => 3, 'balance_after' => 3]);
+        $this->postJson('/api/items', ['data' => ['name' => 'Tape', 'counting_unit' => 'roll', 'opening_stock' => ['location_id' => $shelf->id, 'quantity' => 0]]])->assertCreated();
+        $this->assertDatabaseCount('inventory_levels', 2);
+        $this->assertDatabaseCount('inventory_movements', 1);
+        $this->putJson("/api/locations/{$foreignShelf->id}/items/".Item::query()->where('name', 'Labels')->value('id').'/count', ['data' => ['observed_quantity' => 1]])->assertNotFound();
+    }
+
     public function test_inventory_endpoints_hide_resources_from_another_household(): void
     {
         [$user] = $this->inventoryContext();

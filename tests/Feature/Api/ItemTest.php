@@ -70,6 +70,31 @@ class ItemTest extends TestCase
         $this->assertDatabaseCount('items', 1);
     }
 
+    public function test_concurrent_creation_of_the_same_name_returns_a_field_error_without_adding_opening_stock(): void
+    {
+        [$user, $household] = $this->householdMember();
+        $shelf = $household->locations()->create(['name' => 'Shelf']);
+        $createdDuringValidation = false;
+        DB::listen(function (QueryExecuted $query) use ($household, &$createdDuringValidation): void {
+            if (! $createdDuringValidation && str_contains(strtolower($query->sql), 'count(*)') && in_array('Labels', $query->bindings, true)) {
+                $createdDuringValidation = true;
+                $household->items()->create(['name' => 'Labels', 'counting_unit' => 'pack']);
+            }
+        });
+
+        $this->actingAs($user, 'web')->postJson('/api/items', ['data' => [
+            'name' => 'Labels',
+            'counting_unit' => 'box',
+            'opening_stock' => ['location_id' => $shelf->id, 'quantity' => 4],
+        ]])->assertUnprocessable()->assertJsonPath('errors.0.source.pointer', '/data/name');
+
+        $this->assertTrue($createdDuringValidation);
+        $this->assertDatabaseHas('items', ['name' => 'Labels', 'counting_unit' => 'pack']);
+        $this->assertDatabaseCount('items', 1);
+        $this->assertDatabaseCount('inventory_levels', 0);
+        $this->assertDatabaseCount('inventory_movements', 0);
+    }
+
     public function test_category_ids_must_be_active_and_belong_to_the_current_household(): void
     {
         [$user, $household] = $this->householdMember();

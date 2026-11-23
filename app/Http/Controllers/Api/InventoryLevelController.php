@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Actions\ManageInventoryLevel;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\CountShelfItemRequest;
 use App\Http\Requests\IndexInventoryLevelRequest;
 use App\Http\Requests\StoreInventoryLevelRequest;
 use App\Http\Requests\UpdateInventoryLevelRequest;
@@ -60,6 +61,17 @@ class InventoryLevelController extends Controller
         }
 
         return response()->json($apiResponse->item($level, $transformer, $includes), 201);
+    }
+
+    public function count(CountShelfItemRequest $request, string $location, string $item, ManageInventoryLevel $levels, ApiResponse $apiResponse, InventoryLevelTransformer $transformer): JsonResponse
+    {
+        Gate::authorize('create', InventoryLevel::class);
+        $count = $levels->count($this->household($request->user()), $request->user(), $location, $item, $request->integer('data.observed_quantity'));
+
+        $response = $apiResponse->item($count['level'], $transformer, []);
+        $response['meta'] = ['previous_quantity' => $count['previous_quantity']];
+
+        return response()->json($response);
     }
 
     public function show(Request $request, string $inventory_level, ApiResponse $apiResponse, InventoryLevelTransformer $transformer): JsonResponse

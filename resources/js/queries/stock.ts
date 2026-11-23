@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query';
 import { computed, type ComputedRef } from 'vue';
 import { getItem, getItems } from '../api/items';
-import { compareLocationPaths, createBuySoon, createInventoryLevel, createLocation, getActiveAlerts, getLocations, getMovementRecorders, getMovements, getTriggeredLevels, recordMovement, resolveAlert, updateThreshold, type AlertListParams, type InventoryAlertStatus, type MovementFilters } from '../api/stock';
+import { compareLocationPaths, countShelfItem, saveShelfAction, createBuySoon, createInventoryLevel, createLocation, getActiveAlerts, getLocations, getMovementRecorders, getMovements, getTriggeredLevels, recordMovement, resolveAlert, updateThreshold, type AlertListParams, type InventoryAlertStatus, type MovementFilters } from '../api/stock';
 
 export const stockQueryKeys = {
     detail: (id: string) => ['items', 'detail', id] as const,
@@ -82,7 +82,7 @@ export function useMovementRecordersQuery() {
     });
 }
 
-function useStockMutation<TVariables>(mutationFn: (variables: TVariables) => Promise<unknown>) {
+function useStockMutation<TVariables, TResult>(mutationFn: (variables: TVariables) => Promise<TResult>) {
     const queryClient = useQueryClient();
 
     return useMutation({
@@ -100,6 +100,8 @@ function useStockMutation<TVariables>(mutationFn: (variables: TVariables) => Pro
     });
 }
 
+export const useSaveShelfActionMutation = () => useStockMutation(saveShelfAction);
+export const useCountShelfItemMutation = () => useStockMutation(countShelfItem);
 export const useRecordMovementMutation = () => useStockMutation(recordMovement);
 export const useUpdateThresholdMutation = () => useStockMutation(({ id, alertThreshold }: { id: string; alertThreshold: number | null }) => updateThreshold(id, alertThreshold));
 export const useCreateInventoryLevelMutation = () => useStockMutation(createInventoryLevel);

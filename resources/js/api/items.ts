@@ -71,6 +71,7 @@ export type NewItem = {
     category_ids?: string[];
 };
 
+export type NewItemWithStock = NewItem & { opening_stock?: { location_id: string; quantity: number } };
 export type ItemUpdate = Partial<NewItem>;
 export type ItemEditSnapshot = {
     id: string;
@@ -125,7 +126,7 @@ export async function getItem(id: string): Promise<ItemResponse['data']> {
     return response.data.data;
 }
 
-export async function createItem(item: NewItem): Promise<InventoryItem> {
+export async function createItem(item: NewItemWithStock): Promise<InventoryItem> {
     const response = await http.post<ItemResponse>('/items', { data: item });
 
     return response.data.data;

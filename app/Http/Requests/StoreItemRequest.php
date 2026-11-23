@@ -26,13 +26,16 @@ class StoreItemRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'data' => ['required', 'array:name,counting_unit,description,category_ids,id,type'],
+            'data' => ['required', 'array:name,counting_unit,description,category_ids,opening_stock,id,type'],
             'data.id' => ['prohibited'],
             'data.type' => ['prohibited'],
             'data.name' => [
                 'required', 'string', 'max:255',
                 Rule::unique('items', 'name')->where('household_id', $this->householdId()),
             ],
+            'data.opening_stock' => ['sometimes', 'array:location_id,quantity', 'required_array_keys:location_id,quantity'],
+            'data.opening_stock.location_id' => ['required_with:data.opening_stock', 'integer', 'min:1'],
+            'data.opening_stock.quantity' => ['required_with:data.opening_stock', 'integer', 'min:0', 'max:4294967295'],
             'data.counting_unit' => ['required', 'string', 'max:255'],
             'data.description' => ['sometimes', 'nullable', 'string'],
             'data.category_ids' => ['sometimes', 'array'],

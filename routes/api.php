@@ -74,6 +74,7 @@ Route::middleware('auth:sanctum')->group(function (): void {
     Route::post('/locations/{location}/restore', [LocationController::class, 'restore'])->name('locations.restore');
     Route::delete('/locations/{location}/permanently', [PermanentDeletionController::class, 'location'])->name('locations.permanently');
 
+    Route::put('/locations/{location}/items/{item}/count', [InventoryLevelController::class, 'count'])->whereNumber(['location', 'item'])->name('locations.items.count');
     Route::get('/inventory-levels', [InventoryLevelController::class, 'index'])->name('inventory-levels.index');
     Route::post('/inventory-levels', [InventoryLevelController::class, 'store'])->name('inventory-levels.store');
     Route::get('/inventory-levels/{inventory_level}', [InventoryLevelController::class, 'show'])->name('inventory-levels.show');

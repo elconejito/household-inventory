@@ -13,7 +13,9 @@ class ManageInventoryLevel
 {
     use RequiresActiveHouseholdMembership;
 
-    /** @param array{item_id: int|string, location_id: int|string, alert_threshold?: int|string|null} $data */
+    public function __construct(private CreateInventoryMovement $movements) {}
+
+    /** @param array{item_id: int|string, location_id: int|string, alert_threshold?: int|string|null, opening_quantity?: int|string} $data */
     public function create(Household $household, User $actor, array $data): InventoryLevel
     {
         return DB::transaction(function () use ($household, $actor, $data): InventoryLevel {
@@ -40,7 +42,50 @@ class ManageInventoryLevel
             $level->quantity = 0;
             $level->save();
 
+            if ((int) ($data['opening_quantity'] ?? 0) > 0) {
+                $this->movements->create($household, $actor, [
+                    'movement_type' => 'restock',
+                    'item_id' => $item->getKey(),
+                    'location_id' => $location->getKey(),
+                    'quantity' => (int) $data['opening_quantity'],
+                ]);
+                $level->refresh();
+            }
+
             return $level->load(['item', 'location']);
+        });
+    }
+
+    /** @return array{level: InventoryLevel, previous_quantity: int} */
+    public function count(Household $household, User $actor, string $locationId, string $itemId, int $quantity): array
+    {
+        return DB::transaction(function () use ($household, $actor, $locationId, $itemId, $quantity): array {
+            $household = Household::query()->lockForUpdate()->findOrFail($household->getKey());
+            $this->assertActiveMembership($household, $actor);
+            $item = $household->items()->whereKey($itemId)->firstOrFail();
+            $location = $household->locations()->whereKey($locationId)->firstOrFail();
+            $level = $item->inventoryLevels()->where('location_id', $location->getKey())->lockForUpdate()->first();
+            if ($level === null) {
+                $created = $this->create($household, $actor, [
+                    'item_id' => $item->getKey(),
+                    'location_id' => $location->getKey(),
+                    'opening_quantity' => $quantity,
+                ]);
+
+                return ['level' => $created, 'previous_quantity' => 0];
+            }
+            $previousQuantity = $level->quantity;
+            if ($level->quantity !== $quantity) {
+                $this->movements->create($household, $actor, [
+                    'movement_type' => 'correction',
+                    'item_id' => $item->getKey(),
+                    'location_id' => $location->getKey(),
+                    'observed_quantity' => $quantity,
+                ]);
+                $level->refresh();
+            }
+
+            return ['level' => $level, 'previous_quantity' => $previousQuantity];
         });
     }
 

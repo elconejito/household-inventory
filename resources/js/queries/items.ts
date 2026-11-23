@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query';
 import { computed, type ComputedRef } from 'vue';
-import { createItem, getItemCategoryOptions, getItems, updateItem, type ItemListParams, type ItemUpdate, type NewItem } from '../api/items';
+import { createItem, getItemCategoryOptions, getItems, updateItem, type ItemListParams, type ItemUpdate, type NewItemWithStock } from '../api/items';
 
 export const itemQueryKeys = {
     all: ['items'] as const,
@@ -36,7 +36,7 @@ export function useCreateItemMutation() {
     const queryClient = useQueryClient();
 
     return useMutation({
-        mutationFn: (item: NewItem) => createItem(item),
+        mutationFn: (item: NewItemWithStock) => createItem(item),
         onSuccess: async () => invalidateItemReferences(queryClient),
     });
 }
