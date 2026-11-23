@@ -1,15 +1,17 @@
 <script setup lang="ts">
 import { computed, useId } from 'vue';
 import type { InventoryItem, ItemLocation } from '../api/items';
-import { buildLocationPath, type Location } from '../api/stock';
+import { buildLocationPath, getLocationTrail, type Location } from '../api/stock';
 import { getMonitoredAttentionLevels } from '../lib/stock-indicators';
 import StockStatusBadge from './StockStatusBadge.vue';
+import PaginatedList from './PaginatedList.vue';
 
 const props = withDefaults(defineProps<{
     item: InventoryItem;
     locations: Location[];
     exactLocationId?: string;
-}>(), { exactLocationId: '' });
+    showAttention?: boolean;
+}>(), { exactLocationId: '', showAttention: true });
 
 const locationsPopoverId = useId();
 
@@ -26,6 +28,10 @@ function locationPath(location: ItemLocation): string {
     return buildLocationPath(location, props.locations);
 }
 
+function locationTrail(location: ItemLocation): ItemLocation[] {
+    return getLocationTrail(location, props.locations);
+}
+
 function unitFor(quantity: number): string {
     return quantity === 1 ? props.item.counting_unit : props.item.counting_unit_plural ?? props.item.counting_unit;
 }
@@ -38,7 +44,7 @@ function unitFor(quantity: number): string {
             <button v-if="positiveLevels.length" type="button" :popovertarget="locationsPopoverId" :aria-label="`View locations for ${item.name}`" class="inline-flex min-h-9 shrink-0 items-center rounded-md border border-line px-2 text-xs font-medium text-sage-dark hover:bg-sage-soft focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sage">Locations</button>
         </div>
         <p v-if="exactLocationId" class="mt-1 break-words text-xs font-normal text-ink-muted">At {{ exactLocationName }}: {{ exactLocationQuantity }} {{ unitFor(exactLocationQuantity) }}</p>
-        <div v-if="attentionLevels.length" class="mt-2 flex min-w-0 flex-wrap gap-1.5">
+        <div v-if="showAttention && attentionLevels.length" class="mt-2 flex min-w-0 flex-wrap gap-1.5">
             <StockStatusBadge v-for="{ level, indicator } in attentionLevels" :key="level.id" :label="`${indicator.label} · ${locationPath(level.location)}`" :tone="indicator.tone" />
         </div>
         <div v-if="positiveLevels.length" :id="locationsPopoverId" popover :aria-labelledby="`${locationsPopoverId}-heading`" class="fixed inset-0 m-auto max-h-[80dvh] w-[calc(100%-2rem)] max-w-sm overflow-y-auto rounded-panel border border-line bg-white p-5 text-sm text-ink shadow-card backdrop:bg-ink/20">
@@ -46,9 +52,11 @@ function unitFor(quantity: number): string {
                 <h4 :id="`${locationsPopoverId}-heading`" class="font-semibold">{{ item.name }} — locations</h4>
                 <button type="button" :popovertarget="locationsPopoverId" popovertargetaction="hide" class="min-h-9 shrink-0 rounded-md border border-line px-2 text-xs font-medium hover:bg-surface-soft focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sage">Close</button>
             </div>
-            <ul class="mt-3 grid min-w-0 gap-2 font-normal text-ink-muted">
-                <li v-for="level in positiveLevels" :key="level.id" class="break-words">{{ locationPath(level.location) }} — {{ level.quantity }} {{ unitFor(level.quantity) }}</li>
-            </ul>
+            <PaginatedList :items="positiveLevels" label="Item stock locations pagination" singular="location" plural="locations" :reset-key="item.id" v-slot="{ rows }">
+                <ul class="mt-3 grid min-w-0 gap-2 font-normal text-ink-muted">
+                    <li v-for="level in rows" :key="level.id" class="break-words"><template v-for="(part, index) in locationTrail(level.location)" :key="part.id"><span v-if="index"> / </span><RouterLink :to="{ name: 'location-detail', params: { location: part.id } }" class="text-sage-dark hover:underline">{{ part.name }}</RouterLink></template> — {{ level.quantity }} {{ unitFor(level.quantity) }}</li>
+                </ul>
+            </PaginatedList>
         </div>
     </div>
 </template>

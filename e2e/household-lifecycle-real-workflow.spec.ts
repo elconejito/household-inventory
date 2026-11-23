@@ -17,6 +17,7 @@ async function api(page: Page, method: string, path: string, data?: Record<strin
 }
 
 test('invites a member, revokes and restores their access, and permanently deletes archived inventory', async ({ page, browser }, testInfo) => {
+    test.setTimeout(60_000);
     const unique = `${Date.now()}-${Math.floor(Math.random() * 100_000)}`;
     const memberEmail = `member-${unique}@example.test`;
     const itemName = `Paper towels ${unique}`;
@@ -39,11 +40,11 @@ test('invites a member, revokes and restores their access, and permanently delet
     expect(stocked.status(), await stocked.text()).toBe(201);
 
     await page.goto('/settings');
-    await expect(page.getByRole('heading', { name: 'Settings', exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Account', exact: true })).toBeVisible();
     const renamedHousehold = `Renamed Home ${unique}`;
     await page.getByLabel('Household name', { exact: true }).fill(renamedHousehold);
     await page.getByRole('button', { name: 'Save name', exact: true }).click();
-    await expect(page.getByRole('heading', { name: renamedHousehold, exact: true })).toBeVisible();
+    await expect(page.getByRole('main').getByText(renamedHousehold, { exact: true }).first()).toBeVisible();
     await expect(page.locator('header')).toContainText(renamedHousehold);
     await page.getByLabel('Role for Household Owner').selectOption('member');
     await expect(page.getByRole('alert')).toContainText('at least one active owner');
@@ -74,7 +75,7 @@ test('invites a member, revokes and restores their access, and permanently delet
         await memberPage.getByRole('button', { name: 'Use 1', exact: true }).click();
         await expect(memberPage.getByRole('status').filter({ hasText: 'Used 1 roll' })).toBeVisible();
         await memberPage.goto('/settings');
-        await expect(memberPage.getByRole('heading', { name: 'Settings', exact: true })).toBeVisible();
+        await expect(memberPage.getByRole('heading', { name: 'Account', exact: true })).toBeVisible();
         await expect(memberPage.getByRole('button', { name: 'Create invitation', exact: true })).toHaveCount(0);
         expect((await api(memberPage, 'PATCH', 'household', { name: 'Not allowed' })).status()).toBe(403);
 
@@ -87,15 +88,19 @@ test('invites a member, revokes and restores their access, and permanently delet
         expect((await api(memberPage, 'GET', 'items')).status()).toBe(403);
         await memberPage.reload();
         await expect(memberPage).toHaveURL('/invitations/accept');
-        await expect(memberPage.getByRole('link', { name: 'Inventory', exact: true })).toHaveCount(0);
+        await expect(memberPage.getByRole('link', { name: 'Items', exact: true })).toHaveCount(0);
 
-        await page.getByRole('combobox', { name: /Show/ }).selectOption('only');
+        const people = page.getByRole('region', { name: 'People', exact: true });
+        await people.getByRole('button', { name: 'Filters', exact: true }).click();
+        await people.getByRole('combobox', { name: 'Show' }).selectOption('only');
+        await people.getByRole('button', { name: 'Done', exact: true }).click();
         await expect(memberRow).toBeVisible();
         await memberRow.getByRole('button', { name: 'Restore', exact: true }).click();
         await expect(memberRow).toHaveCount(0);
         expect((await api(memberPage, 'GET', 'items')).status()).toBe(200);
 
         await page.goto(`/items/${item.id}`);
+        await page.locator('summary[aria-label="More item actions"]').click();
         page.once('dialog', (dialog) => dialog.accept());
         await page.getByRole('button', { name: 'Archive item', exact: true }).click();
         await expect(page).toHaveURL('/items');

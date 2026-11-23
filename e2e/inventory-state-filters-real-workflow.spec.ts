@@ -54,8 +54,24 @@ async function waitForFilteredItems(page: Page, expected: Record<string, string>
     return new URL(request.url());
 }
 
+async function selectInventoryFilter(page: Page, label: string, value: string): Promise<void> {
+    const filters = page.locator('dialog[aria-label="Filters and display"]');
+    const isOpen = await filters.isVisible();
+    if (!isOpen) {
+        await page.getByRole('button', { name: /^Filters/ }).click();
+    }
+    await page.getByLabel(label, { exact: true }).selectOption(value);
+    await page.getByRole('button', { name: 'Apply filters', exact: true }).click();
+}
+
+async function closeInventoryFilters(page: Page): Promise<void> {
+    if (await page.locator('dialog[aria-label="Filters and display"]').isVisible()) {
+        await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+    }
+}
+
 function itemLink(page: Page, name: string) {
-    return page.getByRole('region', { name: 'Your items', exact: true }).getByRole('link', { name, exact: true });
+    return page.getByRole('region', { name: 'Inventory', exact: true }).getByRole('link', { name, exact: true });
 }
 
 test('filters stock and attention across item-wide levels while preserving combined inventory filters', async ({ page }, testInfo) => {
@@ -122,9 +138,10 @@ test('filters stock and attention across item-wide levels while preserving combi
     expect(pageOnlyItems).toHaveLength(11);
 
     await page.goto('/items');
-    const inventory = page.getByRole('region', { name: 'Your items', exact: true });
+    const inventory = page.getByRole('region', { name: 'Inventory', exact: true });
     const stockFilter = page.locator('#item-stock-filter');
     const attentionFilter = page.locator('#item-attention-filter');
+    await page.getByRole('button', { name: /^Filters/ }).click();
     await expect(stockFilter).toHaveValue('');
     await expect(attentionFilter).toHaveValue('');
     await expect(stockFilter.locator('option')).toHaveText(['All stock levels', 'Stock on hand', 'No stock on hand']);
@@ -136,6 +153,7 @@ test('filters stock and attention across item-wide levels while preserving combi
         'Buy soon',
         'No attention needed',
     ]);
+    await page.getByRole('button', { name: 'Close', exact: true }).click();
 
     const search = page.locator('#item-search');
     const searchRequestPromise = waitForFilteredItems(page, { 'filter[search]': names.combined });
@@ -143,11 +161,11 @@ test('filters stock and attention across item-wide levels while preserving combi
     const searchRequest = await searchRequestPromise;
     expect(searchRequest.searchParams.get('page')).toBe('1');
     const categoryRequestPromise = waitForFilteredItems(page, { 'filter[search]': names.combined, 'filter[category_id]': category.id });
-    await page.getByLabel('Category', { exact: true }).selectOption(category.id);
+    await selectInventoryFilter(page, 'Category', category.id);
     const categoryRequest = await categoryRequestPromise;
     expect(categoryRequest.searchParams.get('page')).toBe('1');
     const combinedLocationRequestPromise = waitForFilteredItems(page, { 'filter[search]': names.combined, 'filter[category_id]': category.id, 'filter[location_id]': pantry.id });
-    await page.getByLabel('Location', { exact: true }).selectOption(pantry.id);
+    await selectInventoryFilter(page, 'Location', pantry.id);
     const combinedLocationRequest = await combinedLocationRequestPromise;
     expect(combinedLocationRequest.searchParams.get('page')).toBe('1');
     const stockRequest = page.waitForRequest((request) => matchesItemsRequest(request, {
@@ -156,7 +174,7 @@ test('filters stock and attention across item-wide levels while preserving combi
         'filter[location_id]': pantry.id,
         'filter[stock_status]': 'in_stock',
     }));
-    await stockFilter.selectOption('in_stock');
+    await selectInventoryFilter(page, 'Stock on hand', 'in_stock');
     const attentionRequest = page.waitForRequest((request) => matchesItemsRequest(request, {
         'filter[search]': names.combined,
         'filter[category_id]': category.id,
@@ -164,12 +182,13 @@ test('filters stock and attention across item-wide levels while preserving combi
         'filter[stock_status]': 'in_stock',
         'filter[attention_status]': 'none',
     }));
-    await attentionFilter.selectOption('none');
+    await selectInventoryFilter(page, 'Attention', 'none');
     const combinedRequest = new URL((await attentionRequest).url());
     expect(combinedRequest.searchParams.get('page')).toBe('1');
     expect(await stockRequest).toBeTruthy();
     await expect(inventory).toContainText('1 item');
     await expect(itemLink(page, names.combined)).toBeVisible();
+    await closeInventoryFilters(page);
     await page.screenshot({ path: testInfo.outputPath('inventory-state-filters-desktop.png'), fullPage: true });
 
     await page.setViewportSize({ width: 320, height: 740 });
@@ -177,9 +196,9 @@ test('filters stock and attention across item-wide levels while preserving combi
     await page.screenshot({ path: testInfo.outputPath('inventory-state-filters-mobile.png'), fullPage: true });
     await page.setViewportSize({ width: 1280, height: 800 });
 
-    await page.reload();
+    await page.goto('/items');
     const categoryPageRequest = waitForFilteredItems(page, { 'filter[category_id]': category.id });
-    await page.getByLabel('Category', { exact: true }).selectOption(category.id);
+    await selectInventoryFilter(page, 'Category', category.id);
     let itemsRequest = await categoryPageRequest;
     expect(itemsRequest.searchParams.get('page')).toBe('1');
     await expect(inventory).toContainText('12 items');
@@ -190,20 +209,20 @@ test('filters stock and attention across item-wide levels while preserving combi
         'filter[stock_status]': 'empty',
         page: '1',
     }));
-    await stockFilter.selectOption('empty');
+    await selectInventoryFilter(page, 'Stock on hand', 'empty');
     itemsRequest = new URL((await emptyFilterRequest).url());
     expect(itemsRequest.searchParams.get('page')).toBe('1');
     await expect(inventory).toContainText('11 items');
     await expect(inventory).toContainText('Page 1 of 2');
 
-    await page.reload();
+    await page.goto('/items');
     const pageSizeRequest = page.waitForRequest((request) => matchesItemsRequest(request, { page: '1', per_page: '100' }));
-    await page.locator('#item-page-size').selectOption('100');
+    await page.getByLabel('Per page').selectOption('100');
     await pageSizeRequest;
     await expect(inventory).toContainText('19 items');
 
     const noStockRequest = page.waitForRequest((request) => matchesItemsRequest(request, { 'filter[stock_status]': 'empty' }));
-    await stockFilter.selectOption('empty');
+    await selectInventoryFilter(page, 'Stock on hand', 'empty');
     expect(new URL((await noStockRequest).url()).searchParams.get('page')).toBe('1');
     await expect(itemLink(page, names.untracked)).toBeVisible();
     await expect(itemLink(page, names.monitoredEmpty)).toBeVisible();
@@ -211,7 +230,7 @@ test('filters stock and attention across item-wide levels while preserving combi
     await expect(inventory).toContainText('14 items');
 
     const inStockRequest = page.waitForRequest((request) => matchesItemsRequest(request, { 'filter[stock_status]': 'in_stock' }));
-    await stockFilter.selectOption('in_stock');
+    await selectInventoryFilter(page, 'Stock on hand', 'in_stock');
     await inStockRequest;
     await expect(itemLink(page, names.untracked)).toHaveCount(0);
     await expect(itemLink(page, names.mixed)).toBeVisible();
@@ -221,10 +240,10 @@ test('filters stock and attention across item-wide levels while preserving combi
         'filter[location_id]': closet.id,
         'filter[stock_status]': '',
     }));
-    await stockFilter.selectOption('');
-    await page.getByLabel('Location', { exact: true }).selectOption(closet.id);
+    await selectInventoryFilter(page, 'Stock on hand', '');
+    await selectInventoryFilter(page, 'Location', closet.id);
     const emptyAttentionRequest = page.waitForRequest((request) => matchesItemsRequest(request, { 'filter[location_id]': closet.id, 'filter[attention_status]': 'empty' }));
-    await attentionFilter.selectOption('empty');
+    await selectInventoryFilter(page, 'Attention', 'empty');
     await locationRequest;
     const emptyAttentionUrl = new URL((await emptyAttentionRequest).url());
     expect(emptyAttentionUrl.searchParams.get('filter[location_id]')).toBe(closet.id);
@@ -234,23 +253,23 @@ test('filters stock and attention across item-wide levels while preserving combi
     await expect(itemLink(page, names.monitoredEmpty)).toHaveCount(0);
     await expect(inventory).toContainText('1 item');
 
-    await page.getByLabel('Location', { exact: true }).selectOption('');
+    await selectInventoryFilter(page, 'Location', '');
     const lowAttentionRequest = page.waitForRequest((request) => matchesItemsRequest(request, { 'filter[attention_status]': 'low' }));
-    await attentionFilter.selectOption('low');
+    await selectInventoryFilter(page, 'Attention', 'low');
     const lowUrl = new URL((await lowAttentionRequest).url());
     expect(lowUrl.searchParams.get('filter[stock_status]')).toBeNull();
     await expect(itemLink(page, names.low)).toBeVisible();
     await expect(inventory).toContainText('1 item');
 
     const buySoonRequest = page.waitForRequest((request) => matchesItemsRequest(request, { 'filter[attention_status]': 'buy_soon' }));
-    await attentionFilter.selectOption('buy_soon');
+    await selectInventoryFilter(page, 'Attention', 'buy_soon');
     await buySoonRequest;
     await expect(itemLink(page, names.buySoon)).toBeVisible();
     await expect(itemLink(page, names.resolved)).toHaveCount(0);
     await expect(inventory).toContainText('1 item');
 
     const needsAttentionRequest = page.waitForRequest((request) => matchesItemsRequest(request, { 'filter[attention_status]': 'needs_attention' }));
-    await attentionFilter.selectOption('needs_attention');
+    await selectInventoryFilter(page, 'Attention', 'needs_attention');
     await needsAttentionRequest;
     await expect(itemLink(page, names.monitoredEmpty)).toBeVisible();
     await expect(itemLink(page, names.mixed)).toBeVisible();
@@ -259,7 +278,7 @@ test('filters stock and attention across item-wide levels while preserving combi
     await expect(itemLink(page, names.resolved)).toHaveCount(0);
 
     const noAttentionRequest = page.waitForRequest((request) => matchesItemsRequest(request, { 'filter[attention_status]': 'none' }));
-    await attentionFilter.selectOption('none');
+    await selectInventoryFilter(page, 'Attention', 'none');
     await noAttentionRequest;
     await expect(itemLink(page, names.untracked)).toBeVisible();
     await expect(itemLink(page, names.positive)).toBeVisible();
@@ -273,8 +292,8 @@ test('filters stock and attention across item-wide levels while preserving combi
         'filter[stock_status]': 'in_stock',
         'filter[attention_status]': 'none',
     }));
-    await stockFilter.selectOption('in_stock');
-    await attentionFilter.selectOption('none');
+    await selectInventoryFilter(page, 'Stock on hand', 'in_stock');
+    await selectInventoryFilter(page, 'Attention', 'none');
     await search.fill(emptyResultSearch);
     await emptyResultRequest;
     await expect(inventory).toContainText('No items match these filters');
@@ -293,9 +312,59 @@ test('filters stock and attention across item-wide levels while preserving combi
     await page.getByRole('button', { name: 'Clear filters', exact: true }).click();
     await clearedRequest;
     await expect(search).toHaveValue('');
+    await page.getByRole('button', { name: /^Filters/ }).click();
     await expect(stockFilter).toHaveValue('');
     await expect(attentionFilter).toHaveValue('');
     await expect(inventory).toContainText('19 items');
+    await page.getByRole('button', { name: 'Close', exact: true }).click();
 
     await page.screenshot({ path: testInfo.outputPath('inventory-state-filters-cleared-desktop.png'), fullPage: true });
+});
+
+test('keeps a searched filtered page in the URL across item navigation, browser back, and refresh', async ({ page }) => {
+    test.setTimeout(90_000);
+    await page.context().setDefaultTimeout(10_000);
+    const suffix = `${Date.now()}-${Math.floor(Math.random() * 100_000)}`;
+    const searchTerm = `History state ${suffix}`;
+
+    await registerHousehold(page, suffix);
+    const category = await createResource(page, 'categories', { name: `History category ${suffix}` });
+    for (let index = 1; index <= 11; index++) {
+        await createResource(page, 'items', {
+            name: `${searchTerm} ${String(index).padStart(2, '0')}`,
+            counting_unit: 'pack',
+            category_ids: [category.id],
+        });
+    }
+
+    await page.goto('/items');
+    const inventory = page.getByRole('region', { name: 'Inventory', exact: true });
+    const search = page.locator('#item-search');
+    const searchRequest = page.waitForRequest((request) => matchesItemsRequest(request, { 'filter[search]': searchTerm }));
+    await search.fill(searchTerm);
+    await searchRequest;
+    await selectInventoryFilter(page, 'Category', category.id);
+    await expect(inventory).toContainText('11 items');
+
+    await page.getByRole('button', { name: 'Page 2', exact: true }).click();
+    await expect(inventory).toContainText('Page 2 of 2');
+    await expect.poll(() => new URL(page.url()).searchParams.get('search')).toBe(searchTerm);
+    await expect.poll(() => new URL(page.url()).searchParams.get('category')).toBe(category.id);
+    await expect.poll(() => new URL(page.url()).searchParams.get('page')).toBe('2');
+    await expect(itemLink(page, `${searchTerm} 11`)).toBeVisible();
+
+    await itemLink(page, `${searchTerm} 11`).click();
+    await expect(page).toHaveURL(/\/items\/\d+/);
+    await page.goBack();
+    await expect(page).toHaveURL(/\/items\?/);
+    await expect(search).toHaveValue(searchTerm);
+    await expect(inventory).toContainText('Page 2 of 2');
+    await expect(itemLink(page, `${searchTerm} 11`)).toBeVisible();
+
+    await page.reload();
+    await expect(search).toHaveValue(searchTerm);
+    await expect(inventory).toContainText('Page 2 of 2');
+    await expect(itemLink(page, `${searchTerm} 11`)).toBeVisible();
+    await page.getByRole('button', { name: /^Filters/ }).click();
+    await expect(page.locator('#item-category-filter')).toHaveValue(category.id);
 });

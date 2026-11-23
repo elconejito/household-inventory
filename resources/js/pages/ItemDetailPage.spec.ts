@@ -6,12 +6,12 @@ import { http } from '../lib/http';
 import { AxiosError } from 'axios';
 import ItemDetailPage from './ItemDetailPage.vue';
 
-const { routeState } = vi.hoisted(() => ({ routeState: { params: { item: '7' }, query: {} as Record<string, string | string[]> } }));
+const { routeState, routerState } = vi.hoisted(() => ({ routeState: { params: { item: '7' }, query: {} as Record<string, string | string[]> }, routerState: { push: vi.fn(), replace: vi.fn() } }));
 vi.mock('../lib/http', () => ({ http: { get: vi.fn(), post: vi.fn(), patch: vi.fn(), delete: vi.fn() } }));
 vi.mock('vue-router', async (importOriginal) => {
     const vue = await import('vue');
     const route = vue.reactive(routeState);
-    return { ...(await importOriginal<typeof import('vue-router')>()), useRoute: () => route, setMockItem: (id: string) => { route.params.item = id; }, setMockQuery: (query: Record<string, string | string[]>) => { route.query = query; } };
+    return { ...(await importOriginal<typeof import('vue-router')>()), useRoute: () => route, useRouter: () => routerState, setMockItem: (id: string) => { route.params.item = id; }, setMockQuery: (query: Record<string, string | string[]>) => { route.query = query; } };
 });
 
 const item = {
@@ -48,15 +48,20 @@ describe('item stock detail', () => {
     });
 
     function mountPage(): void {
-        wrapper = mount(ItemDetailPage, { global: { plugins: [createPinia(), [VueQueryPlugin, { queryClient }]], stubs: { RouterLink: { template: '<a><slot /></a>' }, ArchiveResourceButton: true } } });
+        wrapper = mount(ItemDetailPage, { global: { plugins: [createPinia(), [VueQueryPlugin, { queryClient }]], stubs: { RouterLink: { template: '<a :data-to="JSON.stringify(to)"><slot /></a>', props: ['to'] }, ArchiveResourceButton: true } } });
     }
 
     function actionForm() {
         return wrapper!.findAll('form').find((form) => form.find('input[type="checkbox"]').exists() || form.find('#stock-threshold').exists())!;
     }
 
+    async function openRowAction(row: ReturnType<NonNullable<typeof wrapper>['findAll']>[number], label: string): Promise<void> {
+        await row.find('summary[aria-label^="More stock actions"]').trigger('click');
+        await row.findAll('button').find((button) => button.text() === label)!.trigger('click');
+    }
+
     async function openLocationSetup(): Promise<void> {
-        await wrapper!.findAll('button').find((button) => button.text() === 'Set up a stock location')!.trigger('click');
+        await wrapper!.findAll('button').find((button) => button.text() === 'Add stock location')!.trigger('click');
         await flushPromises();
     }
 
@@ -71,7 +76,7 @@ describe('item stock detail', () => {
 
         const pantry = wrapper!.findAll('li').find((row) => row.text().includes('Pantry'))!;
         expect(pantry.text()).not.toContain('Use 1');
-        await pantry.findAll('button').find((button) => button.text() === 'Move in')!.trigger('click');
+        await openRowAction(pantry, 'Move in');
         expect(wrapper!.find('#transfer-location').exists()).toBe(true);
         expect(wrapper!.get('#transfer-location').text()).toContain('Closet (5 available)');
     });
@@ -118,6 +123,124 @@ describe('item stock detail', () => {
         expect(http.post).toHaveBeenCalledWith('/inventory-levels', { data: { item_id: '7', location_id: '5', alert_threshold: null } });
         expect(http.post).not.toHaveBeenCalledWith('/inventory-movements', expect.anything());
         expect(wrapper!.text()).toContain('Stock location set up with 0 packs. No stock was added; restock later');
+    });
+
+    it('opens the add-stock panel from the setup query and records an opening quantity', async () => {
+        vi.mocked(http.post).mockResolvedValue({ data: { data: { id: 'level-13', quantity: 4 } } } as never);
+        (await import('vue-router') as unknown as { setMockQuery: (query: Record<string, string>) => void }).setMockQuery({ setup: '1' });
+        mountPage();
+        await flushPromises();
+
+        expect(wrapper!.get('#setup-location-title').text()).toBe('Add stock location');
+        expect(routerState.replace).toHaveBeenCalledWith(expect.objectContaining({ name: 'inventory-item', params: { item: '7' }, query: {} }));
+        await wrapper!.get('#setup-location').setValue('4');
+        await wrapper!.get('#setup-quantity').setValue('4');
+        await wrapper!.get('#setup-threshold').setValue('2');
+        await submitLocationSetup();
+
+        expect(http.post).toHaveBeenCalledWith('/inventory-levels', { data: { item_id: '7', location_id: '4', opening_quantity: 4, alert_threshold: 2 } });
+        expect(http.post).not.toHaveBeenCalledWith('/inventory-movements', expect.anything());
+    });
+
+    it('opens the setup handoff when the requested item is already cached', async () => {
+        queryClient.setQueryData(['items', 'detail', '7'], item);
+        (await import('vue-router') as unknown as { setMockQuery: (query: Record<string, string>) => void }).setMockQuery({ setup: '1' });
+        mountPage();
+        await flushPromises();
+        expect(wrapper!.find('#setup-location-form').exists()).toBe(true);
+    });
+
+    it.each(['', '-1', '0.5', '4294967296'])('rejects an invalid opening quantity %j without tracking at zero', async (quantity) => {
+        mountPage();
+        await flushPromises();
+        await openLocationSetup();
+        await wrapper!.get('#setup-location').setValue('4');
+        await wrapper!.get('#setup-quantity').setValue(quantity);
+        expect(wrapper!.get('button[form="setup-location-form"]').attributes('disabled')).toBeDefined();
+        await submitLocationSetup();
+        expect(http.post).not.toHaveBeenCalled();
+    });
+
+    it.each([
+        ['category', 'Back to category', { search: 'hose', page: '3', perPage: '25' }],
+        ['location', 'Back to location', { page: '2', childrenPage: '3', childrenPerPage: '50' }],
+    ] as const)('returns to the originating %s for both loading and loaded items', async (origin, label, state) => {
+        (await import('vue-router') as unknown as { setMockQuery: (query: Record<string, string>) => void }).setMockQuery({ origin, originId: '18', ...state, redirect: 'https://example.org' });
+        mountPage();
+        const target = { name: origin + '-detail', params: { [origin]: '18' }, query: state };
+        expect(JSON.parse(wrapper!.get('a').attributes('data-to')!)).toEqual(target);
+        await flushPromises();
+        expect(JSON.parse(wrapper!.get('a[aria-label="' + label + '"]').attributes('data-to')!)).toEqual(target);
+    });
+
+    it('preserves catalog query state and follows previous and next items', async () => {
+        (await import('vue-router') as unknown as { setMockQuery: (query: Record<string, string>) => void }).setMockQuery({ search: 'paper', category: '2', location: '3', stockStatus: 'low', attentionStatus: 'buy-soon', sort: 'name', page: '2', perPage: '24', resultIds: '6,7,8' });
+        mountPage();
+        await flushPromises();
+
+        const link = (label: string) => wrapper!.findAll('a').find((element) => element.attributes('aria-label') === label)!;
+        expect(JSON.parse(link('Back to results').attributes('data-to')!)).toEqual({ name: 'inventory', query: expect.objectContaining({ page: '2', resultIds: '6,7,8', search: 'paper' }) });
+        expect(JSON.parse(link('Previous item').attributes('data-to')!)).toMatchObject({ name: 'inventory-item', params: { item: '6' } });
+        expect(JSON.parse(link('Next item').attributes('data-to')!)).toMatchObject({ name: 'inventory-item', params: { item: '8' } });
+    });
+
+    it('loads the next filtered page when the current result sequence ends', async () => {
+        routerState.push.mockClear();
+        (await import('vue-router') as unknown as { setMockQuery: (query: Record<string, string>) => void }).setMockQuery({ search: 'paper', page: '2', perPage: '10', resultIds: '6,7' });
+        vi.mocked(http.get).mockImplementation(async (url) => {
+            if (String(url) === '/items') return { data: { data: [{ id: '8' }, { id: '9' }], meta: { current_page: 3, last_page: 4 } } } as never;
+            if (String(url).includes('/images')) return { data: { data: [] } } as never;
+            if (String(url).endsWith('/notes')) return { data: { data: [], meta: { current_page: 1, last_page: 1, total: 0 } } } as never;
+            if (String(url) === '/inventory-movements') return { data: { data: [], meta: { current_page: 1, last_page: 1, total: 0 } } } as never;
+            if (String(url).startsWith('/items/')) return { data: { data: item } } as never;
+            if (String(url) === '/inventory-alerts') return { data: { data: [], meta: { current_page: 1, last_page: 1, total: 0 } } } as never;
+            return { data: { data: [{ id: '2', name: 'Pantry', description: null, parent: null }, { id: '3', name: 'Closet', description: null, parent: null }, { id: '4', name: 'Garage', description: null, parent: null }], meta: { current_page: 1, last_page: 1, total: 3 } } } as never;
+        });
+        mountPage();
+        await flushPromises();
+
+        await wrapper!.get('button[aria-label="Next item"]').trigger('click');
+        await flushPromises();
+
+        expect(http.get).toHaveBeenCalledWith('/items', expect.objectContaining({ params: expect.objectContaining({ 'filter[search]': 'paper', page: 3 }) }));
+        expect(routerState.push).toHaveBeenCalledWith(expect.objectContaining({ name: 'inventory-item', params: { item: '8' }, query: expect.objectContaining({ page: '3', resultIds: '8,9' }) }));
+    });
+
+    it('supports arrow-key navigation between detail tabs', async () => {
+        mountPage();
+        await flushPromises();
+        const selectedTab = wrapper!.get('[role="tab"][aria-selected="true"]');
+        await selectedTab.trigger('keydown', { key: 'ArrowRight' });
+
+        expect(wrapper!.get('[role="tab"][aria-selected="true"]').text()).toBe('Notes');
+    });
+
+    it('paginates stock-location rows instead of rendering every level at once', async () => {
+        const manyLevels = Array.from({ length: 11 }, (_, index) => ({
+            id: `level-${index}`,
+            quantity: index + 1,
+            alert_threshold: null,
+            stock_status: 'in_stock',
+            alert_status: 'unmonitored',
+            location: { id: `location-${index}`, name: `Location ${index + 1}`, description: null, parent: null },
+        }));
+        vi.mocked(http.get).mockImplementation(async (url) => {
+            if (String(url).includes('/images')) return { data: { data: [] } } as never;
+            if (String(url).endsWith('/notes')) return { data: { data: [], meta: { current_page: 1, last_page: 1, total: 0 } } } as never;
+            if (String(url) === '/inventory-movements') return { data: { data: [], meta: { current_page: 1, last_page: 1, total: 0 } } } as never;
+            if (String(url).startsWith('/items/')) return { data: { data: { ...item, inventory_levels: manyLevels } } } as never;
+            if (String(url) === '/inventory-alerts') return { data: { data: [], meta: { current_page: 1, last_page: 1, total: 0 } } } as never;
+            return { data: { data: manyLevels.map(({ location }) => location), meta: { current_page: 1, last_page: 1, total: manyLevels.length } } } as never;
+        });
+        mountPage();
+        await flushPromises();
+
+        expect(wrapper!.findAll('[aria-labelledby="locations-heading"] li')).toHaveLength(10);
+        expect(wrapper!.get('[aria-labelledby="locations-heading"]').text()).toContain('11 locations · Page 1 of 2');
+        await wrapper!.get('nav[aria-label="Stock locations pagination"] button[aria-label="Next"]').trigger('click');
+
+        expect(wrapper!.findAll('[aria-labelledby="locations-heading"] li')).toHaveLength(1);
+        expect(wrapper!.findAll('[aria-labelledby="locations-heading"] li h3').map((heading) => heading.text())).toEqual(['Location 11']);
     });
 
     it('accepts threshold zero for a nested child location', async () => {
@@ -371,7 +494,7 @@ describe('item stock detail', () => {
         mountPage();
         await flushPromises();
         const pantry = wrapper!.findAll('li').find((row) => row.text().includes('Pantry'))!;
-        await pantry.findAll('button').find((button) => button.text() === 'Correct')!.trigger('click');
+        await openRowAction(pantry, 'Correct');
         await wrapper!.get('#observed-quantity').setValue('4');
         await wrapper!.get('input[type="checkbox"]').setValue(true);
         await actionForm().trigger('submit');
@@ -417,7 +540,7 @@ describe('item stock detail', () => {
         mountPage();
         await flushPromises();
         const pantry = wrapper!.findAll('li').find((row) => row.text().includes('Pantry'))!;
-        await pantry.findAll('button').find((button) => button.text() === 'Threshold')!.trigger('click');
+        await openRowAction(pantry, 'Threshold');
         await wrapper!.get('#stock-threshold').setValue('2');
         expect(wrapper!.find('input[type="checkbox"]').exists()).toBe(false);
         await actionForm().trigger('submit');
@@ -442,7 +565,7 @@ describe('item stock detail', () => {
         mountPage();
         await flushPromises();
         const pantry = wrapper!.findAll('li').find((row) => row.text().includes('Pantry'))!;
-        await pantry.findAll('button').find((button) => button.text() === 'Move in')!.trigger('click');
+        await openRowAction(pantry, 'Move in');
         await wrapper!.get('#transfer-location').setValue('3');
         await wrapper!.get('#stock-quantity').setValue('2');
 
