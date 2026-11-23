@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import FormModal from '../components/FormModal.vue';
 import ListPagination from '../components/ListPagination.vue';
+import NotesPanel from '../components/NotesPanel.vue';
+import UiIcon from '../components/UiIcon.vue';
 import { computed, onUnmounted, ref, watch } from 'vue';
 import { useQuery } from '@tanstack/vue-query';
 import { RouterLink } from 'vue-router';
@@ -8,15 +10,11 @@ import { getItems, type InventoryItem } from '../api/items';
 import { buildLocationPath, compareLocationPaths, getActiveAlerts, type InventoryLevel, type InventoryAlert } from '../api/stock';
 import { parseApiErrors } from '../lib/api-errors';
 import { useActiveAlertsQuery, useBuySoonMutation, useLocationsQuery, useRecordMovementMutation, useResolveAlertMutation, useTriggeredLevelsQuery } from '../queries/stock';
-import NotesPanel from '../components/NotesPanel.vue';
 
 const pageSize = 10;
 const search = ref('');
 const debouncedSearch = ref('');
 const resultsPage = ref(1);
-const emptyPage = ref(1);
-const lowPage = ref(1);
-const buySoonPage = ref(1);
 const selectedItem = ref<InventoryItem | null>(null);
 const action = ref<'consume' | 'restock' | null>(null);
 const selectedLocationId = ref('');
@@ -27,13 +25,17 @@ const success = ref('');
 let searchTimeout: ReturnType<typeof setTimeout> | undefined;
 
 const itemParams = computed(() => ({ search: debouncedSearch.value, page: resultsPage.value, perPage: pageSize }));
-const emptyParams = computed(() => ({ page: emptyPage.value, perPage: pageSize }));
-const lowParams = computed(() => ({ page: lowPage.value, perPage: pageSize }));
-const buySoonParams = computed(() => ({ page: buySoonPage.value, perPage: pageSize }));
+const emptyParams = computed(() => ({ page: 1, perPage: 10 }));
+const lowParams = computed(() => ({ page: 1, perPage: 10 }));
+const buySoonParams = computed(() => ({ page: 1, perPage: 10 }));
 const itemQuery = useQuery({
     queryKey: computed(() => ['items', 'dashboard-search', itemParams.value]),
     queryFn: () => getItems(itemParams.value, 'inventory_levels.location'),
     enabled: computed(() => debouncedSearch.value.length > 0),
+});
+const inventoryCountQuery = useQuery({
+    queryKey: ['items', 'dashboard-count'],
+    queryFn: () => getItems({ search: '', page: 1, perPage: 10 }, ''),
 });
 const emptyQuery = useTriggeredLevelsQuery(emptyParams, 'empty');
 const lowQuery = useTriggeredLevelsQuery(lowParams, 'low');
@@ -42,7 +44,6 @@ const locationsQuery = useLocationsQuery();
 const movementMutation = useRecordMovementMutation();
 const buySoonMutation = useBuySoonMutation();
 const resolveMutation = useResolveAlertMutation();
-const openAlertNoteContexts = ref(new Set<string>());
 const itemIds = computed(() => (itemQuery.data.value?.data ?? []).map((item) => item.id));
 const itemAlertQuery = useQuery({
     queryKey: computed(() => ['inventory-alerts', 'active-by-visible-item', itemIds.value]),
@@ -75,16 +76,9 @@ const actionLocationOptions = computed(() => action.value === 'consume'
 const pending = computed(() => movementMutation.isPending.value || buySoonMutation.isPending.value || resolveMutation.isPending.value);
 const emptyLevels = computed(() => emptyQuery.data.value?.data ?? []);
 const lowLevels = computed(() => lowQuery.data.value?.data ?? []);
-
-watch(() => emptyQuery.data.value?.meta.last_page, (lastPage) => {
-    if (lastPage && emptyPage.value > lastPage) emptyPage.value = lastPage;
-});
-watch(() => lowQuery.data.value?.meta.last_page, (lastPage) => {
-    if (lastPage && lowPage.value > lastPage) lowPage.value = lastPage;
-});
-watch(() => activeAlertQuery.data.value?.meta.last_page, (lastPage) => {
-    if (lastPage && buySoonPage.value > lastPage) buySoonPage.value = lastPage;
-});
+const activeAlerts = computed(() => activeAlertQuery.data.value?.data ?? []);
+const firstLocation = computed(() => locationsQuery.data.value?.[0]);
+const openReminderNoteIds = ref(new Set<string>());
 
 watch(search, (value) => {
     if (searchTimeout) clearTimeout(searchTimeout);
@@ -159,51 +153,120 @@ async function toggleBuySoon(item: NonNullable<typeof selectedItem.value>): Prom
     }
 }
 
-async function resolveBuySoon(alertId: string): Promise<void> {
-    if (pending.value) return;
-    actionError.value = '';
-    try {
-        await resolveMutation.mutateAsync(alertId);
-    } catch (error) {
-        actionError.value = parseApiErrors(error).form || 'The Buy soon reminder could not be resolved.';
-    }
-}
-
 function retryQueries(): void {
     if (debouncedSearch.value.length > 0) void itemQuery.refetch();
+    void inventoryCountQuery.refetch();
     void emptyQuery.refetch();
     void lowQuery.refetch();
     void activeAlertQuery.refetch();
 }
 
-function toggleAlertNotes(id: string, event: Event): void {
-    const updated = new Set(openAlertNoteContexts.value);
-    if ((event.currentTarget as HTMLDetailsElement).open) updated.add(id);
-    else updated.delete(id);
-    openAlertNoteContexts.value = updated;
+function attentionRoute(status: 'empty' | 'low' | 'buy_soon'): { name: 'inventory'; query: { attentionStatus: string } } {
+    return { name: 'inventory', query: { attentionStatus: status } };
 }
 
+function toggleAlertNotes(id: string, event: Event): void {
+    const updated = new Set(openReminderNoteIds.value);
+    if ((event.currentTarget as HTMLDetailsElement).open) updated.add(id);
+    else updated.delete(id);
+    openReminderNoteIds.value = updated;
+}
 
 </script>
 
 <template>
     <section aria-labelledby="page-title">
-        <div class="flex flex-wrap items-end justify-between gap-4">
+        <div class="dashboard-pagehead flex flex-wrap items-end justify-between gap-4">
             <div>
                 <h1 id="page-title" class="page-title">Dashboard</h1>
+                <p class="mt-1 text-sm text-ink-muted">Inventory and household stock alerts</p>
             </div>
             <RouterLink
                 :to="{ name: 'inventory', query: { create: '1' } }"
-                class="inline-flex min-h-11 items-center rounded-md bg-sage px-4 text-sm font-semibold text-white hover:bg-sage-dark focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sage"
+                class="inline-flex min-h-11 items-center gap-2 rounded-md bg-sage px-4 text-sm font-semibold text-white hover:bg-sage-dark focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sage"
             >
-                ＋ Add item
+                <UiIcon name="plus" :size="17" /> Add item
             </RouterLink>
         </div>
 
         <p v-if="success" class="mt-5 rounded-md border border-sage/20 bg-sage-soft px-4 py-3 text-sm font-medium text-sage-dark" role="status">{{ success }}</p>
         <p v-if="actionError" class="mt-5 rounded-md border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800" role="alert">{{ actionError }}</p>
 
-        <section class="mt-7 rounded-panel border border-line bg-white shadow-card" aria-labelledby="finder-title">
+        <div class="dashboard-stats" aria-label="Household inventory summary">
+            <RouterLink :to="{ name: 'inventory' }" class="dashboard-stat"><strong>{{ inventoryCountQuery.data.value?.meta.total ?? '—' }}</strong><span>Items in inventory</span></RouterLink>
+            <RouterLink :to="attentionRoute('empty')" class="dashboard-stat"><strong>{{ emptyQuery.data.value?.meta.total ?? '—' }}</strong><span>Out-of-stock alerts</span></RouterLink>
+            <RouterLink :to="attentionRoute('buy_soon')" class="dashboard-stat"><strong>{{ activeAlertQuery.data.value?.meta.total ?? '—' }}</strong><span>Buy-soon reminders</span></RouterLink>
+        </div>
+
+        <div class="dashboard-overview">
+            <section class="dashboard-card" aria-labelledby="needs-attention-title">
+                <header class="dashboard-card-header">
+                    <div><h2 id="needs-attention-title">Needs attention</h2><p>Stock alerts across your household</p></div>
+                    <RouterLink :to="attentionRoute('empty')" class="dashboard-card-action">View inventory</RouterLink>
+                </header>
+                <div class="attention-groups">
+                    <section class="attention-group" aria-labelledby="empty-heading">
+                        <header><h3 id="empty-heading">Out of stock</h3><RouterLink :to="attentionRoute('empty')">See all {{ emptyQuery.data.value?.meta.total ?? '' }}</RouterLink></header>
+                        <p v-if="emptyQuery.isError.value" class="attention-state text-rose-700" role="alert">Out-of-stock alerts could not be loaded. <button class="underline" @click="emptyQuery.refetch()">Try again</button></p>
+                        <p v-else-if="emptyQuery.isPending.value" class="attention-state" role="status">Loading…</p>
+                        <p v-else-if="!emptyLevels.length" class="attention-state">Nothing is out of stock.</p>
+                        <ul v-else class="attention-list">
+                            <li v-for="level in emptyLevels.slice(0, 2)" :key="level.id">
+                                <RouterLink :to="{ name: 'inventory-item', params: { item: level.item.id } }"><strong>{{ level.item.name }}</strong><span>{{ buildLocationPath(level.location, locationsQuery.data.value ?? []) }} · 0 {{ level.item.counting_unit }}</span></RouterLink>
+                                <span class="attention-badge attention-badge-empty">Out of stock</span>
+                            </li>
+                        </ul>
+                    </section>
+                    <section class="attention-group" aria-labelledby="low-heading">
+                        <header><h3 id="low-heading">Low stock</h3><RouterLink :to="attentionRoute('low')">See all {{ lowQuery.data.value?.meta.total ?? '' }}</RouterLink></header>
+                        <p v-if="lowQuery.isError.value" class="attention-state text-rose-700" role="alert">Low-stock alerts could not be loaded. <button class="underline" @click="lowQuery.refetch()">Try again</button></p>
+                        <p v-else-if="lowQuery.isPending.value" class="attention-state" role="status">Loading…</p>
+                        <p v-else-if="!lowLevels.length" class="attention-state">No low stock alerts.</p>
+                        <ul v-else class="attention-list">
+                            <li v-for="level in lowLevels.slice(0, 2)" :key="level.id">
+                                <RouterLink :to="{ name: 'inventory-item', params: { item: level.item.id } }"><strong>{{ level.item.name }}</strong><span>{{ buildLocationPath(level.location, locationsQuery.data.value ?? []) }} · {{ level.quantity }} {{ level.item.counting_unit }}</span></RouterLink>
+                                <span class="attention-badge">Low stock</span>
+                            </li>
+                        </ul>
+                    </section>
+                    <section class="attention-group" aria-labelledby="buysoon-heading">
+                        <header><h3 id="buysoon-heading">Buy soon</h3><RouterLink :to="attentionRoute('buy_soon')">See all {{ activeAlertQuery.data.value?.meta.total ?? '' }}</RouterLink></header>
+                        <p v-if="activeAlertQuery.isError.value" class="attention-state text-rose-700" role="alert">Buy-soon reminders could not be loaded. <button class="underline" @click="activeAlertQuery.refetch()">Try again</button></p>
+                        <p v-else-if="activeAlertQuery.isPending.value" class="attention-state" role="status">Loading…</p>
+                        <p v-else-if="!activeAlerts.length" class="attention-state">Nothing marked to buy soon.</p>
+                        <ul v-else class="attention-list buysoon-list">
+                            <li v-for="alert in activeAlerts.slice(0, 2)" :key="alert.id">
+                                <div class="attention-reminder-row">
+                                    <RouterLink :to="{ name: 'inventory-item', params: { item: alert.item.id } }"><strong>{{ alert.item.name }}</strong><span>Marked for your next shop</span></RouterLink>
+                                    <span class="attention-badge">Buy soon</span>
+                                </div>
+                                <details class="reminder-notes" @toggle="toggleAlertNotes(alert.id, $event)">
+                                    <summary>Reminder notes</summary>
+                                    <NotesPanel v-if="openReminderNoteIds.has(alert.id)" type="inventory-alerts" :context-id="alert.id" />
+                                </details>
+                            </li>
+                        </ul>
+                    </section>
+                </div>
+            </section>
+
+            <section class="dashboard-card" aria-labelledby="quick-access-title">
+                <header class="dashboard-card-header"><div><h2 id="quick-access-title">Quick access</h2><p>Go straight to a household area</p></div></header>
+                <nav class="quick-access-list" aria-label="Quick access">
+                    <RouterLink :to="{ name: 'inventory' }"><span class="quick-access-icon"><UiIcon name="box" :size="18" /></span><span><strong>Browse inventory</strong><small>Find and manage all items</small></span><UiIcon name="chevron" :size="16" /></RouterLink>
+                    <RouterLink :to="{ name: 'catalog-locations' }"><span class="quick-access-icon"><UiIcon name="pin" :size="18" /></span><span><strong>Browse locations</strong><small>See your household storage</small></span><UiIcon name="chevron" :size="16" /></RouterLink>
+                    <template v-if="firstLocation">
+                        <RouterLink :to="{ name: 'location-intake', params: { location: firstLocation.id } }"><span class="quick-access-icon"><UiIcon name="plus" :size="18" /></span><span><strong>Add items at {{ firstLocation.name }}</strong><small>Start a shelf entry</small></span><UiIcon name="chevron" :size="16" /></RouterLink>
+                        <RouterLink :to="{ name: 'location-count', params: { location: firstLocation.id } }"><span class="quick-access-icon"><UiIcon name="check" :size="18" /></span><span><strong>Count stock at {{ firstLocation.name }}</strong><small>Record a shelf count</small></span><UiIcon name="chevron" :size="16" /></RouterLink>
+                    </template>
+                    <RouterLink :to="{ name: 'activity' }"><span class="quick-access-icon"><UiIcon name="clock" :size="18" /></span><span><strong>Recent activity</strong><small>Review recent stock changes</small></span><UiIcon name="chevron" :size="16" /></RouterLink>
+                </nav>
+            </section>
+        </div>
+
+        <details class="dashboard-workflows">
+            <summary>Search inventory and make stock changes</summary>
+            <section class="mt-4 rounded-panel border border-line bg-white shadow-card" aria-labelledby="finder-title">
             <div class="border-b border-line p-5 sm:p-6">
                 <h2 id="finder-title" class="sr-only">Find an item</h2>
                 <label for="dashboard-search" class="sr-only">Find an item</label>
@@ -295,7 +358,8 @@ function toggleAlertNotes(id: string, event: Event): void {
                 </li>
             </ul>
             <ListPagination v-if="itemQuery.data.value" :meta="itemQuery.data.value.meta" :page="resultsPage" :busy="itemQuery.isFetching.value" singular="item" plural="items" @change="resultsPage = $event" />
-        </section>
+            </section>
+        </details>
 
         <FormModal v-if="selectedItem && action" label="Change stock" :busy="pending" @close="cancelAction">
             <section class="rounded-panel border border-line bg-white p-5 shadow-card sm:p-6" aria-labelledby="quick-action-title">
@@ -345,38 +409,6 @@ function toggleAlertNotes(id: string, event: Event): void {
             </section>
         </FormModal>
 
-        <div class="mt-8 grid gap-5 xl:grid-cols-3">
-            <section class="rounded-panel border border-line bg-white shadow-card" aria-labelledby="empty-heading">
-                <div class="border-b border-line px-5 py-4"><h2 id="empty-heading" class="font-semibold text-ink">Out of stock</h2><p class="mt-1 text-sm text-ink-muted">Monitored locations with no stock</p></div>
-                <div v-if="emptyQuery.isError.value" class="p-5 text-sm text-rose-700" role="alert">Out of stock items could not be loaded. <button class="underline" @click="emptyQuery.refetch()">Try again</button></div>
-                <div v-else-if="emptyQuery.isPending.value" class="p-5 text-sm text-ink-muted" role="status">Loading…</div>
-                <p v-else-if="!emptyLevels.length" class="p-5 text-sm text-ink-muted">Nothing is out of stock.</p>
-                <ul v-else class="divide-y divide-line"><li v-for="level in emptyLevels" :key="level.id" class="p-4"><RouterLink :to="{ name: 'inventory-item', params: { item: level.item.id } }" class="font-medium text-ink hover:underline">{{ level.item.name }}</RouterLink><p class="mt-1 text-sm text-ink-muted">{{ buildLocationPath(level.location, locationsQuery.data.value ?? []) }} · 0 {{ level.item.counting_unit }} · threshold {{ level.alert_threshold }}</p><RouterLink :to="{ name: 'inventory-item', params: { item: level.item.id } }" class="mt-2 inline-block text-sm font-medium text-sage-dark">Restock or transfer</RouterLink></li></ul>
-                <ListPagination v-if="emptyQuery.data.value" :meta="emptyQuery.data.value.meta" :page="emptyPage" :busy="emptyQuery.isFetching.value" singular="item" plural="items" @change="emptyPage = $event" />
-            </section>
-            <section class="rounded-panel border border-line bg-white shadow-card" aria-labelledby="low-heading">
-                <div class="border-b border-line px-5 py-4"><h2 id="low-heading" class="font-semibold text-ink">Low stock</h2><p class="mt-1 text-sm text-ink-muted">At or below the location threshold</p></div>
-                <div v-if="lowQuery.isError.value" class="p-5 text-sm text-rose-700" role="alert">Low stock items could not be loaded. <button class="underline" @click="lowQuery.refetch()">Try again</button></div>
-                <div v-else-if="lowQuery.isPending.value" class="p-5 text-sm text-ink-muted" role="status">Loading…</div>
-                <p v-else-if="!lowLevels.length" class="p-5 text-sm text-ink-muted">No low stock alerts.</p>
-                <ul v-else class="divide-y divide-line"><li v-for="level in lowLevels" :key="level.id" class="p-4"><RouterLink :to="{ name: 'inventory-item', params: { item: level.item.id } }" class="font-medium text-ink hover:underline">{{ level.item.name }}</RouterLink><p class="mt-1 text-sm text-ink-muted">{{ buildLocationPath(level.location, locationsQuery.data.value ?? []) }} · {{ level.quantity }} {{ level.item.counting_unit }} · threshold {{ level.alert_threshold }}</p><RouterLink :to="{ name: 'inventory-item', params: { item: level.item.id } }" class="mt-2 inline-block text-sm font-medium text-sage-dark">Restock or transfer</RouterLink></li></ul>
-                <ListPagination v-if="lowQuery.data.value" :meta="lowQuery.data.value.meta" :page="lowPage" :busy="lowQuery.isFetching.value" singular="item" plural="items" @change="lowPage = $event" />
-            </section>
-            <section class="rounded-panel border border-line bg-white shadow-card" aria-labelledby="buysoon-heading">
-                <div class="border-b border-line px-5 py-4"><h2 id="buysoon-heading" class="font-semibold text-ink">Buy soon</h2><p class="mt-1 text-sm text-ink-muted">Items you marked for your next shop</p></div>
-                <div v-if="activeAlertQuery.isError.value" class="p-5 text-sm text-rose-700" role="alert">Buy soon alerts could not be loaded. <button class="underline" @click="activeAlertQuery.refetch()">Try again</button></div>
-                <div v-else-if="activeAlertQuery.isPending.value" class="p-5 text-sm text-ink-muted" role="status">Loading…</div>
-                <p v-else-if="!activeAlertQuery.data.value?.data.length" class="p-5 text-sm text-ink-muted">Nothing marked to buy soon.</p>
-                <ul v-else class="divide-y divide-line">
-                    <li v-for="alert in activeAlertQuery.data.value.data" :key="alert.id" class="grid gap-3 p-4">
-                        <div class="flex items-center justify-between gap-3"><RouterLink :to="{ name: 'inventory-item', params: { item: alert.item.id } }" class="min-w-0 font-medium text-ink hover:underline">{{ alert.item.name }}</RouterLink>
-                            <button type="button" :disabled="pending" class="min-h-10 shrink-0 rounded-md border border-line px-3 text-sm disabled:opacity-50" @click="resolveBuySoon(alert.id)">Resolve</button></div>
-                        <details @toggle="toggleAlertNotes(alert.id, $event)"><summary class="w-fit cursor-pointer text-sm font-medium text-sage-dark">Notes</summary><NotesPanel v-if="openAlertNoteContexts.has(alert.id)" class="mt-3" type="inventory-alerts" :context-id="alert.id" /></details>
-                    </li>
-                </ul>
-                <ListPagination v-if="activeAlertQuery.data.value" :meta="activeAlertQuery.data.value.meta" :page="buySoonPage" :busy="activeAlertQuery.isFetching.value" singular="reminder" plural="reminders" @change="buySoonPage = $event" />
-            </section>
-        </div>
-        <button v-if="itemQuery.isError.value || emptyQuery.isError.value || lowQuery.isError.value || activeAlertQuery.isError.value" type="button" class="mt-4 text-sm font-medium text-sage-dark underline" @click="retryQueries">Retry dashboard</button>
+        <button v-if="itemQuery.isError.value || inventoryCountQuery.isError.value || emptyQuery.isError.value || lowQuery.isError.value || activeAlertQuery.isError.value" type="button" class="mt-4 text-sm font-medium text-sage-dark underline" @click="retryQueries">Retry dashboard</button>
     </section>
 </template>

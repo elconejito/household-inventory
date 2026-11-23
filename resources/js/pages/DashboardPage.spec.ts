@@ -61,14 +61,15 @@ describe('dashboard finder and attention', () => {
     });
 
     function mountPage(): void {
-        wrapper = mount(DashboardPage, { global: { plugins: [[VueQueryPlugin, { queryClient }]], stubs: { RouterLink: { template: '<a><slot /></a>' } } } });
+        wrapper = mount(DashboardPage, { global: { plugins: [[VueQueryPlugin, { queryClient }]], stubs: { RouterLink: { props: ['to'], template: '<a :data-to="JSON.stringify(to)"><slot /></a>' } } } });
     }
 
-    it('does not fetch inventory until a nonempty, debounced search is entered', async () => {
+    it('loads the inventory count without fetching full results until a nonempty search is entered', async () => {
         vi.useFakeTimers();
         mountPage();
         await flushPromises();
-        expect(http.get).not.toHaveBeenCalledWith('/items', expect.anything());
+        expect(http.get).toHaveBeenCalledWith('/items', { params: expect.objectContaining({ per_page: 10 }) });
+        expect(http.get).not.toHaveBeenCalledWith('/items', { params: expect.objectContaining({ 'filter[search]': 'Tea' }) });
 
         await wrapper!.get('#dashboard-search').setValue('Tea');
         await vi.advanceTimersByTimeAsync(300);
@@ -110,15 +111,20 @@ describe('dashboard finder and attention', () => {
         expect(http.post).not.toHaveBeenCalledWith('/inventory-alerts/101/resolve');
     });
 
-    it('keeps empty and low stock as separate attention groups', async () => {
+    it('shows concise alert groups with scoped links instead of dashboard widget pagers', async () => {
         mountPage();
         await flushPromises();
 
         expect(wrapper!.get('#empty-heading').text()).toBe('Out of stock');
         expect(wrapper!.get('#low-heading').text()).toBe('Low stock');
         expect(wrapper!.get('#buysoon-heading').text()).toBe('Buy soon');
-        expect(wrapper!.text()).toContain('Closet · 0 box · threshold 0');
-        expect(wrapper!.text()).toContain('Pantry · 1 box · threshold 2');
+        expect(wrapper!.text()).toContain('Closet · 0 box');
+        expect(wrapper!.text()).toContain('Pantry · 1 box');
+        expect(wrapper!.get('[aria-labelledby="needs-attention-title"]').findAll('button[aria-label="Next"]')).toHaveLength(0);
+        expect(wrapper!.findAll('a').some((link) => link.attributes('data-to')?.includes('"attentionStatus":"empty"'))).toBe(true);
+        expect(wrapper!.findAll('a').some((link) => link.attributes('data-to')?.includes('"attentionStatus":"low"'))).toBe(true);
+        expect(wrapper!.findAll('a').some((link) => link.attributes('data-to')?.includes('"attentionStatus":"buy_soon"'))).toBe(true);
+        expect(wrapper!.get('.dashboard-workflows').attributes('open')).toBeUndefined();
     });
 
     it('shows the API field error when a selected source no longer has enough stock', async () => {
@@ -149,9 +155,9 @@ describe('dashboard finder and attention', () => {
         mountPage();
         await flushPromises();
 
-        expect(wrapper!.text()).toContain('Out of stock items could not be loaded.');
-        expect(wrapper!.text()).toContain('Low stock items could not be loaded.');
-        expect(wrapper!.text()).toContain('Buy soon alerts could not be loaded.');
+        expect(wrapper!.text()).toContain('Out-of-stock alerts could not be loaded.');
+        expect(wrapper!.text()).toContain('Low-stock alerts could not be loaded.');
+        expect(wrapper!.text()).toContain('Buy-soon reminders could not be loaded.');
         expect(wrapper!.text()).not.toContain('Nothing is out of stock.');
         expect(wrapper!.text()).not.toContain('No low stock alerts.');
         expect(wrapper!.text()).not.toContain('Nothing marked to buy soon.');
@@ -159,7 +165,10 @@ describe('dashboard finder and attention', () => {
 
     it('shows active status and resolves a manual alert without a request body', async () => {
         activeAlerts = [{ id: '501', alert_type: 'buy_soon', created_at: '2026-10-03T12:00:00Z', resolved_at: null, item }];
+        vi.useFakeTimers();
         mountPage();
+        await wrapper!.get('#dashboard-search').setValue('Tea');
+        await vi.advanceTimersByTimeAsync(300);
         await flushPromises();
 
         expect(wrapper!.text()).toContain('Tea');
@@ -169,7 +178,7 @@ describe('dashboard finder and attention', () => {
         expect(http.post).toHaveBeenCalledWith('/inventory-alerts/501/resolve');
     });
 
-    it('returns to a populated alert page when resolving the only record on the last page', async () => {
+    it('keeps alert summaries short and links the full set into scoped inventory', async () => {
         activeAlerts = Array.from({ length: 11 }, (_, index) => ({
             id: `alert-${index}`,
             alert_type: 'buy_soon',
@@ -180,16 +189,11 @@ describe('dashboard finder and attention', () => {
         mountPage();
         await flushPromises();
 
-        const buySoonSection = wrapper!.get('section[aria-labelledby="buysoon-heading"]');
-        expect(buySoonSection.text()).toContain('Alert 9');
-        await buySoonSection.findAll('button').find((button) => button.attributes('aria-label') === 'Next')!.trigger('click');
-        await flushPromises();
-        expect(wrapper!.text()).toContain('Alert 10');
-
-        await wrapper!.findAll('button').find((button) => button.text() === 'Resolve')!.trigger('click');
-        await flushPromises();
-
-        expect(wrapper!.text()).toContain('Alert 9');
-        expect(wrapper!.text()).not.toContain('Nothing marked to buy soon.');
+        const buySoonSection = wrapper!.get('[aria-labelledby="buysoon-heading"]');
+        expect(buySoonSection.text()).toContain('Alert 0');
+        expect(buySoonSection.text()).toContain('Alert 1');
+        expect(buySoonSection.text()).not.toContain('Alert 10');
+        expect(buySoonSection.find('a').attributes('data-to')).toContain('"attentionStatus":"buy_soon"');
+        expect(buySoonSection.findAll('button[aria-label="Next"]')).toHaveLength(0);
     });
 });

@@ -46,10 +46,18 @@ test('finds stock and manages independent automatic and buy-soon attention state
     const emptyGroup = page.getByRole('region', { name: 'Out of stock', exact: true });
     const lowGroup = page.getByRole('region', { name: 'Low stock', exact: true });
     const manualGroup = page.getByRole('region', { name: 'Buy soon', exact: true });
+    await expect(page.getByRole('heading', { name: 'Needs attention' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Quick access' })).toBeVisible();
+    await expect(page.getByLabel('Household inventory summary')).toContainText('Items in inventory');
+    await expect(page.locator('.dashboard-stat').first().locator('strong')).toHaveText('2');
+    await expect(emptyGroup.getByRole('link', { name: /See all/ })).toHaveAttribute('href', '/items?attentionStatus=empty');
+    await expect(lowGroup.getByRole('link', { name: /See all/ })).toHaveAttribute('href', '/items?attentionStatus=low');
+    await expect(manualGroup.getByRole('link', { name: /See all/ })).toHaveAttribute('href', '/items?attentionStatus=buy_soon');
     await expect(emptyGroup).toContainText('Basement / Pantry');
     await expect(lowGroup).toContainText('Basement');
     await expect(page.getByText(unrelatedName, { exact: true })).toHaveCount(0);
 
+    await page.locator('.dashboard-workflows > summary').click();
     await page.getByRole('searchbox', { name: 'Find an item', exact: true }).fill('Dashboard tissue');
     const result = page.getByRole('listitem').filter({ has: page.getByRole('link', { name: itemName, exact: true }) }).filter({ has: page.getByRole('button', { name: 'Consume 1', exact: true }) });
     await expect(result).toContainText('6 packs');
@@ -79,7 +87,7 @@ test('finds stock and manages independent automatic and buy-soon attention state
     await page.screenshot({ path: testInfo.outputPath('dashboard-desktop.png'), fullPage: true });
     await page.setViewportSize({ width: 390, height: 844 });
     await page.screenshot({ path: testInfo.outputPath('dashboard-mobile.png'), fullPage: true });
-    await manualGroup.getByRole('button', { name: 'Resolve', exact: true }).click();
+    await result.getByRole('button', { name: 'Resolve', exact: true }).click();
     await expect(manualGroup).not.toContainText(itemName);
     await expect(result.getByRole('button', { name: 'Buy soon', exact: true })).toBeVisible();
 });

@@ -45,14 +45,14 @@ describe('application shell', () => {
         expect(wrapper.get('a[href="/items"]').attributes('aria-current')).toBe('page');
         expect(wrapper.findAll('nav a').map((link) => link.text())).toContain('Activity');
         expect(wrapper.get('a[aria-label="Household home"]').text()).toContain('Household');
-        expect(wrapper.get('header [role="search"] input').attributes('placeholder')).toBe('Search items');
+        const searchButton = wrapper.get('header button[aria-label="Search all"]');
+        expect(searchButton.attributes('aria-haspopup')).toBe('dialog');
         expect(wrapper.get('header summary').text()).toContain('Account');
-
-        await wrapper.get('#global-search').setValue('Paper towels');
-        await wrapper.get('header [role="search"]').trigger('submit');
-        await flushPromises();
-
-        expect(router.currentRoute.value).toMatchObject({ name: 'inventory', query: { search: 'Paper towels' } });
+        expect(wrapper.get('.app-footer').text()).toContain('Ramos Home');
+        await wrapper.get('.mobile-more > summary').trigger('click');
+        expect(wrapper.get('.mobile-more').attributes('open')).toBeDefined();
+        expect(wrapper.get('.mobile-more-panel').text()).toContain('Account & settings');
+        await wrapper.get('.mobile-more > summary').trigger('click');
 
         await wrapper.get('a[href="/activity"]').trigger('click');
         await flushPromises();
