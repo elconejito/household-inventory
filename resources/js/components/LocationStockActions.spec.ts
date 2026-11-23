@@ -30,13 +30,16 @@ const itemDetail = {
 };
 
 describe('LocationStockActions', () => {
-    beforeEach(() => vi.clearAllMocks());
+    beforeEach(() => {
+        vi.clearAllMocks();
+        vi.mocked(http.get).mockResolvedValue({ data: { data: itemDetail } } as never);
+    });
 
     function mountActions() {
         const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
         const wrapper = mount(LocationStockActions, {
             props: { level, locations, activeAction: null, busy: false, errors: { fields: {}, form: '' }, locationsLoading: false, locationsError: false },
-            global: { plugins: [createPinia(), [VueQueryPlugin, { queryClient }]] },
+            global: { plugins: [createPinia(), [VueQueryPlugin, { queryClient }]], stubs: { RouterLink: true } },
         });
         return { wrapper, queryClient };
     }
@@ -49,7 +52,6 @@ describe('LocationStockActions', () => {
         await wrapper.findAll('button').find((button) => button.text() === 'Restock')!.trigger('click');
         await wrapper.setProps({ activeAction: { levelId: 'level-bin', action: 'restock' } });
         await wrapper.get('#stock-action-quantity-level-bin').setValue('4');
-        await wrapper.get('input[type="checkbox"]').setValue(true);
         await wrapper.get('form').trigger('submit');
 
         expect(wrapper.emitted('submit')?.[1]).toEqual(['level-bin', { movement_type: 'restock', item_id: 'item-1', location_id: '22', quantity: 4 }]);
@@ -66,8 +68,8 @@ describe('LocationStockActions', () => {
         expect(destination.findAll('option').map((option) => option.element.value)).not.toContain('22');
         await destination.setValue('30');
         await wrapper.get('#stock-action-quantity-level-bin').setValue('2');
-        expect(wrapper.text()).toContain('Move 2 hoses from House / Kitchen / Bin to House / Closet.');
-        await wrapper.get('input[type="checkbox"]').setValue(true);
+        expect(wrapper.get('button[type="submit"]').text()).toBe('Move 2 hoses');
+        expect(wrapper.text()).toContain('6 → 4 hoses');
         await wrapper.get('form').trigger('submit');
 
         expect(wrapper.emitted('submit')?.[0]).toEqual(['level-bin', { movement_type: 'transfer', item_id: 'item-1', source_location_id: '22', destination_location_id: '30', quantity: 2 }]);
@@ -75,7 +77,7 @@ describe('LocationStockActions', () => {
         queryClient.clear();
     });
 
-    it('loads full item stock only for move-in and transfers from a positive source into the exact row location', async () => {
+    it('loads full item stock on demand and transfers from a positive source into the exact row location', async () => {
         vi.mocked(http.get).mockResolvedValue({ data: { data: itemDetail } } as never);
         const { wrapper, queryClient } = mountActions();
         expect(http.get).not.toHaveBeenCalled();
@@ -89,13 +91,11 @@ describe('LocationStockActions', () => {
         expect(source.findAll('option').map((option) => option.element.value)).not.toContain('22');
         await source.setValue('30');
         await wrapper.get('#stock-action-quantity-level-bin').setValue('4');
-        await wrapper.get('input[type="checkbox"]').setValue(true);
         expect((wrapper.get('button[type="submit"]').element as HTMLButtonElement).disabled).toBe(true);
         await wrapper.get('#stock-action-quantity-level-bin').setValue('3');
         await flushPromises();
-        expect((wrapper.get('input[type="checkbox"]').element as HTMLInputElement).checked).toBe(false);
-        expect(wrapper.text()).toContain('Move 3 hoses from House / Closet to House / Kitchen / Bin.');
-        await wrapper.get('input[type="checkbox"]').setValue(true);
+        expect(wrapper.text()).toContain('3 → 0 hoses');
+        expect(wrapper.text()).toContain('6 → 9 hoses');
         await wrapper.get('form').trigger('submit');
 
         expect(wrapper.emitted('submit')?.[0]).toEqual(['level-bin', { movement_type: 'transfer', item_id: 'item-1', source_location_id: '30', destination_location_id: '22', quantity: 3 }]);
@@ -103,22 +103,33 @@ describe('LocationStockActions', () => {
         queryClient.clear();
     });
 
-    it('requires a valid quantity and resets confirmation when transfer details change', async () => {
+    it('requires a valid quantity and submits the revised transfer destination', async () => {
         const { wrapper, queryClient } = mountActions();
         await wrapper.setProps({ activeAction: { levelId: 'level-bin', action: 'move-out' } });
         await wrapper.get('#move-out-destination-level-bin').setValue('30');
         await wrapper.get('#stock-action-quantity-level-bin').setValue('7');
-        await wrapper.get('input[type="checkbox"]').setValue(true);
 
         expect((wrapper.get('button[type="submit"]').element as HTMLButtonElement).disabled).toBe(true);
         await wrapper.get('#stock-action-quantity-level-bin').setValue('6');
         await flushPromises();
-        expect((wrapper.get('input[type="checkbox"]').element as HTMLInputElement).checked).toBe(false);
-        await wrapper.get('input[type="checkbox"]').setValue(true);
         await wrapper.get('#move-out-destination-level-bin').setValue('31');
-        await flushPromises();
-        expect((wrapper.get('input[type="checkbox"]').element as HTMLInputElement).checked).toBe(false);
+        await wrapper.get('form').trigger('submit');
+        expect(wrapper.emitted('submit')?.[0]?.[1]).toMatchObject({ destination_location_id: '31', quantity: 6 });
 
+        wrapper.unmount();
+        queryClient.clear();
+    });
+
+    it('offers an absolute shelf count, including zero, in the stock menu', async () => {
+        const { wrapper, queryClient } = mountActions();
+        await wrapper.setProps({ activeAction: { levelId: level.id, action: 'menu' } });
+        await wrapper.findAll('button').find((button) => button.text().startsWith('Count on this shelf'))!.trigger('click');
+        expect(wrapper.emitted('activate')?.[0]).toEqual([level.id, 'count']);
+        await wrapper.setProps({ activeAction: { levelId: level.id, action: 'count' } });
+        expect((wrapper.get('button[type="submit"]').element as HTMLButtonElement).disabled).toBe(true);
+        await wrapper.get('#stock-action-quantity-level-bin').setValue('0');
+        await wrapper.get('form').trigger('submit');
+        expect(wrapper.emitted('submit')?.[0]).toEqual([level.id, { movement_type: 'shelf_count', item_id: 'item-1', location_id: '22', observed_quantity: 0 }]);
         wrapper.unmount();
         queryClient.clear();
     });

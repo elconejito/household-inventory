@@ -8,7 +8,7 @@ import type { CatalogInventoryLevel } from '../api/catalog';
 import ContextDetailPage from './ContextDetailPage.vue';
 
 vi.mock('../lib/http', () => ({ http: { get: vi.fn(), post: vi.fn(), patch: vi.fn(), delete: vi.fn() } }));
-const route = vi.hoisted(() => ({ name: 'category-detail' as string, params: { category: '12', location: '21' } }));
+const route = vi.hoisted(() => ({ name: 'category-detail' as string, query: {} as Record<string, string>, params: { category: '12', location: '21' } }));
 vi.mock('vue-router', async (importOriginal) => {
     const vue = await import('vue');
     const reactiveRoute = vue.reactive(route);
@@ -22,6 +22,7 @@ describe('category and location note contexts', () => {
     beforeEach(() => {
         vi.clearAllMocks();
         route.name = 'category-detail';
+        route.query = {};
         route.params.category = '12';
         route.params.location = '21';
         client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -63,6 +64,45 @@ describe('category and location note contexts', () => {
         wrapper = mount(ContextDetailPage, { global: { plugins: [createPinia(), [VueQueryPlugin, { queryClient: client }]], stubs: { RouterLink: { props: ['to'], template: '<a :data-to="JSON.stringify(to)"><slot /></a>' }, ArchiveResourceButton: true } } });
     }
 
+    it('restores category search and pagination and passes them back through item links', async () => {
+        route.query = { search: 'hose', page: '3', perPage: '25' };
+        const original = vi.mocked(http.get).getMockImplementation()!;
+        vi.mocked(http.get).mockImplementation(async (url, config) => url === '/items'
+            ? { data: { data: [{ id: '18', name: 'Garden Hose', counting_unit: 'hose' }], meta: { current_page: 3, last_page: 4, total: 80 } } } as never
+            : original(url, config));
+        mountPage();
+        await flushPromises();
+        expect(wrapper!.get('#category-items-search').element).toHaveProperty('value', 'hose');
+        expect(http.get).toHaveBeenCalledWith('/items', expect.objectContaining({ params: expect.objectContaining({ page: 3, per_page: 25, 'filter[search]': 'hose' }) }));
+        const link = wrapper!.findAll('a').find((element) => element.text() === 'Garden Hose')!;
+        expect(JSON.parse(link.attributes('data-to')!)).toEqual({
+            name: 'inventory-item', params: { item: '18' }, query: { origin: 'category', originId: '12', search: 'hose', page: '3', perPage: '25' },
+        });
+    });
+
+    it('restores both location pagers and gives the stock menu the same item destination as its row', async () => {
+        route.name = 'location-detail';
+        route.query = { page: '2', childrenPerPage: '25' };
+        const original = vi.mocked(http.get).getMockImplementation()!;
+        vi.mocked(http.get).mockImplementation(async (url, config) => {
+            if (url !== '/inventory-levels') return original(url, config);
+            const levels = Array.from({ length: 12 }, (_, idx) => ({
+                id: 'level-' + idx, location: { id: '21', name: 'Kitchen' }, quantity: 1,
+                item: { id: String(idx + 1), name: 'Item ' + (idx + 1), counting_unit: 'piece' },
+            }));
+            return { data: { data: levels, meta: { last_page: 1 } } } as never;
+        });
+        mountPage();
+        await flushPromises();
+        const list = wrapper!.get('ul[aria-label="Items stored directly here"]');
+        expect(list.findAll('li')).toHaveLength(2);
+        const row = list.findAll('li')[0]!;
+        const expected = { name: 'inventory-item', params: { item: '11' }, query: { origin: 'location', originId: '21', page: '2', childrenPerPage: '25' } };
+        expect(JSON.parse(row.get('a').attributes('data-to')!)).toEqual(expected);
+        await row.get('button[aria-label="More stock actions for Item 11"]').trigger('click');
+        expect(JSON.parse(wrapper!.get('dialog a').attributes('data-to')!)).toEqual(expected);
+    });
+
     it('loads a category detail identity and offers its notes', async () => {
         mountPage();
         await flushPromises();
@@ -95,7 +135,10 @@ describe('category and location note contexts', () => {
         const rows = wrapper!.findAll('ul[aria-label="Items in this category"] > li');
         expect(rows[0].get('img').attributes('src')).toBe('/hose.webp');
         expect(rows[0].text()).toContain('6 hoses total on hand');
-        expect(rows[0].text()).toContain('House / Kitchen / Bin — 6 hoses');
+        expect(rows[0].findAll('a').map((link) => link.text())).toContain('House');
+        expect(rows[0].findAll('a').map((link) => link.text())).toContain('Kitchen');
+        expect(rows[0].findAll('a').map((link) => link.text())).toContain('Bin');
+        expect(rows[0].text()).toContain('6 hoses');
         expect(rows[0].text()).toContain('Low stock');
         expect(rows[0].text()).toContain('Buy soon');
         expect(rows[1].text()).toContain('0 rolls total on hand');
@@ -267,6 +310,28 @@ describe('category and location note contexts', () => {
         expect(wrapper!.get('h1').text()).toBe('Cupboard');
     });
 
+    it('moves a location without offering itself or its descendants as a parent', async () => {
+        route.name = 'location-detail';
+        vi.mocked(http.patch).mockResolvedValue({ data: { data: { id: '21', name: 'Kitchen', description: 'Lower cabinets', parent: null } } } as never);
+        mountPage();
+        await flushPromises();
+
+        await wrapper!.findAll('button').find((button) => button.text() === 'Move location')!.trigger('click');
+        expect(wrapper!.get('dialog').text()).toContain('Sublocations and the items stored directly here move with this location.');
+        expect(wrapper!.find('#edit-location-name').exists()).toBe(false);
+        const parentOptions = wrapper!.get('#edit-location-parent').findAll('option').map((option) => option.attributes('value'));
+        expect(parentOptions).toEqual(['', '20']);
+        expect((wrapper!.get('#edit-location-parent').element as HTMLSelectElement).value).toBe('20');
+        await wrapper!.get('#edit-location-parent').setValue('');
+        const saveButton = wrapper!.findAll('button').find((button) => button.text() === 'Move location')!;
+        expect(saveButton.attributes('disabled')).toBeUndefined();
+        await wrapper!.get('form').trigger('submit');
+        await flushPromises();
+
+        expect(http.patch).toHaveBeenCalledWith('/locations/21', { data: { parent_id: null } });
+        expect(wrapper!.text()).toContain('Kitchen was moved.');
+    });
+
     it('shows the location hierarchy and requests notes for that location', async () => {
         route.name = 'location-detail';
         mountPage();
@@ -282,6 +347,10 @@ describe('category and location note contexts', () => {
         expect(wrapper!.find('#item-to-restock').exists()).toBe(false);
         expect(wrapper!.text()).not.toContain('Restock here');
         expect(wrapper!.get('[aria-label="Record actions"]').find('archive-resource-button-stub').exists()).toBe(true);
+        const locationActions = wrapper!.findAll('a');
+        expect(locationActions.map((link) => JSON.parse(link.attributes('data-to')!))).toContainEqual({ name: 'location-intake', params: { location: '21' } });
+        expect(locationActions.map((link) => JSON.parse(link.attributes('data-to')!))).toContainEqual({ name: 'location-count', params: { location: '21' } });
+        expect(locationActions.map((link) => JSON.parse(link.attributes('data-to')!))).toContainEqual({ name: 'inventory', query: { location: '21' } });
 
     });
 
@@ -304,13 +373,13 @@ describe('category and location note contexts', () => {
         await flushPromises();
         const hoseRow = wrapper!.findAll('li').find((entry) => entry.text().includes('Hose'))!;
         await hoseRow.findAll('button').find((button) => button.text() === 'Restock')!.trigger('click');
-        expect(wrapper!.get('form').text()).toContain('Restock');
+        expect(wrapper!.get('dialog').attributes('aria-label')).toContain('Restock');
         const screwsRow = wrapper!.findAll('li').find((entry) => entry.text().includes('Screws'))!;
         await screwsRow.findAll('button').find((button) => button.text() === 'Use 1')!.trigger('click');
         await flushPromises();
 
         expect(http.post).toHaveBeenCalledWith('/inventory-movements', { data: { movement_type: 'consumption', item_id: 'item-2', location_id: '21', quantity: 1 } });
-        expect(wrapper!.findAll('form').some((form) => form.text().includes('Restock'))).toBe(false);
+        expect(wrapper!.findAll('dialog').some((dialog) => dialog.attributes('aria-label')?.includes('Restock'))).toBe(false);
     });
 
     it('shows structured stock action validation errors', async () => {
@@ -336,7 +405,6 @@ describe('category and location note contexts', () => {
         const row = wrapper!.findAll('li').find((entry) => entry.text().includes('Hose'))!;
         await row.findAll('button').find((button) => button.text() === 'Restock')!.trigger('click');
         await wrapper!.get('#stock-action-quantity-level-1').setValue('2');
-        await wrapper!.get('input[type="checkbox"]').setValue(true);
         await wrapper!.get('form').trigger('submit');
         await flushPromises();
 
@@ -346,11 +414,11 @@ describe('category and location note contexts', () => {
         finishMovement?.({ data: { data: { id: 'movement-late' } } });
         await flushPromises();
 
-        expect(wrapper!.findAll('form').some((form) => form.text().includes('Restock'))).toBe(false);
+        expect(wrapper!.findAll('dialog').some((dialog) => dialog.attributes('aria-label')?.includes('Restock'))).toBe(false);
         expect(wrapper!.findAll('[role="status"]').some((status) => status.text() === 'Stock updated.')).toBe(false);
     });
 
-    it('combines child locations and direct items while excluding descendant stock', async () => {
+    it('separates sublocations from directly stored items and excludes descendant stock', async () => {
         route.name = 'location-detail';
         const originalGet = vi.mocked(http.get).getMockImplementation()!;
         vi.mocked(http.get).mockImplementation(async (url, config) => {
@@ -364,20 +432,30 @@ describe('category and location note contexts', () => {
         mountPage();
         await flushPromises();
 
-        const list = wrapper!.get('ul[aria-label="Location contents"]');
-        expect(list.findAll(':scope > li')).toHaveLength(3);
-        expect(list.text()).toContain('BinChild location');
-        expect(list.text()).toContain('HoseItem · 6 hoses');
-        expect(list.text()).toContain('ScrewsItem · 2 boxes');
-        expect(list.text()).not.toContain('Stored inside Bin');
-        expect(wrapper!.text()).toContain('3 entries · Page 1 of 1');
+        const children = wrapper!.get('ul[aria-label="Sublocations"]');
+        const items = wrapper!.get('ul[aria-label="Items stored directly here"]');
+        expect(children.findAll(':scope > li')).toHaveLength(1);
+        expect(children.text()).toContain('Bin');
+        expect(items.findAll(':scope > li')).toHaveLength(2);
+        expect(items.text()).toContain('Hose');
+        expect(items.text()).toContain('Screws');
+        expect(items.text()).not.toContain('Stored inside Bin');
+        expect(wrapper!.text()).toContain('2 items · Page 1 of 1');
         expect(wrapper!.find('#inventory-scope').exists()).toBe(false);
     });
 
-    it('paginates and searches one combined collection across all direct-stock API pages', async () => {
+    it('paginates sublocations and directly stored items independently', async () => {
         route.name = 'location-detail';
         const originalGet = vi.mocked(http.get).getMockImplementation()!;
         vi.mocked(http.get).mockImplementation(async (url, config) => {
+            if (url === '/locations') {
+                const locations = [
+                    { id: '20', name: 'House', description: null, parent: null },
+                    { id: '21', name: 'Kitchen', description: null, parent: { id: '20', name: 'House', description: null } },
+                    ...Array.from({ length: 11 }, (_, index) => ({ id: `child-${index + 1}`, name: `Child ${index + 1}`, description: null, parent: { id: '21', name: 'Kitchen', description: null } })),
+                ];
+                return { data: { data: locations, meta: { current_page: 1, last_page: 1, total: locations.length } } } as never;
+            }
             if (url !== '/inventory-levels') return originalGet(url, config);
             const page = Number((config?.params as { page?: number } | undefined)?.page ?? 1);
             const ids = page === 1 ? Array.from({ length: 10 }, (_, index) => index + 1) : [11];
@@ -386,27 +464,20 @@ describe('category and location note contexts', () => {
         mountPage();
         await flushPromises();
 
-        expect(wrapper!.get('ul[aria-label="Location contents"]').findAll(':scope > li')).toHaveLength(10);
-        expect(wrapper!.text()).toContain('12 entries · Page 1 of 2');
-        await wrapper!.get('section[aria-labelledby="location-contents-heading"] button[aria-label="Page 2"]').trigger('click');
-        expect(wrapper!.get('ul[aria-label="Location contents"]').findAll(':scope > li')).toHaveLength(2);
+        const childSection = wrapper!.get('section[aria-labelledby="sublocations-heading"]');
+        const itemSection = wrapper!.get('section[aria-labelledby="direct-items-heading"]');
+        expect(childSection.get('ul[aria-label="Sublocations"]').findAll(':scope > li')).toHaveLength(10);
+        expect(itemSection.get('ul[aria-label="Items stored directly here"]').findAll(':scope > li')).toHaveLength(10);
+        await childSection.get('button[aria-label="Page 2"]').trigger('click');
+        await flushPromises();
+        expect(childSection.get('ul[aria-label="Sublocations"]').findAll(':scope > li')).toHaveLength(1);
+        expect(itemSection.get('ul[aria-label="Items stored directly here"]').findAll(':scope > li')).toHaveLength(10);
+        expect(wrapper!.text()).toContain('11 sublocations · Page 2 of 2');
+        await itemSection.get('select').setValue('25');
+        await flushPromises();
+        expect(itemSection.get('ul[aria-label="Items stored directly here"]').findAll(':scope > li')).toHaveLength(11);
+        expect(childSection.get('ul[aria-label="Sublocations"]').findAll(':scope > li')).toHaveLength(1);
+        expect(wrapper!.text()).toContain('11 items · Page 1 of 1');
         expect(http.get).toHaveBeenCalledWith('/inventory-levels', { params: { 'filter[location_id]': '21', include: 'item.active_alerts,location', page: 2, per_page: 100 } });
-        await wrapper!.get('#location-contents-search').setValue('Direct 11');
-        expect(wrapper!.text()).toContain('1 entry · Page 1 of 1');
-        expect(wrapper!.get('ul[aria-label="Location contents"]').text()).toContain('Direct 11');
-    });
-
-    it('clears the stock action when the contents search changes', async () => {
-        route.name = 'location-detail';
-        mountPage();
-        await flushPromises();
-        const row = wrapper!.findAll('li').find((entry) => entry.text().includes('Hose'))!;
-        await row.findAll('button').find((button) => button.text() === 'Restock')!.trigger('click');
-        expect(wrapper!.findAll('form').some((form) => form.text().includes('Restock'))).toBe(true);
-
-        await wrapper!.get('#location-contents-search').setValue('Screws');
-        await flushPromises();
-
-        expect(wrapper!.findAll('form').some((form) => form.text().includes('Restock'))).toBe(false);
     });
 });
