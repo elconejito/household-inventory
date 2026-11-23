@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import FormModal from '../components/FormModal.vue';
-import ListFilters from '../components/ListFilters.vue';
 import ListPagination from '../components/ListPagination.vue';
+import UiIcon from '../components/UiIcon.vue';
 import { computed, nextTick, onUnmounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { buildLocationPath, type Location as StockLocation } from '../api/stock';
@@ -9,7 +9,6 @@ import { parseApiErrors, type FormErrors } from '../lib/api-errors';
 import { useCategoriesCatalogQuery, useCreateCatalogLocationMutation, useCreateCategoryMutation, useLocationsCatalogQuery } from '../queries/catalog';
 import { useLocationsQuery } from '../queries/stock';
 
-const pageSizes = [10, 25, 50, 100];
 const route = useRoute();
 const router = useRouter();
 const isCategoriesPage = computed(() => route.name === 'catalog-categories');
@@ -47,10 +46,15 @@ const currentParentPath = computed(() => currentParent.value
         : locationOptions.isError.value
             ? 'Location hierarchy unavailable'
             : 'Loading location hierarchy…');
-const locationRows = computed(() => (locationQuery.data.value?.data ?? []).map((location) => ({
-    location,
-    path: buildLocationPath(location, locationOptions.data.value ?? []),
-})));
+const locationRows = computed(() => {
+    const allLocations = locationOptions.data.value ?? [];
+
+    return (locationQuery.data.value?.data ?? []).map((location) => ({
+        location,
+        path: buildLocationPath(location, allLocations),
+        childCount: allLocations.filter((candidate) => candidate.parent?.id === location.id).length,
+    }));
+});
 const eligibleParents = computed(() => locationOptions.data.value ?? []);
 const isPending = computed(() => createCategoryMutation.isPending.value || createLocationMutation.isPending.value);
 
@@ -65,8 +69,6 @@ watch(search, (value) => {
 watch(() => [route.name, route.query.parent, route.query.create], () => {
     page.value = 1;
     pageSize.value = 10;
-    search.value = '';
-    debouncedSearch.value = '';
     showCreateForm.value = route.query.create === '1';
     categoryName.value = '';
     locationName.value = '';
@@ -74,6 +76,13 @@ watch(() => [route.name, route.query.parent, route.query.create], () => {
     createParentId.value = parentId.value ?? '';
     errors.value = { fields: {}, form: '' };
     success.value = '';
+}, { immediate: true });
+
+watch(() => [route.name, route.query.parent, route.query.search], () => {
+    const query = route.query.search;
+    search.value = typeof query === 'string' ? query : '';
+    debouncedSearch.value = search.value.trim();
+    page.value = 1;
 }, { immediate: true });
 
 watch(parentId, (value) => {
@@ -86,14 +95,6 @@ onUnmounted(() => {
 
 function changePage(nextPage: number): void {
     if (nextPage >= 1 && nextPage <= (activeQuery.value.data.value?.meta.last_page ?? 1)) page.value = nextPage;
-}
-
-function changePageSize(value: string): void {
-    const parsed = Number(value);
-    if (pageSizes.includes(parsed)) {
-        pageSize.value = parsed;
-        page.value = 1;
-    }
 }
 
 function toggleCreateForm(): void {
@@ -223,21 +224,19 @@ async function browseChildren(id: string): Promise<void> {
         </FormModal>
 
         <section class="mt-7 overflow-hidden rounded-panel border border-line bg-white shadow-card" :aria-busy="activeQuery.isFetching.value" :aria-labelledby="isCategoriesPage ? 'categories-heading' : 'locations-heading'">
-            <div v-if="!isCategoriesPage && parentId !== 'root'" class="border-b border-line px-5 py-3 sm:px-6">
+            <div v-if="isCategoriesPage || parentId === 'root'" class="border-b border-line px-5 py-3 sm:px-6">
+                <h2 :id="isCategoriesPage ? 'categories-heading' : 'locations-heading'" class="text-base font-semibold text-ink">{{ isCategoriesPage ? 'Inventory categories' : 'Household locations' }}</h2>
+            </div>
+            <div v-else class="border-b border-line px-5 py-3 sm:px-6">
                 <h2 id="locations-heading" class="text-sm font-semibold text-ink">{{ currentParentPath }}</h2>
                 <RouterLink v-if="parentId" :to="{ name: 'catalog-locations', query: currentParent?.parent?.id ? { parent: currentParent.parent.id } : { parent: 'root' } }" class="text-sm font-medium text-sage-dark hover:underline">← {{ currentParent?.parent?.name ?? 'All locations' }}</RouterLink>
             </div>
-            <h2 v-else :id="isCategoriesPage ? 'categories-heading' : 'locations-heading'" class="sr-only">{{ isCategoriesPage ? 'Categories' : 'Locations' }}</h2>
             <div class="flex items-center gap-3 border-b border-line px-5 py-4 sm:px-6">
                 <div class="relative min-w-0 flex-1">
-                    <label for="catalog-search" class="sr-only">Search {{ isCategoriesPage ? 'categories' : 'locations' }}</label>
+                    <label for="catalog-search" class="sr-only">{{ isCategoriesPage ? 'Search categories' : 'Search all locations' }}</label>
                     <span class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-muted" aria-hidden="true">⌕</span>
-                    <input id="catalog-search" v-model="search" type="search" :placeholder="`Search ${isCategoriesPage ? 'categories' : 'locations'}`" class="min-h-10 w-full rounded-md border border-line bg-canvas pl-9 pr-3 text-sm text-ink outline-none focus:border-sage focus:ring-2 focus:ring-sage/20">
+                    <input id="catalog-search" v-model="search" type="search" :placeholder="isCategoriesPage ? 'Search categories' : 'Search all locations'" class="min-h-10 w-full rounded-md border border-line bg-canvas pl-9 pr-3 text-sm text-ink outline-none focus:border-sage focus:ring-2 focus:ring-sage/20">
                 </div>
-                <ListFilters label="Display"><div class="grid gap-2"><label class="text-xs font-semibold text-ink-muted" for="catalog-page-size">Rows per page</label>
-                    <select id="catalog-page-size" :value="pageSize" class="min-h-10 rounded-md border border-line bg-white px-3 text-sm text-ink" @change="changePageSize(($event.target as HTMLSelectElement).value)">
-                        <option v-for="size in pageSizes" :key="size" :value="size">{{ size }} per page</option>
-                    </select></div></ListFilters>
             </div>
 
             <div v-if="activeQuery.isPending.value" class="grid min-h-44 place-items-center p-6 text-sm text-ink-muted" role="status">Loading {{ isCategoriesPage ? 'categories' : 'locations' }}…</div>
@@ -247,25 +246,38 @@ async function browseChildren(id: string): Promise<void> {
             <template v-else-if="isCategoriesPage && categoryQuery.data.value">
                 <div v-if="categoryQuery.data.value.data.length === 0" class="grid min-h-44 place-items-center p-6 text-center"><div><h3 class="font-semibold text-ink">{{ debouncedSearch ? 'No categories match that search' : 'No categories yet' }}</h3><p class="mt-2 text-sm text-ink-muted">{{ debouncedSearch ? 'Try another name or clear your search.' : 'Create a category to group related items.' }}</p><button v-if="!debouncedSearch" type="button" class="mt-4 min-h-10 rounded-md bg-sage px-4 text-sm font-semibold text-white" @click="toggleCreateForm">Add category</button></div></div>
                 <ul v-else class="divide-y divide-line" aria-label="Categories">
-                    <li v-for="category in categoryQuery.data.value.data" :key="category.id" class="flex flex-wrap items-center justify-between gap-3 px-5 py-4 sm:px-6">
-                        <RouterLink :to="{ name: 'category-detail', params: { category: category.id } }" class="min-h-10 rounded-sm text-base font-semibold text-ink hover:text-sage-dark hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sage">{{ category.name }}</RouterLink>
-                        <span class="text-sm text-ink-muted">Browse category items →</span>
+                    <li v-for="category in categoryQuery.data.value.data" :key="category.id" class="px-5 py-3 sm:px-6">
+                        <RouterLink :to="{ name: 'category-detail', params: { category: category.id } }" class="flex min-h-14 items-center gap-3 rounded-md p-2 text-ink transition hover:bg-surface-soft focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sage">
+                            <span class="grid size-10 shrink-0 place-items-center rounded-md bg-sage-soft text-sage" aria-hidden="true"><UiIcon name="tag" /></span>
+                            <span class="min-w-0 flex-1">
+                                <strong class="block break-words text-sm font-semibold">{{ category.name }}</strong>
+                                <span class="mt-0.5 block text-xs text-ink-muted">Browse category items</span>
+                            </span>
+                            <span class="text-sm font-medium text-sage-dark">Browse <span aria-hidden="true">→</span></span>
+                        </RouterLink>
                     </li>
                 </ul>
             </template>
             <template v-else-if="!isCategoriesPage && locationQuery.data.value">
-                <div v-if="locationQuery.data.value.data.length === 0" class="grid min-h-44 place-items-center p-6 text-center"><div><h3 class="font-semibold text-ink">{{ debouncedSearch ? 'No locations match that search' : (parentId ? 'No child locations yet' : 'No locations yet') }}</h3><p class="mt-2 text-sm text-ink-muted">{{ debouncedSearch ? 'Try another name or clear your search.' : 'Create a location to map where household supplies are stored.' }}</p><button v-if="!debouncedSearch" type="button" class="mt-4 min-h-10 rounded-md bg-sage px-4 text-sm font-semibold text-white" @click="toggleCreateForm">Add location</button></div></div>
+                <div v-if="locationQuery.data.value.data.length === 0" class="grid min-h-44 place-items-center p-6 text-center"><div><h3 class="font-semibold text-ink">{{ debouncedSearch ? 'No locations match that search' : (parentId !== 'root' ? 'No child locations yet' : 'No locations yet') }}</h3><p class="mt-2 text-sm text-ink-muted">{{ debouncedSearch ? 'Try another name or clear your search.' : 'Create a location to map where household supplies are stored.' }}</p><button v-if="!debouncedSearch" type="button" class="mt-4 min-h-10 rounded-md bg-sage px-4 text-sm font-semibold text-white" @click="toggleCreateForm">Add location</button></div></div>
                 <ul v-else class="divide-y divide-line" aria-label="Locations">
-                    <li v-for="row in locationRows" :key="row.location.id" class="grid gap-3 px-5 py-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:px-6">
-                        <div class="min-w-0">
-                            <RouterLink :to="{ name: 'location-detail', params: { location: row.location.id } }" class="break-words text-base font-semibold text-ink hover:text-sage-dark hover:underline">{{ row.location.name }}</RouterLink>
-                            <p class="mt-1 whitespace-pre-line text-sm text-ink-muted">{{ row.path }}<span v-if="row.location.description"> · {{ row.location.description }}</span></p>
+                    <li v-for="row in locationRows" :key="row.location.id" class="px-5 py-3 sm:px-6">
+                        <div class="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+                            <RouterLink :to="{ name: 'location-detail', params: { location: row.location.id } }" :aria-label="row.location.name" class="flex min-h-14 min-w-0 items-center gap-3 rounded-md p-2 text-ink transition hover:bg-surface-soft focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sage">
+                                <span class="grid size-10 shrink-0 place-items-center rounded-md bg-sage-soft text-sage" aria-hidden="true"><UiIcon :name="row.childCount ? 'layers' : 'pin'" /></span>
+                                <span class="min-w-0 flex-1">
+                                    <strong class="block break-words text-sm font-semibold">{{ row.location.name }}</strong>
+                                    <span class="mt-0.5 block break-words text-xs text-ink-muted">{{ row.path }} · {{ row.childCount ? `${row.childCount} sublocations` : (row.location.parent ? 'Sublocation' : 'Top-level location') }}</span>
+                                    <span v-if="row.location.description" class="mt-0.5 block whitespace-pre-line text-xs text-ink-muted">{{ row.location.description }}</span>
+                                </span>
+                                <UiIcon v-if="row.childCount" name="chevron" :size="16" />
+                            </RouterLink>
+                            <button type="button" class="min-h-10 justify-self-start rounded-md border border-line px-3 text-sm font-semibold text-sage-dark hover:bg-sage-soft sm:justify-self-end" @click="browseChildren(row.location.id)">Browse children</button>
                         </div>
-                        <button type="button" class="min-h-10 justify-self-start rounded-md border border-line px-3 text-sm font-semibold text-sage-dark hover:bg-sage-soft sm:justify-self-end" @click="browseChildren(row.location.id)">Browse children</button>
                     </li>
                 </ul>
             </template>
-            <ListPagination v-if="activeQuery.data.value" :meta="activeQuery.data.value.meta" :page="page" :busy="activeQuery.isFetching.value" :singular="isCategoriesPage ? 'category' : 'location'" :plural="isCategoriesPage ? 'categories' : 'locations'" @change="changePage" />
+            <ListPagination v-if="activeQuery.data.value" v-model:per-page="pageSize" :meta="activeQuery.data.value.meta" :page="page" :busy="activeQuery.isFetching.value" :singular="isCategoriesPage ? 'category' : 'location'" :plural="isCategoriesPage ? 'categories' : 'locations'" @change="changePage" />
         </section>
     </section>
 </template>
