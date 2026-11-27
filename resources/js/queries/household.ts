@@ -4,8 +4,8 @@ import { acceptInvitation, createInvitation, getArchivedResources, getHousehold,
 
 export const householdQueryKeys = {
     household: ['household'] as const,
-    members: (trashed: 'without' | 'only', page: number) => ['memberships', trashed, page] as const,
-    invitations: (page: number) => ['household-invitations', page] as const,
+    members: (trashed: 'without' | 'only', page: number, perPage: number) => ['memberships', trashed, page, perPage] as const,
+    invitations: (page: number, perPage: number) => ['household-invitations', page, perPage] as const,
     archived: (type: ArchivedType) => ['archived-resources', type] as const,
 };
 
@@ -13,12 +13,12 @@ export function useHouseholdQuery(enabled: ComputedRef<boolean> = computed(() =>
     return useQuery({ queryKey: householdQueryKeys.household, queryFn: getHousehold, enabled });
 }
 
-export function useMembersQuery(trashed: ComputedRef<'without' | 'only'>, page: ComputedRef<number>, enabled: ComputedRef<boolean> = computed(() => true)) {
-    return useQuery({ queryKey: computed(() => householdQueryKeys.members(trashed.value, page.value)), queryFn: () => getMembers(page.value, trashed.value), enabled });
+export function useMembersQuery(trashed: ComputedRef<'without' | 'only'>, page: ComputedRef<number>, perPage: ComputedRef<number>, enabled: ComputedRef<boolean> = computed(() => true)) {
+    return useQuery({ queryKey: computed(() => householdQueryKeys.members(trashed.value, page.value, perPage.value)), queryFn: () => getMembers(page.value, trashed.value, perPage.value), enabled });
 }
 
-export function useInvitationsQuery(page: ComputedRef<number>, enabled: boolean | ComputedRef<boolean> = true) {
-    return useQuery({ queryKey: computed(() => householdQueryKeys.invitations(page.value)), queryFn: () => getInvitations(page.value), enabled });
+export function useInvitationsQuery(page: ComputedRef<number>, perPage: ComputedRef<number>, enabled: boolean | ComputedRef<boolean> = true) {
+    return useQuery({ queryKey: computed(() => householdQueryKeys.invitations(page.value, perPage.value)), queryFn: () => getInvitations(page.value, perPage.value), enabled });
 }
 
 export function useArchivedResourcesQuery(type: ComputedRef<ArchivedType>) {

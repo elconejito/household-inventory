@@ -51,7 +51,7 @@ test('sets up zero-stock parent and child locations with explicit monitoring and
     });
 
     await page.goto(`/items/${item.id}`);
-    await page.getByRole('button', { name: 'Set up a stock location', exact: true }).click();
+    await page.getByRole('region', { name: 'Stock by location', exact: true }).getByRole('button', { name: 'Add stock location', exact: true }).click();
     await page.locator('#setup-location').selectOption({ label: 'Basement' });
     await expect(page.locator('#setup-threshold')).toHaveValue('');
     await page.screenshot({ path: testInfo.outputPath('zero-stock-setup-desktop.png'), fullPage: true });
@@ -59,7 +59,7 @@ test('sets up zero-stock parent and child locations with explicit monitoring and
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(320);
     await page.screenshot({ path: testInfo.outputPath('zero-stock-setup-mobile.png'), fullPage: true });
     const unmonitoredResponse = page.waitForResponse((response) => response.request().method() === 'POST' && new URL(response.url()).pathname === '/api/inventory-levels');
-    await page.getByRole('button', { name: 'Set up location', exact: true }).click();
+    await page.getByRole('dialog', { name: 'Add stock location', exact: true }).getByRole('button', { name: 'Add stock location', exact: true }).click();
     const unmonitored = await unmonitoredResponse;
     expect(unmonitored.status()).toBe(201);
     expect(unmonitored.request().postDataJSON()).toEqual({ data: { item_id: item.id, location_id: basement.id, alert_threshold: null } });
@@ -69,16 +69,16 @@ test('sets up zero-stock parent and child locations with explicit monitoring and
     await expect(basementRow).toContainText('Unmonitored');
     await expect(basementRow.getByRole('button', { name: 'Use 1', exact: true })).toHaveCount(0);
 
-    await page.getByRole('button', { name: 'Set up a stock location', exact: true }).click();
+    await page.getByRole('region', { name: 'Stock by location', exact: true }).getByRole('button', { name: 'Add stock location', exact: true }).click();
     await expect(page.locator('#setup-location').getByRole('option', { name: 'Basement', exact: true })).toHaveCount(0);
     await page.locator('#setup-location').selectOption({ label: 'Basement / Shelf' });
     await page.locator('#setup-threshold').fill('0');
     const monitoredResponse = page.waitForResponse((response) => response.request().method() === 'POST' && new URL(response.url()).pathname === '/api/inventory-levels');
-    await page.getByRole('button', { name: 'Set up location', exact: true }).click();
+    await page.getByRole('dialog', { name: 'Add stock location', exact: true }).getByRole('button', { name: 'Add stock location', exact: true }).click();
     const monitored = await monitoredResponse;
     expect(monitored.status()).toBe(201);
     expect(monitored.request().postDataJSON()).toEqual({ data: { item_id: item.id, location_id: shelf.id, alert_threshold: 0 } });
-    const shelfRow = stock.getByRole('listitem').filter({ has: page.getByRole('link', { name: 'Basement / Shelf', exact: true }) });
+    const shelfRow = stock.getByRole('listitem').filter({ has: page.getByRole('link', { name: 'Shelf', exact: true }) });
     await expect(shelfRow).toContainText('Monitored');
     await expect(shelfRow).toContainText('Empty');
     await expect(stock.getByRole('button', { name: 'Use 1', exact: true })).toHaveCount(0);
@@ -95,6 +95,7 @@ test('sets up zero-stock parent and child locations with explicit monitoring and
     const alerts = await getResource(page, `inventory-levels?filter[item_id]=${item.id}&filter[alert_status]=empty&include=location`);
     expect(alerts).toHaveLength(1);
     expect(alerts[0].location.id).toBe(shelf.id);
+    await page.setViewportSize({ width: 1280, height: 720 });
     await page.getByRole('navigation', { name: 'Main navigation' }).getByRole('link', { name: 'Dashboard', exact: true }).click();
     const emptyGroup = page.getByRole('region', { name: 'Out of stock', exact: true });
     await expect(emptyGroup.getByRole('listitem')).toHaveCount(1);

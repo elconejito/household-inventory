@@ -23,13 +23,15 @@ const editorGeneration = ref(0);
 const savedMessage = ref('');
 const createdItemId = ref('');
 const createdItemName = ref('');
+const createdUnit = ref('');
+const showReceipt = ref(false);
+const chooseLocation = ref(false);
 const intent = ref<CreateIntent>('detail');
 const photo = ref<File | null>(null);
 const photoInput = ref<HTMLInputElement | null>(null);
 const photoSelectionError = ref('');
 const photoUploadError = ref('');
 const photoUploadFailed = ref(false);
-const photoUploaded = ref(false);
 const navigationError = ref('');
 const processing = ref(false);
 const creationErrors = ref<FormErrors>({ fields: {}, form: '' });
@@ -40,7 +42,7 @@ let isMounted = true;
 
 function setProcessing(value: boolean): void {
     processing.value = value;
-    emit('busy', value || Boolean(createdItemId.value && route.name === 'inventory'));
+    emit('busy', value || Boolean(createdItemId.value && !showReceipt.value && route.name === 'inventory'));
 }
 
 function photoError(file: File): string {
@@ -76,14 +78,7 @@ function isCurrent(generation: number): boolean {
     return isMounted && generation === operationGeneration;
 }
 
-function itemDestination(): { name: string; params: { item: string } } {
-    return {
-        name: 'inventory-item',
-        params: { item: createdItemId.value },
-    };
-}
-
-async function openCreatedItem(generation: number): Promise<void> {
+async function finishCreation(generation: number): Promise<void> {
     if (!createdItemId.value || !isCurrent(generation)) return;
     if (intent.value === 'another') {
         savedMessage.value = `${createdItemName.value} saved. Add another item below.`;
@@ -93,7 +88,6 @@ async function openCreatedItem(generation: number): Promise<void> {
         photoSelectionError.value = '';
         photoUploadError.value = '';
         photoUploadFailed.value = false;
-        photoUploaded.value = false;
         navigationError.value = '';
         creationErrors.value = { fields: {}, form: '' };
         editorGeneration.value++;
@@ -102,10 +96,24 @@ async function openCreatedItem(generation: number): Promise<void> {
         panel.value?.querySelector<HTMLInputElement>('#item-name')?.focus();
         return;
     }
+    showReceipt.value = true;
+    setProcessing(false);
+    await nextTick();
+    panel.value?.querySelector<HTMLElement>('#saved-created-item-title')?.focus();
+}
+
+async function navigateToItem(setup = false): Promise<void> {
+    if (!createdItemId.value || processing.value) return;
+    const generation = ++operationGeneration;
+    chooseLocation.value = setup;
+    showReceipt.value = false;
     setProcessing(true);
     navigationError.value = '';
     try {
-        const failure = await router.push(itemDestination());
+        const failure = await router.push({
+            name: 'inventory-item', params: { item: createdItemId.value },
+            query: setup ? { setup: '1' } : {},
+        });
         if (!isCurrent(generation)) {
             setProcessing(false);
             return;
@@ -148,23 +156,21 @@ async function uploadPhotoForCreatedItem(generation: number, file: File, checkFo
                     setProcessing(false);
                     return;
                 }
-                photoUploaded.value = true;
                 photoUploadFailed.value = false;
-                await openCreatedItem(generation);
+                await finishCreation(generation);
                 return;
             }
         }
 
         await photoMutations.upload.mutateAsync({ file, caption: '' });
         if (!isMounted) return;
-        photoUploaded.value = true;
         photoUploadFailed.value = false;
         if (!isCurrent(generation)) {
             navigationError.value = 'The photo was uploaded, but the page changed before the item could be opened.';
             setProcessing(false);
             return;
         }
-        await openCreatedItem(generation);
+        await finishCreation(generation);
     } catch (cause) {
         if (!isMounted) return;
         photoUploadFailed.value = true;
@@ -184,6 +190,7 @@ async function submitCreate(itemData: NewItem, _snapshot: ItemEditSnapshot | nul
     const generation = ++operationGeneration;
     intent.value = requestedIntent;
     createdItemName.value = itemData.name;
+    createdUnit.value = itemData.counting_unit;
     creationErrors.value = { fields: {}, form: '' };
     navigationError.value = '';
     setProcessing(true);
@@ -215,7 +222,7 @@ async function submitCreate(itemData: NewItem, _snapshot: ItemEditSnapshot | nul
         return;
     }
 
-    await openCreatedItem(generation);
+    await finishCreation(generation);
 }
 
 async function retryPhotoUpload(): Promise<void> {
@@ -233,14 +240,7 @@ async function continueWithoutPhoto(): Promise<void> {
     if (processing.value || !createdItemId.value) return;
     const generation = ++operationGeneration;
     photoUploadFailed.value = false;
-    photoUploaded.value = false;
-    await openCreatedItem(generation);
-}
-
-async function retryOpenItem(): Promise<void> {
-    if (processing.value || !createdItemId.value) return;
-    const generation = ++operationGeneration;
-    await openCreatedItem(generation);
+    await finishCreation(generation);
 }
 
 function cancel(): void {
@@ -254,7 +254,7 @@ watch(() => route.fullPath, () => {
 }, { flush: 'sync' });
 
 watch(() => route.name, () => {
-    emit('busy', processing.value || Boolean(createdItemId.value && route.name === 'inventory'));
+    emit('busy', processing.value || Boolean(createdItemId.value && !showReceipt.value && route.name === 'inventory'));
 }, { flush: 'sync' });
 
 onUnmounted(() => {
@@ -281,16 +281,23 @@ onUnmounted(() => {
 
         <section v-else class="rounded-panel border border-line bg-white p-5 shadow-card sm:p-7" :aria-busy="processing" aria-labelledby="saved-created-item-title">
             <p class="eyebrow">Item saved</p>
-            <h2 id="saved-created-item-title" class="mt-1 text-xl font-semibold text-ink">{{ createdItemName }}</h2>
+            <h2 id="saved-created-item-title" tabindex="-1" class="mt-1 text-xl font-semibold text-ink">{{ createdItemName }}</h2>
             <p v-if="photoUploadFailed" class="mt-3 text-sm text-rose-700" role="alert">The item was saved, but its photo could not be uploaded. {{ photoUploadError }}</p>
             <p v-else-if="navigationError" class="mt-3 text-sm text-rose-700" role="alert">{{ navigationError }}</p>
             <p v-else-if="processing" class="mt-3 text-sm text-ink-muted" role="status">{{ photoBusy ? 'Uploading photo…' : 'Opening item…' }}</p>
-            <p v-else-if="photoUploaded" class="mt-3 text-sm text-sage-dark" role="status">Photo uploaded. Opening the saved item…</p>
+            <template v-else-if="showReceipt">
+                <p class="mt-3 text-sm text-ink-muted">Counted in {{ createdUnit }}. Choose a location to record opening stock.</p>
+                <div class="mt-5 flex flex-wrap gap-2">
+                    <button type="button" class="min-h-10 rounded-md border border-line px-3 font-medium" @click="emit('cancel')">Done</button>
+                    <button type="button" class="min-h-10 rounded-md px-3 font-medium text-sage-dark" @click="navigateToItem()">Open item</button>
+                    <button type="button" class="min-h-10 rounded-md bg-sage px-3 font-semibold text-white" @click="navigateToItem(true)">Choose a location</button>
+                </div>
+            </template>
             <div v-if="photoUploadFailed" class="mt-4 grid gap-3">
                 <div class="grid gap-2"><label for="create-item-photo" class="text-sm font-medium text-ink">Choose a replacement photo</label><input id="create-item-photo" ref="photoInput" type="file" accept="image/jpeg,image/png,image/webp" :disabled="processing" class="min-h-10 w-full min-w-0 rounded-md border border-line bg-white px-3 py-2 text-sm file:mr-3 file:rounded file:border-0 file:bg-sage-soft file:px-3 file:py-1 file:font-medium file:text-sage-dark disabled:opacity-50" @change="selectPhoto"><p v-if="photoSelectionError" class="text-sm text-rose-700" role="alert">{{ photoSelectionError }}</p><p v-else-if="photo" class="break-all text-sm text-ink-muted">{{ photo.name }}</p><button v-if="photo" type="button" :disabled="processing" class="w-fit text-sm font-semibold text-sage-dark underline disabled:opacity-50" @click="removePhoto">Remove photo</button></div>
                 <div class="flex flex-wrap gap-3"><button type="button" :disabled="processing || !photo || Boolean(photoSelectionError)" class="inline-flex min-h-10 items-center rounded-md bg-sage px-4 text-sm font-semibold text-white disabled:opacity-50" @click="retryPhotoUpload">Retry photo upload</button><button type="button" :disabled="processing" class="inline-flex min-h-10 items-center rounded-md border border-line px-4 text-sm font-medium text-ink disabled:opacity-50" @click="continueWithoutPhoto">Continue without photo</button></div>
             </div>
-            <button v-else-if="navigationError" type="button" :disabled="processing" class="mt-4 min-h-10 rounded-md border border-line px-4 text-sm font-semibold text-ink disabled:opacity-50" @click="retryOpenItem">Retry opening item</button>
+            <button v-else-if="navigationError" type="button" :disabled="processing" class="mt-4 min-h-10 rounded-md border border-line px-4 text-sm font-semibold text-ink disabled:opacity-50" @click="navigateToItem(chooseLocation)">Retry opening item</button>
         </section>
     </div>
 </template>

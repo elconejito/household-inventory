@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
+import ListPagination from './ListPagination.vue';
 import { useItemImagesQuery, useItemImageMutations } from '../queries/item-images';
 import { parseApiErrors } from '../lib/api-errors';
 import FormModal from './FormModal.vue';
@@ -13,6 +14,8 @@ const managing = ref(false);
 const caption = ref('');
 const editCaption = ref('');
 const editingId = ref<string | null>(null);
+const imagePage = ref(1);
+const imagePerPage = ref(10);
 const error = ref('');
 const preview = ref<string | null>(null);
 const previewDialog = ref<HTMLDialogElement | null>(null);
@@ -20,6 +23,8 @@ const pending = computed(() => mutations.upload.isPending.value || mutations.upd
 const images = computed(() => imagesQuery.data.value ?? []);
 const primary = computed(() => images.value.find((image) => image.is_primary) ?? images.value[0] ?? null);
 const secondary = computed(() => images.value.filter((image) => image.id !== primary.value?.id));
+const imagePaginationMeta = computed(() => ({ current_page: imagePage.value, last_page: Math.max(1, Math.ceil(secondary.value.length / imagePerPage.value)), total: secondary.value.length }));
+const visibleSecondary = computed(() => secondary.value.slice((imagePage.value - 1) * imagePerPage.value, imagePage.value * imagePerPage.value));
 let itemGeneration = 0;
 
 watch(() => props.itemId, () => {
@@ -30,12 +35,15 @@ watch(() => props.itemId, () => {
     editCaption.value = '';
     error.value = '';
     editingId.value = null;
+    imagePage.value = 1;
     preview.value = null;
 });
 watch(preview, (value) => {
     if (value && previewDialog.value && !previewDialog.value.open) previewDialog.value.showModal();
     if (!value && previewDialog.value?.open) previewDialog.value.close();
 });
+watch([imagePerPage, () => secondary.value.length], () => { imagePage.value = 1; });
+watch(() => imagePaginationMeta.value.last_page, (lastPage) => { imagePage.value = Math.min(imagePage.value, lastPage); });
 
 function timestamp(value: string): string {
     return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }).format(new Date(value));
@@ -128,13 +136,15 @@ function closePreview(): void { preview.value = null; }
         <div v-else-if="imagesQuery.isError.value" class="py-4 text-sm text-rose-700" role="alert">Photos could not be loaded. <button type="button" class="underline" @click="imagesQuery.refetch()">Try again</button></div>
         <template v-else>
             <div v-if="primary" class="mt-3 grid gap-3">
+                <p class="mb-2 text-xs font-semibold text-ink-muted">Primary photo</p>
                 <button type="button" class="block overflow-hidden rounded-md bg-surface-soft" :aria-label="`Enlarge ${primary.caption || 'primary photo'}`" @click="openPreview"><img :src="primary.display_url" :alt="primary.caption || 'Primary item photo'" class="max-h-48 w-full object-contain" loading="lazy"></button>
                 <p v-if="primary.caption" class="text-sm text-ink-muted">{{ primary.caption }}</p>
-                <div v-if="secondary.length" class="flex flex-wrap gap-2">
-                    <button v-for="image in secondary" :key="image.id" type="button" class="overflow-hidden rounded-md bg-surface-soft" :aria-label="`Enlarge ${image.caption || 'photo'}`" @click="preview = image.display_url"><img :src="image.thumbnail_url" :alt="image.caption || 'Item photo'" class="size-14 object-cover" loading="lazy"></button>
+                <div v-if="visibleSecondary.length" class="flex flex-wrap gap-2">
+                    <button v-for="image in visibleSecondary" :key="image.id" type="button" class="overflow-hidden rounded-md bg-surface-soft" :aria-label="`Enlarge ${image.caption || 'photo'}`" @click="preview = image.display_url"><img :src="image.thumbnail_url" :alt="image.caption || 'Item photo'" class="size-14 object-cover" loading="lazy"></button>
                 </div>
             </div>
             <p v-else class="mt-3 text-sm text-ink-muted">No photos yet.</p>
+            <ListPagination v-if="imagesQuery.data.value" v-model:per-page="imagePerPage" :meta="imagePaginationMeta" :page="imagePage" :singular="primary ? 'additional photo' : 'photo'" :plural="primary ? 'additional photos' : 'photos'" @change="imagePage = $event" />
         </template>
         <FormModal v-if="managing" label="Manage photos" :busy="pending" @close="managing = false">
             <section class="p-5 sm:p-6">
@@ -153,13 +163,15 @@ function closePreview(): void { preview.value = null; }
                 <p v-else class="mt-4 text-sm text-ink-muted">No photos yet. Add a photo to make this item easier to recognize.</p>
 
                 <ul v-if="secondary.length" class="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
-                    <li v-for="image in secondary" :key="image.id" class="grid content-start gap-2 rounded-md border border-line p-2">
+                    <li v-for="image in visibleSecondary" :key="image.id" class="grid content-start gap-2 rounded-md border border-line p-2">
                         <button type="button" class="overflow-hidden rounded bg-surface-soft" :aria-label="`Enlarge ${image.caption || 'photo'}`" @click="preview = image.display_url"><img :src="image.thumbnail_url" :alt="image.caption || 'Item photo'" class="aspect-[4/3] w-full object-cover" loading="lazy"></button>
                         <p v-if="image.caption" class="line-clamp-2 text-xs text-ink">{{ image.caption }}</p>
                         <div v-if="editingId === image.id" class="grid gap-2"><label :for="`image-caption-${image.id}`" class="sr-only">Caption</label><input :id="`image-caption-${image.id}`" v-model="editCaption" maxlength="500" class="min-h-9 w-full rounded border border-line px-2 text-xs"><button type="button" :disabled="pending" class="text-left text-xs text-sage-dark underline" @click="saveCaption(image.id, image.caption)">Save caption</button></div>
                         <div v-else class="flex flex-wrap gap-x-3 gap-y-1 text-xs"><button type="button" :disabled="pending" class="text-sage-dark underline" @click="startEdit(image.id, image.caption)">Caption</button><button type="button" :disabled="pending" class="text-sage-dark underline" @click="makePrimary(image.id)">Make primary</button><button type="button" :disabled="pending" class="text-rose-700 underline" @click="removeImage(image.id)">Remove photo</button></div>
                     </li>
                 </ul>
+                <p v-else-if="primary" class="mt-4 text-sm text-ink-muted">No additional photos.</p>
+                <ListPagination v-model:per-page="imagePerPage" :meta="imagePaginationMeta" :page="imagePage" :singular="primary ? 'additional photo' : 'photo'" :plural="primary ? 'additional photos' : 'photos'" @change="imagePage = $event" />
                 <form class="mt-4 grid gap-3 border-t border-line pt-4 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] sm:items-end" @submit.prevent="upload">
                     <div class="grid gap-2"><label :for="`image-upload-${itemId}`" class="text-sm font-medium text-ink">Add a photo</label><input :id="`image-upload-${itemId}`" type="file" accept="image/jpeg,image/png,image/webp" :disabled="pending" class="min-h-10 w-full text-sm file:mr-3 file:min-h-10 file:rounded-md file:border-0 file:bg-sage-soft file:px-3 file:text-sm file:font-medium file:text-sage-dark" @change="chooseFile"></div>
                     <div class="grid gap-2"><label :for="`image-upload-caption-${itemId}`" class="text-sm font-medium text-ink">Caption <span class="font-normal text-ink-muted">(optional)</span></label><input :id="`image-upload-caption-${itemId}`" v-model="caption" maxlength="500" :disabled="pending" class="min-h-10 rounded-md border border-line px-3 text-sm"></div>

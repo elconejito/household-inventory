@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Actions\ArchiveItem;
+use App\Actions\ManageInventoryLevel;
 use App\Enums\InventoryAlertType;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\IndexItemRequest;
@@ -16,6 +17,7 @@ use App\Serialization\ApiResponse;
 use App\Transformers\ItemTransformer;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Relations\Relation;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -101,25 +103,38 @@ class ItemController extends Controller
 
     public function store(
         StoreItemRequest $request,
+        ManageInventoryLevel $levels,
         ApiResponse $apiResponse,
         ItemTransformer $transformer,
     ): JsonResponse {
         Gate::authorize('create', Item::class);
 
         $household = $this->household($request->user());
-        /** @var array{name: string, counting_unit: string, description?: string|null, category_ids?: array<int, int|string>} $data */
+        /** @var array{name: string, counting_unit: string, description?: string|null, category_ids?: array<int, int|string>, opening_stock?: array{location_id: int|string, quantity: int|string}} $data */
         $data = $request->validated('data');
         $categoryIds = $data['category_ids'] ?? null;
-        unset($data['category_ids']);
+        $openingStock = $data['opening_stock'] ?? null;
+        unset($data['category_ids'], $data['opening_stock']);
         $includes = $this->requestedIncludes($request->query('include'));
 
-        $item = DB::transaction(function () use ($household, $request, $data, $categoryIds): Item {
+        $item = DB::transaction(function () use ($household, $request, $data, $categoryIds, $openingStock, $levels): Item {
             $household = Household::query()->lockForUpdate()->findOrFail($household->getKey());
             $this->assertActiveMembership($household, $request->user());
             Gate::authorize('create', Item::class);
             $this->assertCategoriesCanBeAttached($household, $categoryIds);
-            $item = $household->items()->create($data);
+            try {
+                $item = $household->items()->create($data);
+            } catch (UniqueConstraintViolationException) {
+                throw ValidationException::withMessages(['data.name' => ['An item with this name already exists in your household.']]);
+            }
 
+            if ($openingStock !== null) {
+                $levels->create($household, $request->user(), [
+                    'item_id' => $item->getKey(),
+                    'location_id' => $openingStock['location_id'],
+                    'opening_quantity' => $openingStock['quantity'],
+                ]);
+            }
             if ($categoryIds !== null) {
                 $item->categories()->sync($categoryIds);
             }

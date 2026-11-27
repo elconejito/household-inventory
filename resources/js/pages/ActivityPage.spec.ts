@@ -3,6 +3,7 @@ import { flushPromises, mount } from '@vue/test-utils';
 import { createMemoryHistory, createRouter } from 'vue-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { http } from '../lib/http';
+import ListPagination from '../components/ListPagination.vue';
 import ActivityPage from './ActivityPage.vue';
 
 vi.mock('../lib/http', () => ({ http: { get: vi.fn() } }));
@@ -41,7 +42,7 @@ describe('activity filters and URL state', () => {
         expect((wrapper!.get('#activity-item').element as HTMLSelectElement).value).toBe('42');
         expect((wrapper!.get('#activity-location-mode').element as HTMLSelectElement).value).toBe('either');
         expect((wrapper!.get('#activity-from').element as HTMLInputElement).value).toBe('');
-        expect((wrapper!.get('#activity-page-size').element as HTMLSelectElement).value).toBe('10');
+        expect((wrapper!.getComponent(ListPagination).get('select').element as HTMLSelectElement).value).toBe('10');
         expect(router.currentRoute.value.query).toMatchObject({ item_id: '42' });
         const movementParams = vi.mocked(http.get).mock.calls.find(([url]) => url === '/inventory-movements')?.[1]?.params as Record<string, unknown>;
         expect(movementParams['filter[item_id]']).toBe('42');
@@ -76,10 +77,11 @@ describe('activity filters and URL state', () => {
         await flushPromises();
         expect(router.currentRoute.value.query.page).toBe('2');
 
+        await wrapper!.getComponent(ListPagination).get('select').setValue('25');
+        await flushPromises();
         await wrapper!.get('#activity-recorder').setValue('8');
         await wrapper!.get('#activity-from').setValue('2026-10-01');
         await wrapper!.get('#activity-until').setValue('2026-10-02');
-        await wrapper!.get('#activity-page-size').setValue('25');
         await flushPromises();
 
         expect(router.currentRoute.value.query).toMatchObject({ recorded_by: '8', recorded_from: '2026-10-01', recorded_until: '2026-10-02', per_page: '25' });

@@ -34,9 +34,9 @@ export async function updateHousehold(name: string): Promise<Household> {
     return response.data.data;
 }
 
-export async function getMembers(page: number, trashed: 'without' | 'only' = 'without'): Promise<Page<HouseholdMember>> {
+export async function getMembers(page: number, trashed: 'without' | 'only' = 'without', perPage = 10): Promise<Page<HouseholdMember>> {
     const response = await http.get<Page<HouseholdMember>>('/memberships', {
-        params: { include: 'user', 'filter[trashed]': trashed, per_page: 10, page },
+        params: { include: 'user', 'filter[trashed]': trashed, per_page: perPage, page },
     });
     return response.data;
 }
@@ -59,8 +59,8 @@ export async function leaveHousehold(): Promise<void> {
     await http.post('/membership/leave');
 }
 
-export async function getInvitations(page: number): Promise<Page<HouseholdInvitation>> {
-    const response = await http.get<Page<HouseholdInvitation>>('/household-invitations', { params: { per_page: 10, page } });
+export async function getInvitations(page: number, perPage = 10): Promise<Page<HouseholdInvitation>> {
+    const response = await http.get<Page<HouseholdInvitation>>('/household-invitations', { params: { per_page: perPage, page } });
     return response.data;
 }
 

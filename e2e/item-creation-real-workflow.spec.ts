@@ -33,10 +33,11 @@ async function createLocation(page: Page, name: string, parentId?: string): Prom
 }
 
 async function openCreateItemPanel(page: Page, itemName: string): Promise<void> {
-    await page.getByRole('navigation', { name: 'Main navigation' }).getByRole('link', { name: 'Inventory' }).click();
+    await page.getByRole('navigation', { name: 'Main navigation' }).getByRole('link', { name: 'Items', exact: true }).click();
     await page.getByRole('button', { name: 'Add item', exact: true }).click();
     await page.getByRole('textbox', { name: /^Name/ }).fill(itemName);
     await page.getByRole('textbox', { name: /^Counting unit/ }).fill('pack');
+    await page.getByText('Categories, description and photo', { exact: true }).click();
 }
 
 async function itemImageList(page: Page, itemId: string): Promise<Array<Record<string, string | boolean>>> {
@@ -107,7 +108,8 @@ test('saves an item with an optional primary photo and opens its detail page', a
         buffer: await primaryPhotoFixture(page, 'COFFEE FILTERS'),
     });
 
-    await page.getByRole('button', { name: 'Save item', exact: true }).click();
+    await page.getByRole('button', { name: 'Create item', exact: true }).click();
+    await page.getByRole('button', { name: 'Open item', exact: true }).click();
     await expect(page).toHaveURL(/\/items\/\d+$/);
     await expect(page.getByRole('heading', { level: 1, name: itemName, exact: true })).toBeVisible();
     expect(requests.items).toHaveLength(1);
@@ -140,6 +142,7 @@ test('saves an item with an optional primary photo and opens its detail page', a
     const displayBody = await display.body();
     expect(display.status(), JSON.stringify({ status: display.status(), headers: display.headers(), bodyBytes: displayBody.length })).toBe(200);
     expect(display.headers()['content-type']).toContain('image/');
+    await page.getByRole('tab', { name: 'Photos' }).click();
     await expect(page.getByRole('region', { name: 'Photos', exact: true })).toContainText('Primary photo');
     await expect.poll(() => page.getByRole('img', { name: 'Primary item photo', exact: true }).evaluate((image) => (image as HTMLImageElement).naturalWidth)).toBeGreaterThan(0);
     await page.screenshot({ path: testInfo.outputPath('new-item-primary-photo-desktop.png'), fullPage: true });
@@ -185,7 +188,7 @@ test('retries a failed optional photo upload without creating a second item', as
         buffer: await primaryPhotoFixture(page, 'WATER FILTER'),
     });
     const creationResponse = page.waitForResponse((response) => response.request().method() === 'POST' && new URL(response.url()).pathname === '/api/items');
-    await page.getByRole('button', { name: 'Save item', exact: true }).click();
+    await page.getByRole('button', { name: 'Create item', exact: true }).click();
     const createdItem = (await creationResponse).json().then((body) => body.data as { id: string });
     await expect(page.getByRole('button', { name: 'Retry photo upload', exact: true })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Continue without photo', exact: true })).toBeVisible();
@@ -206,6 +209,7 @@ test('retries a failed optional photo upload without creating a second item', as
     const retryResponse = page.waitForResponse((response) => response.request().method() === 'POST' && new URL(response.url()).pathname === `/api/items/${itemId}/images`);
     await page.getByRole('button', { name: 'Retry photo upload', exact: true }).click();
     expect((await retryResponse).status()).toBe(201);
+    await page.getByRole('button', { name: 'Open item', exact: true }).click();
     await expect(page).toHaveURL(`/items/${itemId}`);
     await expect(page.getByRole('button', { name: 'Retry photo upload', exact: true })).toHaveCount(0);
     expect(requests.items).toHaveLength(1);
@@ -218,6 +222,7 @@ test('retries a failed optional photo upload without creating a second item', as
     const photos = await itemImageList(page, itemId);
     expect(photos).toHaveLength(1);
     expect(photos[0]).toMatchObject({ is_primary: true, thumbnail_mime_type: 'image/webp', display_mime_type: 'image/webp' });
+    await page.getByRole('tab', { name: 'Photos' }).click();
     await expect(page.getByRole('region', { name: 'Photos', exact: true })).toContainText('Primary photo');
     await page.screenshot({ path: testInfo.outputPath('new-item-photo-retried-desktop.png'), fullPage: true });
     await page.setViewportSize({ width: 320, height: 740 });
@@ -252,7 +257,7 @@ test('continues without a failed optional photo and preserves the add-stock inte
         buffer: await primaryPhotoFixture(page, 'DISH SOAP'),
     });
     const creationResponse = page.waitForResponse((response) => response.request().method() === 'POST' && new URL(response.url()).pathname === '/api/items');
-    await page.getByRole('button', { name: 'Save and add stock', exact: true }).click();
+    await page.getByRole('button', { name: 'Create item', exact: true }).click();
     const createdItem = (await creationResponse).json().then((body) => body.data as { id: string });
     await expect(page.getByRole('button', { name: 'Continue without photo', exact: true })).toBeVisible();
     expect(requests.items).toHaveLength(1);
@@ -261,20 +266,19 @@ test('continues without a failed optional photo and preserves the add-stock inte
     expect(itemPayload.data).not.toHaveProperty('image');
     const savedItemId = (await createdItem).id;
     await page.getByRole('button', { name: 'Continue without photo', exact: true }).click();
-    await expect(page).toHaveURL(/\/items\/\d+\?restock=1$/);
-    await expect(page.locator('#new-level-location')).toBeVisible();
+    await page.getByRole('button', { name: 'Choose a location', exact: true }).click();
+    const stockDialog = page.getByRole('dialog', { name: 'Add stock location' });
+    await expect(stockDialog).toBeVisible();
     const createdItemId = new URL(page.url()).pathname.split('/').at(-1)!;
     expect(createdItemId).toBe(savedItemId);
-    await page.locator('#new-level-location').selectOption({ label: 'Kitchen / Shelf' });
-    await page.locator('#new-level-quantity').fill('4');
-    await expect(page.getByText('Restock 4 packs at Kitchen / Shelf.', { exact: true })).toBeVisible();
-    await page.getByLabel('I’ve checked this direction and quantity.').check();
-    const movementResponse = page.waitForResponse((response) => response.request().method() === 'POST' && response.url().endsWith('/api/inventory-movements'));
-    await page.getByRole('button', { name: 'Save change', exact: true }).click();
-    const restockResponse = await movementResponse;
-    expect(restockResponse.status()).toBe(201);
-    expect(restockResponse.request().postDataJSON()).toEqual({ data: { movement_type: 'restock', item_id: createdItemId, location_id: location.id, quantity: 4 } });
-    await expect(page.getByRole('status').filter({ hasText: 'Stock updated.' })).toBeVisible();
+    await stockDialog.getByLabel('Location', { exact: true }).selectOption({ label: 'Kitchen / Shelf' });
+    await stockDialog.getByLabel('Quantity here').fill('4');
+    const openingStockResponse = page.waitForResponse((response) => response.request().method() === 'POST' && response.url().endsWith('/api/inventory-levels'));
+    await stockDialog.getByRole('button', { name: 'Add stock location', exact: true }).click();
+    const openingStock = await openingStockResponse;
+    expect(openingStock.status()).toBe(201);
+    expect(openingStock.request().postDataJSON().data).toMatchObject({ item_id: createdItemId, location_id: location.id, opening_quantity: 4 });
+    await expect(page.getByRole('status').filter({ hasText: 'Stock location added with 4 packs.' })).toBeVisible();
     expect(requests.items).toHaveLength(1);
     expect(requests.photos).toHaveLength(1);
     expect(await itemImageList(page, createdItemId)).toHaveLength(0);

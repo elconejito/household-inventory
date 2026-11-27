@@ -86,7 +86,7 @@ describe('item editor', () => {
         expect(wrapper!.emitted('submit')?.[0]?.[2]).toBe('detail');
     });
 
-    it('keeps Save item and defaults Enter submissions to detail', async () => {
+    it('submits the primary create action by default on Enter', async () => {
         mountEditor({ item: null });
         await flushPromises();
         const form = wrapper!.get('form').element as HTMLFormElement;

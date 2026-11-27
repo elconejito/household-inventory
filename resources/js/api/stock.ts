@@ -143,7 +143,7 @@ export async function createLocation(data: { name: string; parent_id: string | n
     return response.data.data;
 }
 
-export async function createInventoryLevel(data: { item_id: string; location_id: string; alert_threshold?: number | null }): Promise<InventoryLevel> {
+export async function createInventoryLevel(data: { item_id: string; location_id: string; opening_quantity?: number; alert_threshold?: number | null }): Promise<InventoryLevel> {
     const response = await http.post<Resource<InventoryLevel>>('/inventory-levels', { data });
 
     return response.data.data;
@@ -153,8 +153,28 @@ export async function updateThreshold(id: string, alertThreshold: number | null)
     await http.patch(`/inventory-levels/${id}`, { data: { alert_threshold: alertThreshold } });
 }
 
+export async function countShelfItem(data: { itemId: string; locationId: string; quantity: number }): Promise<{ before: number; after: number }> {
+    const response = await http.put<Resource<Pick<InventoryLevel, 'quantity'>> & { meta: { previous_quantity: number } }>(`/locations/${data.locationId}/items/${data.itemId}/count`, { data: { observed_quantity: data.quantity } });
+    return { before: response.data.meta.previous_quantity, after: response.data.data.quantity };
+}
+
 export async function recordMovement(data: Record<string, string | number>): Promise<void> {
     await http.post('/inventory-movements', { data });
+}
+
+export type ShelfActionResult = { kind: 'count'; before: number; after: number } | { kind: 'movement'; movement: InventoryMovement };
+
+export async function saveShelfAction(data: Record<string, string | number>): Promise<ShelfActionResult | null> {
+    if (data.movement_type === 'shelf_count') {
+        const change = await countShelfItem({ itemId: String(data.item_id), locationId: String(data.location_id), quantity: Number(data.observed_quantity) });
+        return { kind: 'count', ...change };
+    }
+    if (data.movement_type === 'consumption') {
+        await recordMovement(data);
+        return null;
+    }
+    const response = await http.post<Resource<InventoryMovement>>('/inventory-movements', { data }, { params: { include: 'item,entries.location' } });
+    return { kind: 'movement', movement: response.data.data };
 }
 
 export async function getMovements(filters: MovementFilters): Promise<PageCollection<InventoryMovement>> {

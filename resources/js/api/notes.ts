@@ -14,8 +14,8 @@ export type NoteContextType = 'items' | 'categories' | 'locations' | 'inventory-
 export type NotePage = { data: Note[]; meta: { current_page: number; last_page: number; total: number } };
 type NoteResource = { data: Note };
 
-export async function getNotes(type: NoteContextType, id: string, page: number): Promise<NotePage> {
-    const response = await http.get<NotePage>(`/${type}/${id}/notes`, { params: { include: 'created_by', per_page: 10, page } });
+export async function getNotes(type: NoteContextType, id: string, page: number, perPage = 10): Promise<NotePage> {
+    const response = await http.get<NotePage>(`/${type}/${id}/notes`, { params: { include: 'created_by', per_page: perPage, page } });
     return response.data;
 }
 

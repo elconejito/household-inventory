@@ -2,17 +2,17 @@
 
 @theme {
     --font-sans: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-    --color-canvas: #f7f7f2;
-    --color-white: #ffffff;
-    --color-surface-soft: #f3f4ef;
-    --color-line: #e4e7df;
-    --color-ink: #252c25;
-    --color-ink-muted: #747c72;
-    --color-sage: #617c60;
-    --color-sage-dark: #4e684d;
-    --color-sage-soft: #edf2e9;
-    --radius-panel: 10px;
-    --shadow-card: 0 1px 2px rgb(28 39 27 / 4%), 0 8px 24px rgb(28 39 27 / 3%);
+    --color-canvas: #f5f5ef;
+    --color-white: #fffefa;
+    --color-surface-soft: #e8efe4;
+    --color-line: #d9dfd4;
+    --color-ink: #202e26;
+    --color-ink-muted: #5d695f;
+    --color-sage: #294937;
+    --color-sage-dark: #1f382d;
+    --color-sage-soft: #e8efe4;
+    --radius-panel: 8px;
+    --shadow-card: 0 2px 5px rgb(27 46 34 / 4%);
 }
 
 @layer base {
@@ -61,5 +61,477 @@
 
     .eyebrow {
         @apply text-xs font-semibold uppercase tracking-[0.12em] text-sage-dark;
+    }
+}
+
+@layer components {
+    .app-layout {
+        @apply flex min-h-screen flex-col;
+        min-height: 100dvh;
+    }
+
+    .app-header {
+        @apply border-b-[3px] border-[#b6c9ac] bg-[#294937] text-white;
+    }
+
+    .app-header-inner,
+    .app-main,
+    .app-footer-inner {
+        @apply mx-auto w-full max-w-7xl;
+    }
+
+    .app-header-inner {
+        @apply flex min-h-[67px] items-center gap-7 px-8;
+    }
+
+    .brand {
+        @apply inline-flex shrink-0 items-center gap-2.5 rounded-sm text-xl font-semibold tracking-tight text-white no-underline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#dce7c9];
+        letter-spacing: -0.035em;
+    }
+
+    .brand-mark {
+        @apply grid size-8 place-items-center rounded-lg rounded-br-sm bg-[#dbe7ce] text-2xl leading-none text-[#264330];
+    }
+
+    .primary-navigation {
+        @apply flex h-full self-stretch items-stretch gap-1;
+    }
+
+    .nav-link {
+        @apply relative inline-flex items-center rounded-none px-3 text-[13px] font-medium text-[#dbe4da] no-underline transition hover:bg-[#365641] hover:text-white;
+    }
+
+    .nav-link-active {
+        @apply bg-[#365641] text-white;
+    }
+
+    .nav-link-active::after {
+        content: '';
+        @apply absolute inset-x-2 bottom-0 h-[3px] bg-[#dce7c9];
+    }
+
+    .header-utilities {
+        @apply ml-auto flex shrink-0 items-center gap-3;
+    }
+
+    .search-trigger {
+        @apply flex h-9 w-auto items-center gap-2 rounded-md border border-[#627965] bg-[#36543f] px-2.5 text-xs text-[#fcfff9] transition hover:bg-[#3d6049] hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#dce7c9];
+    }
+
+    .search-label {
+        @apply font-medium;
+    }
+
+    .search-trigger kbd {
+        @apply rounded-sm border border-[#819780] px-1 text-[11px] leading-5;
+        font-family: inherit;
+    }
+
+    .account-trigger {
+        @apply flex min-h-9 cursor-pointer list-none items-center gap-2 rounded-md border border-transparent px-1 text-[13px] font-medium text-white hover:bg-[#365641];
+    }
+
+    .account-trigger::-webkit-details-marker,
+    .mobile-more summary::-webkit-details-marker {
+        display: none;
+    }
+
+    .account-avatar {
+        @apply grid size-8 place-items-center rounded-full bg-[#d9dfcb] text-xs font-bold text-[#344835];
+    }
+
+    .account-menu {
+        @apply absolute right-0 z-20 mt-2 grid w-56 gap-1 rounded-md border border-line bg-white p-2 text-ink shadow-card;
+    }
+
+    .account-menu > div {
+        @apply border-b border-line px-3 py-2;
+    }
+
+    .account-menu-link {
+        @apply inline-flex min-h-10 items-center rounded-md px-3 text-left text-sm font-medium text-ink-muted no-underline hover:bg-surface-soft hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sage;
+    }
+
+    .logout-error {
+        @apply mx-auto max-w-7xl px-8 pb-3 text-right text-sm text-rose-200;
+    }
+
+    .app-main {
+        @apply flex-1 px-8 py-7 outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sage;
+    }
+
+    .app-footer {
+        @apply border-t border-line bg-[#eef0e8] text-ink-muted;
+    }
+
+    .app-footer-inner {
+        @apply flex min-h-[55px] items-center justify-between gap-4 px-8 py-2.5 text-xs;
+    }
+
+    .footer-brand {
+        @apply inline-flex items-center gap-2 font-semibold tracking-tight text-ink;
+    }
+
+    .mobile-navigation {
+        display: none;
+    }
+
+    .search-dialog {
+        @apply rounded-xl border-[#e1e5dc] shadow-[0_18px_70px_rgb(25_46_37_/_25%)];
+    }
+
+    .search-dialog > div {
+        @apply gap-3;
+    }
+
+    .search-keyboard-hint {
+        @apply -mt-2 text-xs text-ink-muted;
+    }
+
+    .search-dialog h2 {
+        font-family: Baskerville, Georgia, serif;
+        @apply text-[30px] font-medium leading-tight tracking-tight;
+    }
+
+    .search-dialog section {
+        @apply rounded-lg border border-line bg-white p-2;
+    }
+
+    .search-dialog section h3 {
+        @apply px-2 py-1 text-xs font-semibold uppercase tracking-wide text-ink-muted;
+    }
+
+    .page-title {
+        font-family: Baskerville, 'Iowan Old Style', Georgia, serif;
+        @apply text-[clamp(2.125rem,3.5vw,3.0625rem)] font-medium leading-tight tracking-tight text-ink;
+    }
+
+    .dashboard-stats {
+        @apply mt-6 grid grid-cols-3 gap-3;
+    }
+
+    .dashboard-stat {
+        @apply block rounded-lg border border-line bg-white px-4 py-3 text-ink no-underline shadow-card transition hover:border-[#bac7b7] hover:bg-[#fcfcf8];
+    }
+
+    .dashboard-stat strong {
+        font-family: Baskerville, 'Iowan Old Style', Georgia, serif;
+        @apply block text-[30px] font-medium leading-tight text-ink;
+    }
+
+    .dashboard-stat span {
+        @apply text-xs text-ink-muted;
+    }
+
+    .dashboard-overview {
+        @apply mt-5 grid items-start gap-5 lg:grid-cols-[minmax(0,1.7fr)_minmax(240px,.9fr)];
+    }
+
+    .dashboard-card {
+        @apply rounded-lg border border-line bg-white shadow-card;
+    }
+
+    .dashboard-card-header {
+        @apply flex items-center justify-between gap-4 border-b border-line px-5 py-4;
+    }
+
+    .dashboard-card-header h2 {
+        @apply text-lg font-semibold tracking-tight text-ink;
+    }
+
+    .dashboard-card-header p {
+        @apply mt-0.5 text-xs text-ink-muted;
+    }
+
+    .dashboard-card-action,
+    .attention-group > header a {
+        @apply text-xs font-semibold text-sage-dark underline decoration-[#829780] underline-offset-2 hover:decoration-current;
+    }
+
+    .attention-groups {
+        @apply grid gap-1 px-5 py-2;
+    }
+
+    .attention-group {
+        @apply border-b border-line py-3 last:border-b-0;
+    }
+
+    .attention-group > header {
+        @apply mb-1 flex items-center justify-between gap-3;
+    }
+
+    .attention-group h3 {
+        @apply text-sm font-semibold text-ink;
+    }
+
+    .attention-list {
+        @apply divide-y divide-line;
+    }
+
+    .attention-list > li {
+        @apply flex items-center justify-between gap-3 py-2;
+    }
+
+    .attention-list.buysoon-list > li {
+        @apply grid gap-1;
+    }
+
+    .attention-reminder-row {
+        @apply flex items-center justify-between gap-3;
+    }
+
+    .attention-list > li > a {
+        @apply grid min-w-0 gap-0.5 text-ink no-underline hover:text-sage-dark;
+    }
+
+    .attention-list strong {
+        @apply truncate text-sm font-semibold;
+    }
+
+    .attention-list a span {
+        @apply truncate text-xs text-ink-muted;
+    }
+
+    .attention-badge {
+        @apply shrink-0 rounded-md bg-surface-soft px-2 py-1 text-[10px] font-semibold text-sage-dark;
+    }
+
+    .attention-badge-empty {
+        @apply bg-[#f7eaca] text-[#795011];
+    }
+
+    .attention-state {
+        @apply py-2 text-xs text-ink-muted;
+    }
+
+    .reminder-notes > summary {
+        @apply w-fit cursor-pointer text-xs font-semibold text-sage-dark underline decoration-[#829780] underline-offset-2 hover:decoration-current;
+    }
+
+    .reminder-notes > section {
+        @apply mt-3;
+    }
+
+    .quick-access-list {
+        @apply grid gap-1 p-3;
+    }
+
+    .quick-access-list > a {
+        @apply flex min-h-[58px] items-center gap-3 rounded-md px-2 py-2 text-ink no-underline hover:bg-surface-soft;
+    }
+
+    .quick-access-list > a > span:nth-child(2) {
+        @apply grid min-w-0 flex-1 gap-0.5;
+    }
+
+    .quick-access-list strong {
+        @apply truncate text-sm font-semibold;
+    }
+
+    .quick-access-list small {
+        @apply truncate text-xs text-ink-muted;
+    }
+
+    .quick-access-icon {
+        @apply grid size-9 shrink-0 place-items-center rounded-md bg-surface-soft text-sage;
+    }
+
+    .quick-access-list > a > svg:last-child {
+        @apply text-ink-muted;
+    }
+
+    .dashboard-workflows {
+        @apply mt-5 rounded-lg border border-line bg-white shadow-card;
+    }
+
+    .dashboard-workflows > summary {
+        @apply flex min-h-12 cursor-pointer list-none items-center justify-between px-5 py-3 text-sm font-semibold text-ink;
+    }
+
+    .dashboard-workflows > summary::-webkit-details-marker {
+        display: none;
+    }
+
+    .dashboard-workflows > summary::after {
+        content: '';
+        @apply size-2 rotate-45 border-b-2 border-r-2 border-ink-muted transition-transform;
+    }
+
+    .dashboard-workflows[open] > summary::after {
+        @apply rotate-[225deg];
+    }
+
+    .dashboard-workflows > section {
+        @apply mb-4;
+    }
+}
+
+@media (max-width: 1000px) {
+    .app-header-inner,
+    .app-main,
+    .app-footer-inner {
+        @apply px-6;
+    }
+
+    .app-header-inner {
+        @apply gap-3;
+    }
+
+    .nav-link {
+        @apply px-2;
+    }
+}
+
+@media (min-width: 761px) and (max-width: 900px) {
+    .app-header-inner {
+        @apply gap-2 px-4;
+    }
+
+    .brand > span:last-child,
+    .account-trigger > span:last-child,
+    .search-label,
+    .search-trigger kbd {
+        display: none;
+    }
+
+    .nav-link {
+        @apply px-1.5;
+    }
+
+    .header-utilities {
+        @apply gap-1;
+    }
+
+    .search-trigger {
+        @apply size-9 justify-center px-0;
+    }
+
+    .account-trigger {
+        @apply size-9 justify-center p-0;
+    }
+}
+
+@media (max-width: 760px) {
+    .app-header {
+        @apply border-b-2;
+    }
+
+    .app-header-inner {
+        @apply min-h-[52px] gap-2 px-4;
+    }
+
+    .brand {
+        @apply gap-2 text-lg;
+    }
+
+    .brand-mark {
+        @apply size-7 text-xl;
+    }
+
+    .primary-navigation,
+    .account-trigger > span:last-child {
+        display: none;
+    }
+
+    .header-utilities {
+        @apply gap-2;
+    }
+
+    .search-trigger {
+        @apply size-10 justify-center border-transparent bg-transparent p-0 text-white hover:bg-[#365641];
+    }
+
+    .search-label,
+    .search-trigger kbd {
+        display: none;
+    }
+
+    .account-trigger {
+        @apply size-10 justify-center p-0;
+    }
+
+    .app-main {
+        @apply px-4 py-4 pb-7;
+    }
+
+    .app-footer {
+        @apply mb-[60px];
+    }
+
+    .app-footer-inner {
+        @apply min-h-[45px] px-4 py-2 text-[10px];
+    }
+
+    .mobile-navigation {
+        @apply fixed inset-x-0 bottom-0 z-10 flex items-stretch justify-around border-t border-[#ccd4c7] bg-[#fffefa] px-1 pt-1;
+        padding-bottom: max(5px, env(safe-area-inset-bottom));
+    }
+
+    .mobile-link {
+        @apply flex min-h-[46px] flex-1 flex-col items-center justify-center gap-0.5 rounded-none text-[10px] font-medium text-ink-muted no-underline;
+    }
+
+    .mobile-link-active {
+        @apply font-bold text-sage;
+    }
+
+    .mobile-icon {
+        @apply box-content rounded-[10px] px-[13px] py-0.5 text-xl leading-none;
+    }
+
+    .mobile-link-active .mobile-icon {
+        @apply bg-surface-soft;
+    }
+
+    .mobile-more {
+        @apply relative flex flex-1;
+    }
+
+    .mobile-more > summary {
+        @apply list-none cursor-pointer;
+    }
+
+    .mobile-more-panel {
+        @apply absolute bottom-[calc(100%+8px)] right-1 grid w-56 gap-1 rounded-lg border border-line bg-white p-2 shadow-card;
+    }
+
+    .mobile-more-link {
+        @apply flex min-h-11 items-center rounded-md px-3 text-sm font-medium text-ink no-underline hover:bg-surface-soft focus-visible:outline-2 focus-visible:outline-sage;
+    }
+
+    .page-title {
+        @apply text-[35px];
+    }
+
+    .dashboard-stats {
+        @apply mt-4 gap-2;
+    }
+
+    .dashboard-overview {
+        @apply mt-4 gap-3;
+    }
+
+    .dashboard-card-header {
+        @apply px-4 py-3;
+    }
+
+    .attention-groups {
+        @apply px-4 py-1;
+    }
+
+    .dashboard-workflows > summary {
+        @apply px-4;
+    }
+
+    .dashboard-stat {
+        @apply px-2.5 py-2;
+    }
+
+    .dashboard-stat strong {
+        @apply text-[25px];
+    }
+
+    .dashboard-stat span {
+        @apply text-[10px] leading-tight;
     }
 }

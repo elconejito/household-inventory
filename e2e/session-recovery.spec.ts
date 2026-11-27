@@ -34,19 +34,21 @@ test('recovers an initial session failure without loading protected data or losi
     await page.keyboard.press('Enter');
 
     await expect(page).toHaveURL('/items?create=1');
-    await expect(page.getByRole('heading', { name: 'Add an item', exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Add item', exact: true })).toBeVisible();
     await expect.poll(() => protectedRequests).toBe(1);
     expect(sessionChecks).toBe(2);
     await page.keyboard.press('Escape');
     await expect(page.getByRole('dialog', { name: 'Add item' })).toHaveCount(0);
     await page.setViewportSize({ width: 320, height: 740 });
-    const mobileNavigation = page.getByRole('navigation', { name: 'Main navigation' }).last();
-    await expect(mobileNavigation.getByRole('link')).toHaveCount(5);
+    const mobileNavigation = page.getByRole('navigation', { name: 'Mobile navigation', exact: true });
+    await expect(mobileNavigation.getByRole('link')).toHaveCount(3);
     await expect(mobileNavigation.getByRole('link', { name: 'Home', exact: true })).toBeVisible();
     await expect(mobileNavigation.getByRole('link', { name: 'Items', exact: true })).toBeVisible();
     await expect(mobileNavigation.getByRole('link', { name: 'Locations', exact: true })).toBeVisible();
+    await mobileNavigation.getByText('More', { exact: true }).click();
     await expect(mobileNavigation.getByRole('link', { name: 'Categories', exact: true })).toBeVisible();
     await expect(mobileNavigation.getByRole('link', { name: 'Activity', exact: true })).toBeVisible();
+    await expect(mobileNavigation.getByRole('link', { name: 'Account & settings', exact: true })).toBeVisible();
     const linkBounds = await mobileNavigation.getByRole('link').evaluateAll((links) => links.map((link) => {
         const bounds = link.getBoundingClientRect();
         return { left: bounds.left, right: bounds.right, width: bounds.width, height: bounds.height };
@@ -57,7 +59,7 @@ test('recovers an initial session failure without loading protected data or losi
         expect(bounds.width).toBeGreaterThanOrEqual(44);
         expect(bounds.height).toBeGreaterThanOrEqual(44);
     }
-    await page.getByText('Account', { exact: true }).click();
+    await page.locator('.account-trigger').click();
     await expect(page.getByRole('link', { name: 'Settings', exact: true })).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(320);
     await page.screenshot({ path: testInfo.outputPath('recovered-inventory-320.png'), fullPage: true });
@@ -66,8 +68,13 @@ test('recovers an initial session failure without loading protected data or losi
     await page.setViewportSize({ width: 768, height: 800 });
     const tabletNavigation = page.getByRole('navigation', { name: 'Main navigation' });
     await expect(tabletNavigation.getByRole('link')).toHaveText(['Dashboard', 'Items', 'Locations', 'Categories', 'Activity']);
-    const searchBounds = await page.locator('header').getByRole('searchbox', { name: 'Search items' }).boundingBox();
-    expect(searchBounds?.width).toBeGreaterThanOrEqual(160);
+    const searchButton = page.getByRole('button', { name: 'Search all', exact: true });
+    await expect(searchButton).toBeVisible();
+    await searchButton.click();
+    const searchDialog = page.getByRole('dialog', { name: 'Search all' });
+    await expect(searchDialog.getByRole('searchbox')).toBeFocused();
+    await page.keyboard.press('Escape');
+    await expect(searchButton).toBeFocused();
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(768);
 });
 

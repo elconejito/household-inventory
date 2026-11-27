@@ -11,8 +11,9 @@ vi.mock('../lib/http', () => ({
         patch: vi.fn(),
     },
 }));
-const { routerPush } = vi.hoisted(() => ({ routerPush: vi.fn() }));
-vi.mock('vue-router', () => ({ useRoute: () => ({ query: {} }), useRouter: () => ({ push: routerPush }) }));
+const { routerPush, routerReplace, routeQuery } = vi.hoisted(() => ({ routerPush: vi.fn(), routerReplace: vi.fn(), routeQuery: {} as Record<string, unknown> }));
+vi.mock('vue-router', () => ({ useRoute: () => ({ query: routeQuery }), useRouter: () => ({ push: routerPush, replace: routerReplace }) }));
+vi.mock('../stores/session', () => ({ useSessionStore: () => ({ user: { membership: { household: { id: 'household-1' } } } }) }));
 
 describe('inventory page', () => {
     let queryClient: QueryClient;
@@ -20,6 +21,7 @@ describe('inventory page', () => {
 
     beforeEach(() => {
         vi.clearAllMocks();
+        for (const key of Object.keys(routeQuery)) delete routeQuery[key];
         queryClient = new QueryClient({
             defaultOptions: {
                 queries: { retry: false },
@@ -31,6 +33,8 @@ describe('inventory page', () => {
     afterEach(() => {
         wrapper?.unmount();
         wrapper = undefined;
+        window.sessionStorage.removeItem('inventory-recently-viewed:household-1');
+        window.sessionStorage.removeItem('inventory-recently-viewed:household-2');
         queryClient.clear();
     });
 
@@ -38,6 +42,18 @@ describe('inventory page', () => {
         const button = wrapper!.findAll('button').find((candidate) => candidate.text() === label || candidate.attributes('aria-label') === label);
         expect(button, `button labeled ${label}`).toBeDefined();
         await button!.trigger('click');
+    }
+
+    async function applyFilters(values: Array<[string, string]>): Promise<void> {
+        await wrapper!.get('button[aria-haspopup="dialog"]:not([aria-controls="create-item-panel"])').trigger('click');
+        for (const [id, value] of values) {
+            await wrapper!.get(`#${id}`).setValue(value);
+        }
+        await wrapper!.findAll('button').find((button) => button.text() === 'Apply filters')!.trigger('click');
+    }
+
+    async function openFilters(): Promise<void> {
+        await wrapper!.get('button[aria-haspopup="dialog"]:not([aria-controls="create-item-panel"])').trigger('click');
     }
 
     it('creates an item, invalidates the item list, and shows the new row', async () => {
@@ -61,8 +77,8 @@ describe('inventory page', () => {
         };
         let firstItemsPage = true;
         vi.mocked(http.get).mockImplementation(async (url) => {
-            if (url === '/categories') return { data: { data: [], meta: { last_page: 1 } } } as never;
-            if (url === '/locations') return { data: { data: [], meta: { current_page: 1, last_page: 1, total: 0 } } } as never;
+            if (url === '/categories') return { data: { data: [{ id: '4', name: 'Cleaning' }], meta: { last_page: 1 } } } as never;
+            if (url === '/locations') return { data: { data: [{ id: '9', name: 'Pantry', parent: null }], meta: { current_page: 1, last_page: 1, total: 1 } } } as never;
             if (url === '/items') {
                 const data = firstItemsPage ? emptyCollection : refreshedCollection;
                 firstItemsPage = false;
@@ -99,7 +115,9 @@ describe('inventory page', () => {
         expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ['items'] });
         await vi.waitFor(() => expect(vi.mocked(http.get).mock.calls.filter(([url]) => url === '/items')).toHaveLength(2));
         await flushPromises();
-        expect(routerPush).toHaveBeenCalledWith({ name: 'inventory-item', params: { item: '31' } });
+        await wrapper.findAll('button').find((button) => button.text() === 'Open item')!.trigger('click');
+        await flushPromises();
+        expect(routerPush).toHaveBeenCalledWith({ name: 'inventory-item', params: { item: '31' }, query: {} });
         expect(wrapper.get('li').text()).toContain('Dish soap');
         expect(wrapper.get('li img').attributes('src')).toBe('/api/item-images/image-31/thumbnail');
     });
@@ -114,13 +132,19 @@ describe('inventory page', () => {
         wrapper = mount(InventoryPage, { global: { plugins: [[VueQueryPlugin, { queryClient }]] } });
         await flushPromises();
 
-        await wrapper.get('#item-category-filter').setValue('4');
-        await wrapper.get('#item-location-filter').setValue('9');
-        await wrapper.get('#item-stock-filter').setValue('in_stock');
-        await wrapper.get('#item-attention-filter').setValue('none');
-        await wrapper.get('#item-sort').setValue('-name');
-        await wrapper.get('#item-page-size').setValue('25');
+        await applyFilters([
+            ['item-category-filter', '4'],
+            ['item-location-filter', '9'],
+            ['item-stock-filter', 'in_stock'],
+            ['item-attention-filter', 'none'],
+            ['item-sort', '-name'],
+        ]);
         await flushPromises();
+        const perPageSelect = wrapper.findAll('select').find((select) => select.element.closest('label')?.textContent?.includes('Per page'));
+        expect(perPageSelect).toBeDefined();
+        await perPageSelect!.setValue('25');
+        await flushPromises();
+        await openFilters();
 
         expect(wrapper.text()).toContain('Stock and attention filters evaluate the whole item across every active location.');
         expect(wrapper.text()).toContain('The Location filter limits the list to items tracked there');
@@ -133,6 +157,99 @@ describe('inventory page', () => {
             per_page: 25,
             include: 'categories,images,inventory_levels.location,active_alerts',
         }) });
+    });
+
+    it('restores browse filters and pagination from the item route query', async () => {
+        Object.assign(routeQuery, {
+            search: 'paper',
+            category: '4',
+            location: '9',
+            stockStatus: 'in_stock',
+            attentionStatus: 'buy_soon',
+            sort: '-name',
+            page: '3',
+            perPage: '25',
+        });
+        vi.mocked(http.get).mockImplementation(async (url) => {
+            if (url === '/items') return { data: { data: [], links: {}, meta: { current_page: 3, last_page: 4, total: 90 } } } as never;
+            if (url === '/categories') return { data: { data: [{ id: '4', name: 'Cleaning' }], meta: { last_page: 1 } } } as never;
+            if (url === '/locations') return { data: { data: [{ id: '9', name: 'Pantry', parent: null }], meta: { current_page: 1, last_page: 1, total: 1 } } } as never;
+            throw new Error(`Unexpected GET ${String(url)}`);
+        });
+
+        wrapper = mount(InventoryPage, { global: { plugins: [[VueQueryPlugin, { queryClient }]] } });
+        await flushPromises();
+
+        expect((wrapper.get('#item-search').element as HTMLInputElement).value).toBe('paper');
+        await wrapper.get('button[aria-haspopup="dialog"]:not([aria-controls="create-item-panel"])').trigger('click');
+        expect((wrapper.get('#item-category-filter').element as HTMLSelectElement).value).toBe('4');
+        expect((wrapper.get('#item-location-filter').element as HTMLSelectElement).value).toBe('9');
+        expect(wrapper.text()).toContain('Page 3 of 4');
+        expect(http.get).toHaveBeenCalledWith('/items', { params: expect.objectContaining({
+            'filter[search]': 'paper',
+            'filter[category_id]': '4',
+            'filter[location_id]': '9',
+            'filter[stock_status]': 'in_stock',
+            'filter[attention_status]': 'buy_soon',
+            sort: '-name',
+            page: 3,
+            per_page: 25,
+        }) });
+    });
+
+    it('discards filter edits when the filter dialog is cancelled', async () => {
+        vi.mocked(http.get).mockImplementation(async (url) => {
+            if (url === '/items') return { data: { data: [], links: {}, meta: { current_page: 1, last_page: 1, total: 0 } } } as never;
+            if (url === '/categories') return { data: { data: [{ id: '4', name: 'Cleaning' }], meta: { last_page: 1 } } } as never;
+            if (url === '/locations') return { data: { data: [], meta: { current_page: 1, last_page: 1, total: 0 } } } as never;
+            throw new Error(`Unexpected GET ${String(url)}`);
+        });
+        wrapper = mount(InventoryPage, { global: { plugins: [[VueQueryPlugin, { queryClient }]] } });
+        await flushPromises();
+
+        await wrapper.get('button[aria-haspopup="dialog"]:not([aria-controls="create-item-panel"])').trigger('click');
+        await wrapper.get('#item-category-filter').setValue('4');
+        await wrapper.findAll('button').find((button) => button.text() === 'Cancel')!.trigger('click');
+        await flushPromises();
+
+        expect(vi.mocked(http.get).mock.calls.filter(([url]) => url === '/items')).toHaveLength(1);
+        expect(wrapper.get('button[aria-haspopup="dialog"]:not([aria-controls="create-item-panel"])').text()).toBe('Filters');
+    });
+
+    it('keeps recently viewed items scoped to the signed-in household and paginates the list', async () => {
+        const householdItems = Array.from({ length: 11 }, (_, index) => ({
+            id: `item-${index}`,
+            name: `Household item ${index}`,
+            category: 'Paper Goods',
+        }));
+        window.sessionStorage.setItem('inventory-recently-viewed:household-1', JSON.stringify(householdItems));
+        window.sessionStorage.setItem('inventory-recently-viewed:household-2', JSON.stringify([{ id: 'secret', name: 'Other household item', category: '' }]));
+        vi.mocked(http.get).mockImplementation(async (url) => {
+            if (url === '/items') return { data: { data: [], links: {}, meta: { current_page: 1, last_page: 1, total: 0 } } } as never;
+            if (url === '/categories') return { data: { data: [], meta: { last_page: 1 } } } as never;
+            if (url === '/locations') return { data: { data: [], meta: { current_page: 1, last_page: 1, total: 0 } } } as never;
+            throw new Error(`Unexpected GET ${String(url)}`);
+        });
+
+        wrapper = mount(InventoryPage, { global: { plugins: [[VueQueryPlugin, { queryClient }]] } });
+        await flushPromises();
+
+        const recentItems = wrapper.get('aside[aria-labelledby="recently-viewed-title"]');
+        expect(recentItems.text()).toContain('Household item 0');
+        expect(recentItems.text()).not.toContain('Other household item');
+        expect(recentItems.find('nav[aria-label="Recently viewed pagination"]').exists()).toBe(true);
+        const recentPageSize = recentItems.findAll('select').find((select) => select.element.closest('label')?.textContent?.includes('Per page'));
+        expect(recentPageSize).toBeDefined();
+        expect(recentItems.text()).toContain('Page 1 of 2');
+
+        await recentPageSize!.setValue('100');
+        expect(recentItems.find('nav[aria-label="Recently viewed pagination"]').exists()).toBe(true);
+        expect(recentItems.findAll('select').find((select) => select.element.closest('label')?.textContent?.includes('Per page'))!.element).toHaveProperty('value', '100');
+        expect(recentItems.text()).toContain('Page 1 of 1');
+
+        await recentItems.findAll('select').find((select) => select.element.closest('label')?.textContent?.includes('Per page'))!.setValue('10');
+        expect(recentItems.findAll('select').find((select) => select.element.closest('label')?.textContent?.includes('Per page'))!.element).toHaveProperty('value', '10');
+        expect(recentItems.text()).toContain('Page 1 of 2');
     });
 
     it('supports numbered pages and direct page entry with bounded navigation', async () => {
@@ -179,7 +296,7 @@ describe('inventory page', () => {
         await flushPromises();
         await clickButton('Next');
         await flushPromises();
-        await wrapper.get('#item-stock-filter').setValue('empty');
+        await applyFilters([['item-stock-filter', 'empty']]);
         await flushPromises();
         const itemRequests = vi.mocked(http.get).mock.calls.filter(([url]) => url === '/items');
         expect(itemRequests.at(-1)?.[1]).toEqual(expect.objectContaining({ params: expect.objectContaining({ page: 1, 'filter[stock_status]': 'empty' }) }));
@@ -190,7 +307,7 @@ describe('inventory page', () => {
             if (url === '/locations') return { data: { data: [], meta: { current_page: 1, last_page: 1, total: 0 } } } as never;
             throw new Error(`Unexpected GET ${String(url)}`);
         });
-        await wrapper.get('#item-attention-filter').setValue('low');
+        await applyFilters([['item-attention-filter', 'low']]);
         await flushPromises();
 
         expect(wrapper.text()).toContain('No items match these filters');
@@ -198,6 +315,7 @@ describe('inventory page', () => {
         expect(wrapper.findAll('button').some((button) => button.text() === 'Clear filters')).toBe(true);
         await clickButton('Clear filters');
         await flushPromises();
+        await openFilters();
         expect((wrapper.get('#item-stock-filter').element as HTMLSelectElement).value).toBe('');
         expect((wrapper.get('#item-attention-filter').element as HTMLSelectElement).value).toBe('');
     });
@@ -218,9 +336,11 @@ describe('inventory page', () => {
         });
         wrapper = mount(InventoryPage, { global: { plugins: [[VueQueryPlugin, { queryClient }]] } });
         await flushPromises();
-        await wrapper.get('#item-location-filter').setValue('9');
-        await wrapper.get('#item-stock-filter').setValue('in_stock');
-        await wrapper.get('#item-attention-filter').setValue('empty');
+        await applyFilters([
+            ['item-location-filter', '9'],
+            ['item-stock-filter', 'in_stock'],
+            ['item-attention-filter', 'empty'],
+        ]);
         await flushPromises();
 
         const row = wrapper.get('li article');
@@ -249,14 +369,12 @@ describe('inventory page', () => {
         expect(row.text()).toContain(longName);
         expect(row.text()).not.toContain('Counted by');
         expect(wrapper.text()).not.toContain('Your items');
-        expect(wrapper.get('[popovertarget="inventory-filters"]').text()).toBe('Filters');
-        expect(wrapper.get('#inventory-filters').attributes('popover')).toBeDefined();
+        expect(wrapper.get('button[aria-haspopup="dialog"]:not([aria-controls="create-item-panel"])').text()).toBe('Filters');
         expect(wrapper.text()).toContain('1 item · Page 1 of 1');
         expect(wrapper.findAll('button').find((button) => button.attributes('aria-label') === 'Previous')!.attributes('disabled')).toBeDefined();
         expect(wrapper.findAll('button').find((button) => button.attributes('aria-label') === 'Next')!.attributes('disabled')).toBeDefined();
-        expect(row.classes()).not.toContain('sm:grid-cols-[3.5rem_minmax(0,calc((100%_-_24.5rem)*13/23))_minmax(0,1fr)_minmax(0,0.65fr)]');
-        expect(row.classes()).toContain('sm:grid-cols-[minmax(0,calc((100%_-_20rem)*13/23))_minmax(0,1fr)_minmax(0,0.65fr)]');
-        expect(wrapper.findAll('div[aria-hidden="true"]').some((element) => element.classes().includes('grid-cols-[minmax(0,calc((100%_-_20rem)*13/23))_minmax(0,1fr)_minmax(0,0.65fr)]'))).toBe(true);
+        expect(row.classes()).toContain('sm:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,0.75fr)]');
+        expect(wrapper.text()).toContain('Household alerts');
     });
 
     it('keeps rows aligned when only some items on a page have primary images', async () => {
@@ -279,9 +397,8 @@ describe('inventory page', () => {
         expect(rows[0].classes()).toEqual(rows[1].classes());
         expect(rows[0].find('img').exists()).toBe(true);
         expect(rows[1].find('img').exists()).toBe(false);
-        const thumbnailSpacer = rows[1].find('[aria-hidden="true"].size-14');
-        expect(thumbnailSpacer.exists()).toBe(true);
-        expect(thumbnailSpacer.classes()).toEqual(expect.arrayContaining(['hidden', 'sm:block']));
+        expect(rows[1].find('img').exists()).toBe(false);
+        expect(rows[1].find('.ui-icon').exists()).toBe(true);
     });
 
     it('shows monitored stock attention and Buy soon without promoting unmonitored empty locations', async () => {

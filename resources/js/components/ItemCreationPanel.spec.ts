@@ -75,7 +75,7 @@ describe('item creation panel', () => {
         await button!.trigger('click');
     }
 
-    it('creates the item once, uploads the selected photo, then opens the item detail page', async () => {
+    it('creates the item once, uploads the selected photo and opens its detail from the receipt', async () => {
         await mountPanel();
         await choosePhoto(new File(['image'], 'soap.webp', { type: 'image/webp' }));
 
@@ -89,6 +89,8 @@ describe('item creation panel', () => {
         const upload = vi.mocked(http.post).mock.calls.find(([url]) => url === '/items/31/images');
         expect(upload?.[1]).toBeInstanceOf(FormData);
         expect((upload?.[1] as FormData).get('image')).toBeInstanceOf(File);
+        await clickButton('Open item');
+        await flushPromises();
         expect(router.currentRoute.value.fullPath).toBe('/items/31');
     });
 
@@ -169,7 +171,9 @@ describe('item creation panel', () => {
 
         expect(vi.mocked(http.post).mock.calls.filter(([url]) => url === '/items')).toHaveLength(1);
         expect(vi.mocked(http.post).mock.calls.filter(([url]) => url === '/items/31/images')).toHaveLength(2);
-        expect(router.currentRoute.value.fullPath).toBe('/items/31');
+        await clickButton('Choose a location');
+        await flushPromises();
+        expect(router.currentRoute.value.fullPath).toBe('/items/31?setup=1');
     });
 
     it('preserves the draft when item creation fails and does not attempt photo upload', async () => {
@@ -252,6 +256,8 @@ describe('item creation panel', () => {
         const push = vi.spyOn(router, 'push').mockResolvedValue({} as never);
 
         await submitWithIntent('detail');
+        await flushPromises();
+        await clickButton('Open item');
         await flushPromises();
         expect(wrapper!.text()).toContain('The item was saved, but its detail page could not be opened.');
         expect(wrapper!.findAll('button').some((button) => button.text() === 'Retry opening item')).toBe(true);

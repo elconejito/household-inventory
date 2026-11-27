@@ -23,9 +23,10 @@ class StoreInventoryLevelRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'data' => ['required', 'array:item_id,location_id,alert_threshold'],
+            'data' => ['required', 'array:item_id,location_id,alert_threshold,opening_quantity'],
             'data.item_id' => ['required', 'integer', 'min:1'],
             'data.location_id' => ['required', 'integer', 'min:1'],
+            'data.opening_quantity' => ['sometimes', 'integer', 'min:0', 'max:4294967295'],
             'data.alert_threshold' => ['sometimes', 'nullable', 'integer', 'min:0', 'max:4294967295'],
         ];
     }

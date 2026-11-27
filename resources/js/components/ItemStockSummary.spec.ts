@@ -28,7 +28,7 @@ describe('ItemStockSummary', () => {
     });
 
     it('shows positive location paths and pluralizes each quantity', () => {
-        const wrapper = mount(ItemStockSummary, { props: { item, locations } });
+        const wrapper = mount(ItemStockSummary, { props: { item, locations }, global: { stubs: { RouterLink: { template: '<a :href="JSON.stringify(to)"><slot /></a>', props: ['to'] } } } });
 
         const trigger = wrapper.get('button[aria-label="View locations for Soap"]');
         const popup = wrapper.get('[popover]');
@@ -38,6 +38,7 @@ describe('ItemStockSummary', () => {
         expect(wrapper.text()).toContain('House — 1 bottle');
         expect(wrapper.text()).toContain('House / Pantry — 3 bottles');
         expect(wrapper.text()).not.toContain('House / Bathroom — 0 bottles');
+        expect(wrapper.findAll('a').map((link) => link.text())).toEqual(['House', 'House', 'Pantry']);
     });
 
     it('shows monitored attention and keeps an unmonitored empty location neutral', () => {
@@ -46,5 +47,28 @@ describe('ItemStockSummary', () => {
         expect(wrapper.text()).toContain('Low stock · House');
         expect(wrapper.text()).not.toContain('Out of stock · House / Bathroom');
         expect(wrapper.text()).not.toContain('Low stock · House / Bathroom');
+    });
+
+    it('paginates the locations popover when an item has many positive stock levels', async () => {
+        const manyLevels = Array.from({ length: 11 }, (_, index) => ({
+            id: `level-${index}`,
+            quantity: index + 1,
+            alert_threshold: null,
+            stock_status: 'in_stock',
+            alert_status: 'unmonitored',
+            location: { id: `location-${index}`, name: `Location ${index + 1}`, description: null, parent: null },
+        }));
+        const wrapper = mount(ItemStockSummary, {
+            props: { item: { ...item, inventory_levels: manyLevels }, locations: manyLevels.map(({ location }) => location) },
+            global: { stubs: { RouterLink: { template: '<a><slot /></a>' } } },
+        });
+
+        expect(wrapper.text()).toContain('11 locations · Page 1 of 2');
+        expect(wrapper.text()).toContain('Location 10 — 10 bottles');
+        expect(wrapper.text()).not.toContain('Location 11 — 11 bottles');
+        await wrapper.find('nav[aria-label="Item stock locations pagination"] button[aria-label="Next"]').trigger('click');
+
+        expect(wrapper.text()).toContain('Location 11 — 11 bottles');
+        expect(wrapper.text()).not.toContain('Location 1 — 1 bottle');
     });
 });

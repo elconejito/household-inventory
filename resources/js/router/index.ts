@@ -5,6 +5,7 @@ import ActivityPage from '../pages/ActivityPage.vue';
 import DashboardPage from '../pages/DashboardPage.vue';
 import InventoryPage from '../pages/InventoryPage.vue';
 import ItemDetailPage from '../pages/ItemDetailPage.vue';
+import ShelfSessionPage from '../pages/ShelfSessionPage.vue';
 import ContextDetailPage from '../pages/ContextDetailPage.vue';
 import CatalogBrowsePage from '../pages/CatalogBrowsePage.vue';
 import LoginPage from '../pages/LoginPage.vue';
@@ -60,6 +61,8 @@ export const routes: RouteRecordRaw[] = [
                 component: ItemDetailPage,
             },
             { path: 'categories/:category', name: 'category-detail', component: ContextDetailPage },
+            { path: 'locations/:location/intake', name: 'location-intake', component: ShelfSessionPage },
+            { path: 'locations/:location/count', name: 'location-count', component: ShelfSessionPage },
             { path: 'locations/:location', name: 'location-detail', component: ContextDetailPage },
             {
                 path: 'activity',
@@ -79,6 +82,69 @@ export const routes: RouteRecordRaw[] = [
 export const router = createRouter({
     history: createWebHistory(),
     routes,
+    scrollBehavior: async (to, from, savedPosition) => {
+        if (savedPosition) {
+            if (to.name === 'inventory' && from.name === 'inventory-item') {
+                if (!hasInventoryBrowseMetadata(from.query)) {
+                    return { left: 0, top: 0 };
+                }
+
+                return waitForInventoryRow(String(from.params.item ?? ''), savedPosition);
+            }
+
+            return savedPosition;
+        }
+
+        if (to.name === 'inventory-item' && from.name === 'inventory') {
+            return { left: 0, top: 0 };
+        }
+
+        if (to.name === 'inventory' && from.name === 'inventory-item' && hasInventoryBrowseMetadata(from.query)) {
+            return waitForInventoryRow(String(from.params.item ?? ''), { left: 0, top: lastInventoryScrollPosition });
+        }
+
+        return to.name === from.name ? false : { left: 0, top: 0 };
+    },
+});
+
+let lastInventoryScrollPosition = 0;
+let scrollNavigationVersion = 0;
+
+function hasInventoryBrowseMetadata(query: Record<string, unknown>): boolean {
+    return typeof query.resultIds === 'string' && query.resultIds.length > 0;
+}
+
+function waitForInventoryRow(itemId: string, position: { left: number; top: number }): Promise<{ left: number; top: number } | false> {
+    if (!itemId) {
+        return Promise.resolve(position);
+    }
+
+    const navigationVersion = scrollNavigationVersion;
+    return new Promise((resolve) => {
+        const deadline = performance.now() + 3000;
+        const checkForRow = (): void => {
+            if (navigationVersion !== scrollNavigationVersion) {
+                resolve(false);
+                return;
+            }
+
+            if (document.getElementById(`inventory-item-${itemId}`) || performance.now() >= deadline) {
+                resolve(position);
+                return;
+            }
+
+            window.requestAnimationFrame(checkForRow);
+        };
+
+        checkForRow();
+    });
+}
+
+router.beforeEach((_to, from) => {
+    scrollNavigationVersion += 1;
+    if (from.name === 'inventory') {
+        lastInventoryScrollPosition = window.scrollY;
+    }
 });
 
 export function installSessionGuards(targetRouter: ReturnType<typeof createRouter>): void {

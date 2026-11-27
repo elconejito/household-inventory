@@ -6,8 +6,8 @@ import { http } from '../lib/http';
 import CatalogBrowsePage from './CatalogBrowsePage.vue';
 
 vi.mock('../lib/http', () => ({ http: { get: vi.fn(), post: vi.fn(), patch: vi.fn() } }));
-const route = vi.hoisted(() => ({ name: 'catalog-locations' as string, query: {} as Record<string, string> }));
-vi.mock('vue-router', () => ({ useRoute: () => route, useRouter: () => ({ push: vi.fn() }) }));
+const { route, routerPush } = vi.hoisted(() => ({ route: { name: 'catalog-locations' as string, query: {} as Record<string, string> }, routerPush: vi.fn() }));
+vi.mock('vue-router', () => ({ useRoute: () => route, useRouter: () => ({ push: routerPush }) }));
 
 describe('catalog browse page', () => {
     let client: QueryClient;
@@ -15,6 +15,7 @@ describe('catalog browse page', () => {
 
     beforeEach(() => {
         vi.clearAllMocks();
+        routerPush.mockReset();
         route.name = 'catalog-locations';
         route.query = {};
         client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -38,6 +39,46 @@ describe('catalog browse page', () => {
         expect(wrapper!.text()).not.toContain('Top-level locations');
         expect(wrapper!.findAll('a').some((link) => link.text() === '← All locations')).toBe(false);
         expect(wrapper!.find('#catalog-search').exists()).toBe(true);
+    });
+
+    it('shows the Inventory categories header and tag tiles for category links', async () => {
+        route.name = 'catalog-categories';
+        vi.mocked(http.get).mockImplementation(async (url) => {
+            if (String(url) === '/categories') return { data: { data: [{ id: '4', name: 'Cleaning' }, { id: '5', name: 'Paper Goods' }], meta: { current_page: 1, last_page: 1, total: 2 } } } as never;
+            if (String(url) === '/locations') return { data: { data: [], meta: { current_page: 1, last_page: 1, total: 0 } } } as never;
+            return { data: { data: [], meta: { current_page: 1, last_page: 1, total: 0 } } } as never;
+        });
+        mountPage();
+        await flushPromises();
+
+        expect(wrapper!.get('#categories-heading').text()).toBe('Inventory categories');
+        const categories = wrapper!.get('ul[aria-label="Categories"]');
+        expect(categories.text()).toContain('Cleaning');
+        expect(categories.findAll('.ui-icon')).toHaveLength(2);
+        expect(categories.findAll('a')).toHaveLength(2);
+    });
+
+    it('groups location rows with hierarchy metadata and keeps child browsing available', async () => {
+        vi.mocked(http.get).mockImplementation(async (url, config) => {
+            const params = config?.params as Record<string, unknown> | undefined;
+            if (String(url) === '/locations' && params?.per_page === 100) {
+                return { data: { data: [
+                    { id: '21', name: 'House', description: null, parent: null },
+                    { id: '22', name: 'Pantry', description: null, parent: { id: '21', name: 'House' } },
+                ], meta: { current_page: 1, last_page: 1, total: 2 } } } as never;
+            }
+            if (String(url) === '/locations') return { data: { data: [{ id: '21', name: 'House', description: null, parent: null }], meta: { current_page: 1, last_page: 1, total: 1 } } } as never;
+            return { data: { data: [], meta: { current_page: 1, last_page: 1, total: 0 } } } as never;
+        });
+        mountPage();
+        await flushPromises();
+
+        expect(wrapper!.get('#locations-heading').text()).toBe('Household locations');
+        const locations = wrapper!.get('ul[aria-label="Locations"]');
+        expect(locations.text()).toContain('1 sublocations');
+        expect(locations.find('.ui-icon').exists()).toBe(true);
+        await locations.find('button').trigger('click');
+        expect(routerPush).toHaveBeenCalledWith({ name: 'catalog-locations', query: { parent: '21' } });
     });
 
     it('browses top-level locations and never submits the root sentinel as a parent ID', async () => {

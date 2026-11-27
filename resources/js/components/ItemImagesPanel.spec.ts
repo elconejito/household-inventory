@@ -49,11 +49,53 @@ describe('item images panel', () => {
         await flushPromises();
         expect(wrapper!.find('dialog[aria-label="Manage photos"]').exists()).toBe(false);
         expect(wrapper!.text()).not.toContain('Archived photos');
+        expect(wrapper!.text()).toContain('Primary photo');
+        expect(wrapper!.text()).toContain('1 additional photo · Page 1 of 1');
         expect(http.get).toHaveBeenCalledWith('/items/7/images', { params: { include: 'uploaded_by', per_page: 100, page: 1 } });
         expect(wrapper!.find('img[src="/api/images/1/display"]').attributes('src')).toBe('/api/images/1/display');
         expect(wrapper!.find('img[src="/api/images/2/thumb"]').attributes('src')).toBe('/api/images/2/thumb');
         await wrapper!.get('button[aria-label="Enlarge Box label"]').trigger('click');
         expect(wrapper!.get('dialog[open]').attributes('aria-labelledby')).toBe('photo-preview-title');
+    });
+
+    it('paginates gallery thumbnails and the photo manager while keeping the primary photo visible', async () => {
+        const photos = [primary, ...Array.from({ length: 11 }, (_, index) => ({
+            ...secondary,
+            id: `image-${index + 2}`,
+            caption: `Photo ${index + 1}`,
+            thumbnail_url: `/api/images/${index + 2}/thumb`,
+            display_url: `/api/images/${index + 2}/display`,
+        }))];
+        vi.mocked(http.get).mockResolvedValue({ data: { data: photos } } as never);
+        mountPanel();
+        await flushPromises();
+
+        expect(wrapper!.text()).toContain('Page 1 of 2');
+        expect(wrapper!.find('img[src="/api/images/12/thumb"]').exists()).toBe(false);
+        await wrapper!.findAll('nav[aria-label="Pagination"]')[0].get('button[aria-label="Next"]').trigger('click');
+        expect(wrapper!.text()).toContain('Page 2 of 2');
+        expect(wrapper!.find('img[src="/api/images/1/display"]').exists()).toBe(true);
+        expect(wrapper!.find('img[src="/api/images/12/thumb"]').exists()).toBe(true);
+
+        await openManager();
+        const manager = wrapper!.get('dialog[aria-label="Manage photos"]');
+        expect(manager.find('nav[aria-label="Pagination"]').exists()).toBe(true);
+        expect(manager.findAll('ul > li')).toHaveLength(1);
+        await manager.get('nav[aria-label="Pagination"] button[aria-label="Previous"]').trigger('click');
+        expect(manager.findAll('ul > li')).toHaveLength(10);
+        expect(manager.find('img[src="/api/images/1/display"]').exists()).toBe(true);
+    });
+
+    it('keeps the manager pagination footer visible with an empty gallery', async () => {
+        vi.mocked(http.get).mockResolvedValue({ data: { data: [] } } as never);
+        mountPanel();
+        await flushPromises();
+        await openManager();
+
+        const manager = wrapper!.get('dialog[aria-label="Manage photos"]');
+        expect(manager.text()).toContain('No photos yet.');
+        expect(manager.find('nav[aria-label="Pagination"]').exists()).toBe(true);
+        expect(manager.text()).toContain('0 photos · Page 1 of 1');
     });
 
     it('sets the primary photo and confirms deletion', async () => {
@@ -176,7 +218,7 @@ describe('item images panel', () => {
         await openManager();
         await wrapper!.findAll('button').find((button) => button.text() === 'Edit caption')!.trigger('click');
         await wrapper!.get('#image-caption-image-1').setValue('Changed on item seven');
-        await wrapper!.findAll('form')[0].trigger('submit');
+        await wrapper!.findAll('form').find((form) => form.find('#image-caption-image-1').exists())!.trigger('submit');
         await flushPromises();
         await wrapper!.setProps({ itemId: '8' });
         await flushPromises();

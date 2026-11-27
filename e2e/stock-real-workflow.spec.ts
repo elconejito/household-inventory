@@ -23,6 +23,12 @@ function levelRow(page: Page, locationPath: string) {
     });
 }
 
+async function openStockAction(page: Page, locationPath: string, action: string): Promise<void> {
+    const row = levelRow(page, locationPath);
+    await row.locator('summary[aria-label^="More stock actions"]').click();
+    await row.getByRole('button', { name: action, exact: true }).click();
+}
+
 async function confirmAction(page: Page): Promise<void> {
     await page.getByLabel('I’ve checked this direction and quantity.').check();
     await page.getByRole('button', { name: 'Save change' }).click();
@@ -62,26 +68,25 @@ test('registers a household and manages real inventory stock and activity', asyn
     const basement = await createResource(page, 'locations', { name: 'Basement' });
     await createResource(page, 'locations', { name: 'Shelf', parent_id: Number(basement.id) });
 
-    await page.getByRole('navigation', { name: 'Main navigation' }).getByRole('link', { name: 'Inventory' }).click();
+    await page.getByRole('navigation', { name: 'Main navigation' }).getByRole('link', { name: 'Items', exact: true }).click();
     await page.getByRole('button', { name: 'Add item' }).click();
     await page.getByRole('textbox', { name: /^Name/ }).fill(itemName);
     await page.getByRole('textbox', { name: /^Counting unit/ }).fill('bottle');
-    await page.getByRole('button', { name: 'Save and add stock', exact: true }).click();
-    await expect(page).toHaveURL(/\/items\/\d+\?restock=1$/);
-    await expect(page.locator('#new-level-location')).toBeVisible();
+    await page.getByRole('button', { name: 'Create item', exact: true }).click();
+    await page.getByRole('button', { name: 'Choose a location', exact: true }).click();
+    await expect(page.locator('#setup-location')).toBeVisible();
+    await expect(page).toHaveURL(/\/items\/\d+$/);
     const itemId = new URL(page.url()).pathname.split('/').at(-1)!;
-    await page.locator('#new-level-location').selectOption({ label: 'Basement' });
-    await page.locator('#new-level-quantity').fill('10');
-    await expect(page.getByText('Restock 10 bottles at Basement.', { exact: true })).toBeVisible();
-    await page.getByLabel('I’ve checked this direction and quantity.').check();
-    const initialRestockRequest = page.waitForRequest((request) => request.method() === 'POST' && request.url().endsWith('/api/inventory-movements'));
-    await page.getByRole('button', { name: 'Save change', exact: true }).click();
-    expect((await initialRestockRequest).postDataJSON()).toEqual({ data: { movement_type: 'restock', item_id: itemId, location_id: basement.id, quantity: 10 } });
+    await page.locator('#setup-location').selectOption({ label: 'Basement' });
+    await page.locator('#setup-quantity').fill('10');
+    const openingStockRequest = page.waitForRequest((request) => request.method() === 'POST' && request.url().endsWith('/api/inventory-levels'));
+    await page.getByRole('dialog', { name: 'Add stock location', exact: true }).getByRole('button', { name: 'Add stock location', exact: true }).click();
+    expect((await openingStockRequest).postDataJSON()).toEqual({ data: { item_id: itemId, location_id: basement.id, opening_quantity: 10, alert_threshold: null } });
     await expect(page.getByRole('heading', { level: 1, name: itemName })).toBeVisible();
 
-    await expect(page.getByRole('status').filter({ hasText: 'Stock updated.' })).toBeVisible();
+    await expect(page.getByRole('status').filter({ hasText: 'Stock location added with 10 bottles.' })).toBeVisible();
 
-    await levelRow(page, 'Basement').getByRole('button', { name: 'Move out' }).click();
+    await openStockAction(page, 'Basement', 'Move out');
     await page.getByLabel('Move to').selectOption({ label: 'Basement / Shelf' });
     await page.locator('#stock-quantity').fill('3');
     await expect(page.getByText('Move 3 bottles from Basement to Basement / Shelf.')).toBeVisible();
@@ -90,30 +95,45 @@ test('registers a household and manages real inventory stock and activity', asyn
     await levelRow(page, 'Basement / Shelf').getByRole('button', { name: 'Use 1' }).click();
     await expect(page.getByRole('status').filter({ hasText: 'Used 1 bottle from Basement / Shelf.' })).toBeVisible();
 
-    await levelRow(page, 'Basement / Shelf').getByRole('button', { name: 'Threshold' }).click();
+    await openStockAction(page, 'Basement / Shelf', 'Threshold');
     await page.getByLabel(/Alert when quantity falls to/).fill('2');
     await page.getByRole('button', { name: 'Save change' }).click();
     await expect(page.getByRole('status').filter({ hasText: 'Low stock threshold updated.' })).toBeVisible();
 
-    await levelRow(page, 'Basement / Shelf').getByRole('button', { name: 'Correct' }).click();
+    await openStockAction(page, 'Basement / Shelf', 'Correct');
     await page.getByLabel('Observed quantity').fill('0');
     await confirmAction(page);
 
     await levelRow(page, 'Basement / Shelf').getByRole('button', { name: 'Restock' }).click();
     await page.locator('#stock-quantity').fill('1');
     await confirmAction(page);
-    await levelRow(page, 'Basement / Shelf').getByRole('button', { name: 'Dispose' }).click();
+    await openStockAction(page, 'Basement / Shelf', 'Dispose');
     await page.locator('#stock-quantity').fill('1');
     await confirmAction(page);
 
     await expect(levelRow(page, 'Basement')).toContainText('7 bottles');
     await expect(levelRow(page, 'Basement / Shelf')).toContainText('0 bottles');
-    await expect(page.getByText('Total on hand').locator('..')).toContainText('7 bottles');
+    await expect(page.locator('header').filter({ has: page.getByRole('heading', { level: 1, name: itemName }) })).toContainText('7 bottles on hand');
     await page.screenshot({ path: testInfo.outputPath('item-stock.png'), fullPage: true });
 
     const itemUrl = page.url();
+    await page.locator('summary[aria-label="More item actions"]').click();
     await page.getByRole('button', { name: 'Mark Buy soon', exact: true }).click();
     await expect(page.getByRole('button', { name: 'Resolve Buy soon', exact: true })).toBeVisible();
+    await page.getByRole('tab', { name: 'Notes', exact: true }).click();
+    const itemNotesTab = page.locator('#item-tab-notes');
+    const alertNotesDisclosure = itemNotesTab.locator('details').filter({ has: page.getByText('Reminder notes', { exact: true }) });
+    await alertNotesDisclosure.locator('summary').click();
+    const alertNotes = itemNotesTab.getByRole('region', { name: 'Notes', exact: true }).nth(1);
+    const reminderNote = 'Buy the unscented refill on the next shop.';
+    await alertNotes.getByLabel('Note', { exact: true }).fill(reminderNote);
+    await alertNotes.getByRole('button', { name: 'Add note', exact: true }).click();
+    await expect(alertNotes).toContainText(reminderNote);
+    await page.reload();
+    await page.getByRole('tab', { name: 'Notes', exact: true }).click();
+    await page.locator('#item-tab-notes').locator('details').filter({ has: page.getByText('Reminder notes', { exact: true }) }).locator('summary').click();
+    await expect(page.locator('#item-tab-notes').getByRole('region', { name: 'Notes', exact: true }).nth(1)).toContainText(reminderNote);
+
     await page.goto('/items');
     const inventoryRow = page.locator('article').filter({ has: page.getByRole('link', { name: itemName, exact: true }) });
     await expect(inventoryRow).toContainText('Buy soon');
@@ -124,6 +144,7 @@ test('registers a household and manages real inventory stock and activity', asyn
     await page.screenshot({ path: testInfo.outputPath('inventory-stock-indicators-mobile.png'), fullPage: true });
     await page.setViewportSize({ width: 1280, height: 720 });
     await page.goto(itemUrl);
+    await page.locator('summary[aria-label="More item actions"]').click();
     await page.getByRole('button', { name: 'Resolve Buy soon', exact: true }).click();
     await expect(page.getByRole('button', { name: 'Mark Buy soon', exact: true })).toBeVisible();
     await page.goto('/items');
@@ -131,6 +152,7 @@ test('registers a household and manages real inventory stock and activity', asyn
     await expect(inventoryRow).toContainText('Out of stock');
 
     await page.getByRole('navigation', { name: 'Main navigation' }).getByRole('link', { name: 'Activity' }).click();
+    await page.getByRole('button', { name: 'Filters', exact: true }).click();
     await page.getByLabel('Item', { exact: true }).selectOption({ label: itemName });
     await page.getByLabel('Change type', { exact: true }).selectOption('transfer');
 

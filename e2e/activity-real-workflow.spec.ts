@@ -45,17 +45,20 @@ test('connects five recent item movements to linkable, paginated and locally dat
     await createResource(page, 'inventory-movements', { movement_type: 'transfer', item_id: item.id, source_location_id: basement.id, destination_location_id: pantry.id, quantity: 3 });
 
     await page.goto(`/items/${item.id}`);
+    await page.getByRole('tab', { name: 'Activity', exact: true }).click();
     const recent = page.getByRole('region', { name: 'Recent activity', exact: true });
-    await expect(recent.locator('article')).toHaveCount(5);
+    await expect(recent.locator('article')).toHaveCount(10);
     await expect(recent).toContainText('Transfer');
     await expect(recent).not.toContainText(otherName);
+    await page.getByRole('tab', { name: 'Stock', exact: true }).click();
     const basementStock = page.getByRole('region', { name: 'Stock by location', exact: true }).getByRole('listitem').filter({
         has: page.getByRole('heading', { name: 'Basement', exact: true }),
     });
     await basementStock.getByRole('button', { name: 'Use 1', exact: true }).click();
     await expect(page.getByRole('status').filter({ hasText: 'Used 1 roll from Basement.' })).toBeVisible();
+    await page.getByRole('tab', { name: 'Activity', exact: true }).click();
     await expect(recent.locator('article').first()).toContainText('Consumption');
-    await expect(recent.locator('article')).toHaveCount(5);
+    await expect(recent.locator('article')).toHaveCount(10);
     await page.screenshot({ path: testInfo.outputPath('item-recent-activity-desktop.png'), fullPage: true });
 
     await recent.getByRole('link', { name: 'View all activity', exact: true }).click();
@@ -63,14 +66,15 @@ test('connects five recent item movements to linkable, paginated and locally dat
     await expect(page.getByLabel('Item', { exact: true })).toHaveValue(item.id);
     const activity = page.getByRole('region', { name: 'Inventory activity', exact: true });
     await expect(activity.locator('article')).toHaveCount(10);
-    await expect(activity).not.toContainText(otherName);
+    await expect(activity.locator('article').filter({ hasText: otherName })).toHaveCount(0);
     await page.getByRole('button', { name: 'Next', exact: true }).click();
     await expect(activity.locator('article')).toHaveCount(4);
     await expect.poll(() => new URL(page.url()).searchParams.get('page')).toBe('2');
-    await page.getByLabel('Movements per page', { exact: true }).selectOption('25');
+    await activity.getByRole('combobox', { name: 'Per page', exact: true }).selectOption('25');
     await expect(activity.locator('article')).toHaveCount(14);
     expect(new URL(page.url()).searchParams.get('page')).not.toBe('2');
 
+    await page.getByRole('button', { name: /^Filters/ }).click();
     await page.getByLabel('Recorded by', { exact: true }).selectOption({ label: 'Activity Tester' });
     const today = await page.evaluate(() => {
         const current = new Date();
@@ -93,8 +97,9 @@ test('connects five recent item movements to linkable, paginated and locally dat
     await expect(page.getByLabel('Item', { exact: true })).toHaveValue(item.id);
     await expect(page.getByLabel('From date', { exact: true })).toHaveValue(today);
     await expect(page.getByLabel('Until date', { exact: true })).toHaveValue(today);
-    await expect(page.getByLabel('Movements per page', { exact: true })).toHaveValue('25');
+    await expect(activity.getByRole('combobox', { name: 'Per page', exact: true })).toHaveValue('25');
     await expect(activity.locator('article')).toHaveCount(1);
+    await page.getByRole('button', { name: /^Filters/ }).click();
     await page.getByLabel('Change type', { exact: true }).selectOption('consumption');
     await expect(activity.locator('article').first()).toContainText('Consumption');
     await page.goBack();

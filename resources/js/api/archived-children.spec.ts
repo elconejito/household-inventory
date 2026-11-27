@@ -20,10 +20,10 @@ describe('archived child requests', () => {
     it('requests archived item photos with pagination and their uploader', async () => {
         vi.mocked(http.get).mockResolvedValue({ data: { data: [], meta: { current_page: 1, last_page: 1, total: 0 } } } as never);
 
-        await getArchivedChildren('items', '7', 'item-images', 1);
+        await getArchivedChildren('items', '7', 'item-images', 1, 25);
 
         expect(http.get).toHaveBeenCalledWith('/items/7/images', {
-            params: { include: 'uploaded_by', 'filter[trashed]': 'only', per_page: 10, page: 1 },
+            params: { include: 'uploaded_by', 'filter[trashed]': 'only', per_page: 25, page: 1 },
         });
     });
 

@@ -55,6 +55,7 @@ test('identifies an item with private photos and preserves editable multiline no
     await page.goto(`/items/${item.id}`);
     await expect(page.getByRole('heading', { name: itemName, exact: true })).toBeVisible();
 
+    await page.getByRole('tab', { name: 'Notes', exact: true }).click();
     const notes = page.getByRole('region', { name: 'Notes', exact: true });
     await notes.getByLabel('Note', { exact: true }).fill('Use cartridge A\nReplace every six months.\n\nKeep the label for reference.');
     await notes.getByRole('button', { name: 'Add note', exact: true }).click();
@@ -65,6 +66,7 @@ test('identifies an item with private photos and preserves editable multiline no
     await notes.getByRole('button', { name: 'Save changes', exact: true }).click();
     await expect(notes).toContainText('edited');
 
+    await page.getByRole('tab', { name: 'Photos', exact: true }).click();
     const photos = page.getByRole('region', { name: 'Photos', exact: true });
     await photos.getByRole('button', { name: 'Add photo', exact: true }).click();
     const photoManager = page.getByRole('dialog', { name: 'Manage photos', exact: true });
@@ -83,7 +85,9 @@ test('identifies an item with private photos and preserves editable multiline no
     await expect(photoManager.getByRole('button', { name: 'Enlarge Rear instructions', exact: true }).locator('..')).toContainText('Primary photo');
     await expect.poll(() => photoManager.getByRole('img', { name: 'Rear instructions', exact: true }).evaluate((image) => (image as HTMLImageElement).naturalWidth)).toBeGreaterThan(0);
     await page.reload();
+    await page.getByRole('tab', { name: 'Notes', exact: true }).click();
     await expect(notes).toContainText('Replace every three months.');
+    await page.getByRole('tab', { name: 'Photos', exact: true }).click();
     await expect(photos.getByRole('img', { name: 'Rear instructions', exact: true })).toBeVisible();
     await photos.getByRole('button', { name: 'Enlarge Rear instructions', exact: true }).click();
     await expect(page.getByRole('dialog', { name: 'Enlarged photo' })).toBeVisible();
@@ -98,6 +102,7 @@ test('identifies an item with private photos and preserves editable multiline no
     await expect(photoManager.getByRole('button', { name: 'Enlarge Front label', exact: true }).locator('..')).toContainText('Primary photo');
     await photoManager.getByRole('button', { name: 'Done', exact: true }).click();
 
+    await page.getByRole('tab', { name: 'Notes', exact: true }).click();
     const persisted = await page.request.get(`/api/items/${item.id}/notes?include=created_by`, {
         headers: { Accept: 'application/json', Origin: 'http://127.0.0.1:8000', Referer: 'http://127.0.0.1:8000/' },
     });
@@ -148,9 +153,6 @@ test('identifies an item with private photos and preserves editable multiline no
     await createResource(page, 'inventory-alerts', { item_id: item.id, alert_type: 'buy_soon' });
     await page.goto('/');
     const manualAlerts = page.getByRole('region', { name: 'Buy soon', exact: true });
-    await manualAlerts.locator('summary').first().click();
-    const alertNotes = manualAlerts.getByRole('region', { name: 'Notes', exact: true });
-    await alertNotes.getByLabel('Note', { exact: true }).fill('Prepare a spare before winter.');
-    await alertNotes.getByRole('button', { name: 'Add note', exact: true }).click();
-    await expect(alertNotes).toContainText('Prepare a spare before winter.');
+    await expect(manualAlerts).toContainText(itemName);
+    await expect(manualAlerts).toContainText('Buy soon');
 });

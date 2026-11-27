@@ -17,9 +17,11 @@ const mutations = useHouseholdMutations();
 const householdName = ref('');
 const memberStatus = ref<'without' | 'only'>('without');
 const memberPage = ref(1);
+const memberPerPage = ref(10);
 const invitationPage = ref(1);
-const membersQuery = useMembersQuery(computed(() => memberStatus.value), computed(() => memberPage.value), computed(() => owner.value));
-const inviteQuery = useInvitationsQuery(computed(() => invitationPage.value), computed(() => owner.value));
+const invitationPerPage = ref(10);
+const membersQuery = useMembersQuery(computed(() => memberStatus.value), computed(() => memberPage.value), computed(() => memberPerPage.value), computed(() => owner.value));
+const inviteQuery = useInvitationsQuery(computed(() => invitationPage.value), computed(() => invitationPerPage.value), computed(() => owner.value));
 const nameError = ref('');
 const memberError = ref('');
 const memberSuccess = ref('');
@@ -36,7 +38,8 @@ watch(() => householdQuery.data.value?.name, (name) => {
     if (name !== undefined) householdName.value = name;
 }, { immediate: true });
 
-watch(memberStatus, () => { memberPage.value = 1; });
+watch([memberStatus, memberPerPage], () => { memberPage.value = 1; });
+watch(invitationPerPage, () => { invitationPage.value = 1; });
 watch(owner, (isOwner) => { if (!isOwner) invitationPage.value = 1; });
 watch(() => inviteQuery.data.value?.meta.last_page, (lastPage) => {
     if (lastPage && invitationPage.value > lastPage) invitationPage.value = lastPage;
@@ -229,7 +232,9 @@ function canManageInvitation(invitation: (typeof invitations.value)[number]): bo
 
 <template>
     <section aria-labelledby="settings-title">
-        <h1 id="settings-title" class="page-title">Settings</h1>
+        <p class="mb-1 text-sm text-ink-muted">Household</p>
+        <h1 id="settings-title" class="page-title">Account</h1>
+        <p class="mt-1 text-sm text-ink-muted">{{ session.user?.membership?.household?.name ?? householdQuery.data.value?.name }}</p>
 
         <div v-if="owner && householdQuery.isPending.value" class="mt-6 grid min-h-40 place-items-center rounded-panel border border-line bg-white text-sm text-ink-muted" role="status">Loading household…</div>
         <div v-else-if="owner && householdQuery.isError.value" class="mt-6 rounded-panel border border-line bg-white p-5" role="alert">
@@ -239,14 +244,17 @@ function canManageInvitation(invitation: (typeof invitations.value)[number]): bo
         <template v-else>
             <section class="mt-6 rounded-panel border border-line bg-white p-5 shadow-card sm:p-6" aria-labelledby="household-heading">
                 <div class="flex flex-wrap items-start justify-between gap-4">
-                    <div><h2 id="household-heading" class="text-lg font-semibold text-ink">{{ session.user?.membership?.household?.name ?? householdQuery.data.value?.name ?? 'Household details' }}</h2><p class="mt-1 text-sm text-ink-muted">You’re signed in as {{ session.user?.email }}.</p></div>
-                    <span class="rounded-full bg-sage-soft px-3 py-1 text-xs font-semibold capitalize text-sage-dark">{{ session.user?.membership?.role }}</span>
+                    <div class="min-w-0">
+                        <h2 id="household-heading" class="text-lg font-semibold text-ink">Profile</h2>
+                        <p class="mt-3 break-words font-semibold text-ink">{{ session.user?.name }}</p>
+                        <p class="break-all text-sm text-ink-muted">{{ session.user?.email }}</p>
+                    </div>
+                    <span class="rounded-md bg-sage-soft px-3 py-1 text-xs font-semibold text-sage-dark">Household {{ session.user?.membership?.role }}</span>
                 </div>
                 <form v-if="owner" class="mt-5 grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto]" @submit.prevent="saveHousehold">
                     <div class="grid gap-2"><label for="household-name" class="text-sm font-medium text-ink">Household name</label><input id="household-name" v-model="householdName" required maxlength="255" class="min-h-11 min-w-0 rounded-md border border-line px-3 text-sm outline-none focus:border-sage focus:ring-2 focus:ring-sage/20"><p v-if="nameError" class="text-sm text-rose-700" role="alert">{{ nameError }}</p></div>
                     <button type="submit" :disabled="mutations.updateHousehold.isPending.value" class="self-end rounded-md bg-sage px-4 py-3 text-sm font-semibold text-white hover:bg-sage-dark disabled:opacity-60">{{ mutations.updateHousehold.isPending.value ? 'Saving…' : 'Save name' }}</button>
                 </form>
-                <p v-else class="mt-5 rounded-md bg-surface-soft px-4 py-3 text-sm text-ink">Household summary for {{ session.user?.membership?.household?.name }}.</p>
                 <p v-if="householdSuccess" class="mt-4 text-sm font-medium text-sage-dark" role="status">{{ householdSuccess }}</p>
             </section>
 
@@ -277,7 +285,7 @@ function canManageInvitation(invitation: (typeof invitations.value)[number]): bo
                         </div>
                     </li>
                 </ul>
-                <ListPagination v-if="owner && membersQuery.data.value" :meta="membersQuery.data.value.meta" :page="memberPage" :busy="membersQuery.isFetching.value || memberMutationPending" singular="member" plural="members" @change="memberPage = $event" />
+                <ListPagination v-if="owner && membersQuery.data.value" v-model:per-page="memberPerPage" :meta="membersQuery.data.value.meta" :page="memberPage" :busy="membersQuery.isFetching.value || memberMutationPending" singular="member" plural="members" @change="memberPage = $event" />
             </section>
 
             <section v-if="owner" class="mt-6 rounded-panel border border-line bg-white p-5 shadow-card sm:p-6" aria-labelledby="invitations-heading">
@@ -298,7 +306,7 @@ function canManageInvitation(invitation: (typeof invitations.value)[number]): bo
                     </div>
                 </div>
                 <p v-else class="mt-5 text-sm text-ink-muted">There are no invitations yet.</p>
-                <ListPagination v-if="inviteQuery.data.value" :meta="inviteQuery.data.value.meta" :page="invitationPage" :busy="inviteQuery.isFetching.value" singular="invitation" plural="invitations" @change="invitationPage = $event" />
+                <ListPagination v-if="inviteQuery.data.value" v-model:per-page="invitationPerPage" :meta="inviteQuery.data.value.meta" :page="invitationPage" :busy="inviteQuery.isFetching.value" singular="invitation" plural="invitations" @change="invitationPage = $event" />
             </section>
 
             <section class="mt-6 grid gap-3 sm:grid-cols-2">

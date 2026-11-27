@@ -55,7 +55,7 @@ describe('archived inventory management', () => {
         expect(wrapper!.findAll('ul > li')).toHaveLength(1);
         expect(wrapper!.text()).toContain('1 record · Page 1 of 1');
         expect(wrapper!.get('button[aria-label="Page 1"]').attributes('aria-current')).toBe('page');
-        expect(wrapper!.get('[popover]').find('#archives-page-size').exists()).toBe(true);
+        expect(wrapper!.find('section[aria-label="Archived items"] select').exists()).toBe(true);
 
         await wrapper!.get('#archives-search').setValue('missing supply');
         expect(wrapper!.text()).toContain('No archived records match that search');
